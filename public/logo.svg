@@ -1,0 +1,7 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GrowPesa">
+  <rect width="120" height="120" rx="28" fill="#0B5D3B"/>
+  <path d="M60 88 V44" stroke="#F59E0B" stroke-width="9" stroke-linecap="round"/>
+  <path d="M38 62 L60 40 L82 62" fill="none" stroke="#F59E0B" stroke-width="9"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="60" cy="88" r="6" fill="#F59E0B"/>
+</svg>
