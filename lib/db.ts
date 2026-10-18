@@ -6,15 +6,24 @@ const globalForDb = globalThis as unknown as {
   sql?: ReturnType<typeof postgres>;
 };
 
-// Use a fallback URL for the build phase so Vercel doesn't crash.
-// The real DATABASE_URL will be used when the app is running.
-export const sql =
-  globalForDb.sql ??
-  postgres(url || 'postgres://postgres:postgres@localhost:5432/postgres', {
+let client: ReturnType<typeof postgres>;
+
+if (url) {
+  client = globalForDb.sql ?? postgres(url, {
     max: 1,
     idle_timeout: 20,
     connect_timeout: 10,
     prepare: false,
   });
+  if (process.env.NODE_ENV !== 'production') globalForDb.sql = client;
+} else {
+  // During build, return a dummy function that throws only if called.
+  // This prevents Next.js from trying to connect during the build.
+  client = new Proxy({} as any, {
+    get: () => {
+      throw new Error('DATABASE_URL is not set. This should only happen during build.');
+    },
+  });
+}
 
-if (process.env.NODE_ENV !== 'production') globalForDb.sql = sql;
+export const sql = client;
