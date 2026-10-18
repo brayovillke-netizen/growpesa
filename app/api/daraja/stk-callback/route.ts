@@ -1,5 +1,8 @@
 import { sql } from '@/lib/db';
 
+// This line fixes the Vercel build error
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
