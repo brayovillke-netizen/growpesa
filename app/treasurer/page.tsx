@@ -10,8 +10,9 @@ export default function TreasurerPage() {
 
   function loadData() {
     fetch('/api/treasurer/data')
-      .then(res => {
-        if (res.status === 403) {
+      .then(async (res) => {
+        if (!res.ok) {
+          // If it's a 403 (Forbidden) or 401 (Unauthorized), kick them out
           alert('Access Denied. You are not the Treasurer.');
           router.push('/');
           return;
@@ -23,6 +24,10 @@ export default function TreasurerPage() {
           setData(d);
           setLoading(false);
         }
+      })
+      .catch((e) => {
+        console.error(e);
+        router.push('/');
       });
   }
 
@@ -58,7 +63,6 @@ export default function TreasurerPage() {
   if (loading) return <div className="p-6 text-center text-gray-500">Checking permissions...</div>;
   if (!data) return null;
 
-  // ... (Keep the rest of the return statement exactly the same as before) ...
   return (
     <main className="min-h-screen bg-gray-50 p-6 pb-20">
       <div className="max-w-md mx-auto space-y-6">
@@ -81,11 +85,11 @@ export default function TreasurerPage() {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-green-deep rounded-2xl p-5 shadow-sm text-white">
             <p className="text-xs font-medium opacity-80 mb-1">Total Pool</p>
-            <h2 className="text-2xl font-bold">KSh {data.pool.toLocaleString()}</h2>
+            <h2 className="text-2xl font-bold">KSh {data.pool?.toLocaleString() || '0'}</h2>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 font-medium mb-1">Cash Out (Loans)</p>
-            <h2 className="text-2xl font-bold text-gray-900">KSh {data.cashOut.toLocaleString()}</h2>
+            <h2 className="text-2xl font-bold text-gray-900">KSh {data.cashOut?.toLocaleString() || '0'}</h2>
           </div>
         </div>
 
@@ -93,7 +97,7 @@ export default function TreasurerPage() {
           🎉 Run Share-out Calculation
         </Link>
 
-        {data.pendingSavings.length > 0 && (
+        {data.pendingSavings?.length > 0 && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               Savings to Verify
@@ -121,11 +125,11 @@ export default function TreasurerPage() {
         <div>
           <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
             Loan Requests 
-            {data.requests.length > 0 && (
+            {data.requests?.length > 0 && (
               <span className="bg-amber-warm text-white text-xs px-2 py-0.5 rounded-full">{data.requests.length}</span>
             )}
           </h3>
-          {data.requests.length === 0 ? (
+          {!data.requests || data.requests.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 text-center border border-gray-100 shadow-sm">
               <p className="text-sm text-gray-500">No pending requests.</p>
             </div>
@@ -153,7 +157,7 @@ export default function TreasurerPage() {
           )}
         </div>
 
-        {data.awaitingPayout && data.awaitingPayout.length > 0 && (
+        {data.awaitingPayout?.length > 0 && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               Awaiting Manual M-Pesa Send
