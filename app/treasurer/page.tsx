@@ -1,17 +1,28 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function TreasurerPage() {
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   function loadData() {
     fetch('/api/treasurer/data')
-      .then(res => res.json())
+      .then(res => {
+        if (res.status === 403) {
+          alert('Access Denied. You are not the Treasurer.');
+          router.push('/');
+          return;
+        }
+        return res.json();
+      })
       .then(d => {
-        setData(d);
-        setLoading(false);
+        if (d) {
+          setData(d);
+          setLoading(false);
+        }
       });
   }
 
@@ -44,8 +55,10 @@ export default function TreasurerPage() {
     if (res.ok) loadData();
   }
 
-  if (loading) return <div className="p-6 text-center text-gray-500">Loading...</div>;
+  if (loading) return <div className="p-6 text-center text-gray-500">Checking permissions...</div>;
+  if (!data) return null;
 
+  // ... (Keep the rest of the return statement exactly the same as before) ...
   return (
     <main className="min-h-screen bg-gray-50 p-6 pb-20">
       <div className="max-w-md mx-auto space-y-6">
@@ -65,7 +78,6 @@ export default function TreasurerPage() {
           </div>
         </header>
 
-        {/* Totals */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-green-deep rounded-2xl p-5 shadow-sm text-white">
             <p className="text-xs font-medium opacity-80 mb-1">Total Pool</p>
@@ -77,19 +89,15 @@ export default function TreasurerPage() {
           </div>
         </div>
 
-        {/* Share-out Link */}
         <Link href="/treasurer/shareout" className="block w-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-center font-bold text-gray-900 hover:bg-gray-50 transition">
           🎉 Run Share-out Calculation
         </Link>
 
-        {/* Pending Savings */}
         {data.pendingSavings.length > 0 && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               Savings to Verify
-              <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">
-                {data.pendingSavings.length}
-              </span>
+              <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">{data.pendingSavings.length}</span>
             </h3>
             <div className="space-y-3">
               {data.pendingSavings.map((s: any) => (
@@ -110,7 +118,6 @@ export default function TreasurerPage() {
           </div>
         )}
 
-        {/* Pending Loan Requests */}
         <div>
           <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
             Loan Requests 
@@ -146,7 +153,6 @@ export default function TreasurerPage() {
           )}
         </div>
 
-        {/* Approved Loans Waiting for M-Pesa Send */}
         {data.awaitingPayout && data.awaitingPayout.length > 0 && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
