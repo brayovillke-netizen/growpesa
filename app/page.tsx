@@ -45,36 +45,22 @@ export default async function Dashboard() {
     limit 1
   `;
 
-  // FETCH RECENT ACTIVITY
-  const recentActivity = await sql`
-    (
-      SELECT 'Savings' as type, amount, created_at, status 
-      FROM savings WHERE member_id = ${memberId} AND status = 'confirmed'
-    )
-    UNION ALL
-    (
-      SELECT 'Loan' as type, amount, created_at, status 
-      FROM loans WHERE member_id = ${memberId} AND status != 'asked'
-    )
-    UNION ALL
-    (
-      SELECT 'Repayment' as type, amount, paid_at as created_at, 'paid' as status 
-      FROM repayments WHERE loan_id IN (SELECT id FROM loans WHERE member_id = ${memberId})
-    )
-    ORDER BY created_at DESC
-    LIMIT 3
-  `;
-
   const settingsRows = await sql`select key, value from settings`;
   const settings: any = {};
   settingsRows.forEach(r => settings[r.key] = r.value);
 
   const weeklyGoal = settings.weekly_goal || 100;
   const borrowLimitPct = settings.borrow_limit_pct || 25;
+  const dividendRate = settings.dividend_rate || 1; // Default 1%
 
   const saved = Number(savingsData.total);
   const sundays = sundaysSince(member.join_date);
+  const monthsInGroup = Math.max(1, Math.floor(sundays / 4)); 
   
+  // Projected growth calculation
+  const projectedGrowth = Math.floor(saved * (dividendRate / 100) * monthsInGroup);
+  const totalWithGrowth = saved + projectedGrowth;
+
   const goal = sundays * weeklyGoal;
   const behind = Math.max(0, goal - saved);
   const limit = Math.floor(saved * (borrowLimitPct / 100));
@@ -85,7 +71,6 @@ export default async function Dashboard() {
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
       
-      {/* Top Header */}
       <header className="bg-white px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Logo" width={28} height={28} />
@@ -122,6 +107,23 @@ export default async function Dashboard() {
             </div>
           </div>
           <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white opacity-10 rounded-full"></div>
+        </div>
+
+        {/* Growth / Dividend Card */}
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-5 shadow-sm border border-amber-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-amber-900">Your Money is Growing 🌱</p>
+            <p className="text-xs text-amber-700 mt-1">
+              Earning <strong>{dividendRate}%</strong> monthly. 
+            </p>
+            <p className="text-xs font-semibold text-green-700 mt-1">
+              + KSh {projectedGrowth.toLocaleString()} in dividends!
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider mb-1">Projected Value</p>
+            <p className="text-xl font-bold text-amber-900">KSh {totalWithGrowth.toLocaleString()}</p>
+          </div>
         </div>
 
         {/* Two Column Stats */}

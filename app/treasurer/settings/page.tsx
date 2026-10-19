@@ -13,6 +13,7 @@ export default function SettingsPage() {
     interest_1wk: 3,
     interest_2wk: 5,
     interest_4wk: 10,
+    dividend_rate: 1, // <-- NEW: Default 1%
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,6 +35,7 @@ export default function SettingsPage() {
           interest_1wk: Number(d.interest_1wk) || 3,
           interest_2wk: Number(d.interest_2wk) || 5,
           interest_4wk: Number(d.interest_4wk) || 10,
+          dividend_rate: Number(d.dividend_rate) || 1, // <-- NEW
         });
         setLoading(false);
       });
@@ -96,6 +98,17 @@ export default function SettingsPage() {
               className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
               onChange={e => setSettings({ ...settings, loan_fee_pct: Number(e.target.value) })} 
             />
+          </div>
+
+          {/* NEW: Dividend Rate */}
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+            <label className="block text-sm font-bold text-amber-900 mb-1">Monthly Savings Dividend (%)</label>
+            <input 
+              type="number" required value={settings.dividend_rate}
+              className="w-full border border-amber-200 p-3 rounded-xl focus:ring-2 focus:ring-amber-warm outline-none bg-white" 
+              onChange={e => setSettings({ ...settings, dividend_rate: Number(e.target.value) })} 
+            />
+            <p className="text-xs text-amber-700 mt-2">How much the group pays members on their savings every month.</p>
           </div>
 
           <div>
