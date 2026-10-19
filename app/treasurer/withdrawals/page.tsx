@@ -7,6 +7,7 @@ export default function TreasurerWithdrawalsPage() {
   const router = useRouter();
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (sessionStorage.getItem('treasurer_unlocked') !== 'true') {
@@ -36,12 +37,26 @@ export default function TreasurerWithdrawalsPage() {
       if (!confirm('Have you sent the M-Pesa? This will deduct the funds from their account.')) return;
     }
 
-    const res = await fetch('/api/treasurer/withdrawals', {
-      method: 'POST',
-      body: JSON.stringify({ withdrawalId, action }),
-    });
+    setProcessingId(withdrawalId);
+    
+    try {
+      const res = await fetch('/api/treasurer/withdrawals', {
+        method: 'POST',
+        body: JSON.stringify({ withdrawalId, action }),
+      });
 
-    if (res.ok) loadData();
+      const data = await res.json();
+
+      if (res.ok) {
+        loadData();
+      } else {
+        alert(data.error || 'Failed to update withdrawal');
+      }
+    } catch (err) {
+      alert('Network error. Please try again.');
+    } finally {
+      setProcessingId(null);
+    }
   }
 
   if (loading) return <div className="p-6 text-center text-gray-500">Loading withdrawals...</div>;
@@ -74,13 +89,14 @@ export default function TreasurerWithdrawalsPage() {
                   <div>
                     <p className="font-bold text-gray-900">{w.name}</p>
                     <p className="text-xs text-gray-500">{w.phone}</p>
-                    <p className="text-xs font-semibold text-gray-700 mt-1">Req: KSh {w.amount.toLocaleString()}</p>
+                    <p className="text-xs font-semibold text-gray-700 mt-1">Req: KSh {Number(w.amount).toLocaleString()}</p>
                   </div>
                   <button 
                     onClick={() => handleAction(w.id, 'approve')}
-                    className="bg-green-deep text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-green-800 transition"
+                    disabled={processingId === w.id}
+                    className="bg-green-deep text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-green-800 transition disabled:opacity-50"
                   >
-                    Approve
+                    {processingId === w.id ? '...' : 'Approve'}
                   </button>
                 </div>
               ))}
@@ -102,13 +118,14 @@ export default function TreasurerWithdrawalsPage() {
                   <div>
                     <p className="font-bold text-gray-900">{w.name}</p>
                     <p className="text-xs text-gray-500">{w.phone}</p>
-                    <p className="text-xs font-semibold text-gray-700 mt-1">Send: KSh {w.amount.toLocaleString()}</p>
+                    <p className="text-xs font-semibold text-gray-700 mt-1">Send: KSh {Number(w.amount).toLocaleString()}</p>
                   </div>
                   <button 
                     onClick={() => handleAction(w.id, 'complete')}
-                    className="bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-gray-800 transition"
+                    disabled={processingId === w.id}
+                    className="bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-gray-800 transition disabled:opacity-50"
                   >
-                    Mark Sent
+                    {processingId === w.id ? 'Sending...' : 'Mark Sent'}
                   </button>
                 </div>
               ))}
