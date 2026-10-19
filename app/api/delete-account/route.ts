@@ -8,19 +8,18 @@ export async function POST() {
 
   try {
     // 1. Prevent the Treasurer from deleting their own account
-    const [member] = await sql`select role, phone from members where id = ${memberId}`;
+    const [member] = await sql`select role from members where id = ${memberId}`;
     if (member?.role === 'treasurer') {
       return Response.json({ error: 'The Treasurer cannot delete their own account.' }, { status: 403 });
     }
 
-    // 2. Create the new phone number in JavaScript to avoid Postgres concat() errors
-    const timestamp = Date.now();
-    const newPhone = `${member.phone}_deleted_${timestamp}`;
+    // 2. Safely format the new phone string in JavaScript
+    const deletedSuffix = `_deleted_${Date.now()}`;
     
-    // 3. Soft delete the account
+    // 3. Update the member status to 'deleted'
     await sql`
       update members 
-      set status = 'deleted', phone = ${newPhone} 
+      set status = 'deleted', phone = concat(phone, ${deletedSuffix}) 
       where id = ${memberId}
     `;
 
