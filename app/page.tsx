@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { sundaysSince, sundaysToShareout } from '@/lib/rules';
+import LogoutButton from './components/LogoutButton'; // <-- Added Logout Import
 
 export default async function Dashboard() {
   const memberId = await getSession();
@@ -58,15 +59,21 @@ export default async function Dashboard() {
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
+      
+      {/* HEADER WITH LOGOUT BUTTON */}
       <header className="bg-white px-6 py-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Logo" width={32} height={32} />
           <span className="font-semibold text-green-deep text-lg">GrowPesa</span>
         </div>
-        <span className="text-sm font-medium text-gray-500">Hi, {member.name.split(' ')[0]}</span>
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-medium text-gray-500">Hi, {member.name.split(' ')[0]}</span>
+          <LogoutButton />
+        </div>
       </header>
 
       <div className="max-w-md mx-auto p-6 space-y-6">
+        
         {loan && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
             <div>
