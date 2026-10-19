@@ -45,6 +45,26 @@ export default async function Dashboard() {
     limit 1
   `;
 
+  // FETCH RECENT ACTIVITY
+  const recentActivity = await sql`
+    (
+      SELECT 'Savings' as type, amount, created_at, status 
+      FROM savings WHERE member_id = ${memberId} AND status = 'confirmed'
+    )
+    UNION ALL
+    (
+      SELECT 'Loan' as type, amount, created_at, status 
+      FROM loans WHERE member_id = ${memberId} AND status != 'asked'
+    )
+    UNION ALL
+    (
+      SELECT 'Repayment' as type, amount, paid_at as created_at, 'paid' as status 
+      FROM repayments WHERE loan_id IN (SELECT id FROM loans WHERE member_id = ${memberId})
+    )
+    ORDER BY created_at DESC
+    LIMIT 3
+  `;
+
   const settingsRows = await sql`select key, value from settings`;
   const settings: any = {};
   settingsRows.forEach(r => settings[r.key] = r.value);
@@ -60,7 +80,6 @@ export default async function Dashboard() {
   const limit = Math.floor(saved * (borrowLimitPct / 100));
   const weeksLeft = sundaysToShareout();
   
-  // This removes the quotation marks from the database string
   const formattedShareoutDate = String(settings.shareout_date || '2026-12-27').replace(/"/g, '');
 
   return (
@@ -155,6 +174,41 @@ export default async function Dashboard() {
               </div>
               <span className="text-[10px] font-medium text-gray-700">Profile</span>
             </Link>
+          </div>
+        </div>
+
+        {/* NEW: Latest Activity Feed */}
+        <div>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-bold text-gray-800">Latest Activity</h3>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {recentActivity.length === 0 ? (
+              <div className="p-4 text-center text-sm text-gray-500">No activity yet.</div>
+            ) : (
+              recentActivity.map((act, i) => (
+                <div key={i} className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      act.type === 'Savings' ? 'bg-green-50 text-green-600' : 
+                      act.type === 'Loan' ? 'bg-amber-50 text-amber-warm' : 
+                      'bg-blue-50 text-blue-600'
+                    }`}>
+                      {act.type === 'Savings' ? '↓' : act.type === 'Loan' ? '↑' : '✓'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">{act.type}</p>
+                      <p className="text-[10px] text-gray-500">
+                        {new Date(act.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                  <p className={`font-bold ${act.type === 'Savings' ? 'text-gray-900' : 'text-gray-900'}`}>
+                    KSh {Number(act.amount).toLocaleString()}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
