@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BottomNav from '../components/BottomNav';
 
 export default function SavingsPage() {
   const router = useRouter();
@@ -51,8 +52,8 @@ export default function SavingsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-md mx-auto bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+    <main className="min-h-screen bg-gray-50 p-6 pb-24">
+      <div className="max-w-md mx-auto bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
         
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold text-gray-900">Add Savings</h1>
@@ -60,25 +61,17 @@ export default function SavingsPage() {
         </div>
 
         {!showManual ? (
-          /* AUTOMATED STK PUSH FLOW */
           <form onSubmit={handleSTK} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (KSh)</label>
               <input 
-                type="number" 
-                required 
-                value={amount}
-                placeholder="e.g. 100"
+                type="number" required value={amount} placeholder="e.g. 100"
                 className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none text-lg font-semibold" 
                 onChange={e => setAmount(e.target.value)} 
               />
             </div>
 
-            <button 
-              type="submit" 
-              disabled={loadingSTK || !amount} 
-              className="w-full bg-green-deep text-white font-semibold p-3.5 rounded-xl hover:bg-green-800 transition disabled:opacity-50"
-            >
+            <button type="submit" disabled={loadingSTK || !amount} className="w-full bg-green-deep text-white font-semibold p-3.5 rounded-xl hover:bg-green-800 transition disabled:opacity-50">
               {loadingSTK ? 'Connecting to M-Pesa...' : 'Pay via M-Pesa'}
             </button>
 
@@ -89,15 +82,11 @@ export default function SavingsPage() {
             </div>
           </form>
         ) : (
-          /* MANUAL FALLBACK FLOW */
           <form onSubmit={handleManual} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (KSh)</label>
               <input 
-                type="number" 
-                required 
-                value={amount}
-                placeholder="e.g. 100"
+                type="number" required value={amount} placeholder="e.g. 100"
                 className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
                 onChange={e => setAmount(e.target.value)} 
               />
@@ -106,19 +95,13 @@ export default function SavingsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">M-Pesa Code</label>
               <input 
-                type="text" 
-                required 
-                placeholder="e.g. SFJ8H2K9L"
+                type="text" required placeholder="e.g. SFJ8H2K9L"
                 className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none uppercase" 
                 onChange={e => setCode(e.target.value)} 
               />
             </div>
 
-            <button 
-              type="submit" 
-              disabled={loadingManual || !amount || !code} 
-              className="w-full bg-gray-900 text-white font-semibold p-3.5 rounded-xl hover:bg-gray-800 transition disabled:opacity-50"
-            >
+            <button type="submit" disabled={loadingManual || !amount || !code} className="w-full bg-gray-900 text-white font-semibold p-3.5 rounded-xl hover:bg-gray-800 transition disabled:opacity-50">
               {loadingManual ? 'Submitting...' : 'Submit to Treasurer'}
             </button>
 
@@ -131,6 +114,7 @@ export default function SavingsPage() {
         )}
 
       </div>
+      <BottomNav />
     </main>
   );
 }
