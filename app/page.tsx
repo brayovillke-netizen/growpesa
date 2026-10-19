@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { sundaysSince, sundaysToShareout } from '@/lib/rules';
 import { redirect } from 'next/navigation';
+import BottomNav from './components/BottomNav';
+import LogoutButton from './components/LogoutButton';
 
 export default async function Dashboard() {
   const memberId = await getSession();
@@ -30,15 +32,8 @@ export default async function Dashboard() {
 
   const [member] = await sql`select name, join_date, role, status from members where id = ${memberId}`;
 
-  // If the Treasurer accidentally lands here, push them to their dashboard
-  if (member?.role === 'treasurer') {
-    redirect('/treasurer');
-  }
-
-  // If account is deleted, kick them out
-  if (member?.status === 'deleted') {
-    redirect('/api/logout');
-  }
+  if (member?.role === 'treasurer') redirect('/treasurer');
+  if (member?.status === 'deleted') redirect('/api/logout');
 
   const [savingsData] = await sql`
     select coalesce(sum(amount), 0) as total 
@@ -57,7 +52,6 @@ export default async function Dashboard() {
 
   const weeklyGoal = settings.weekly_goal || 100;
   const borrowLimitPct = settings.borrow_limit_pct || 25;
-  const shareoutDate = settings.shareout_date || '2026-12-27';
 
   const saved = Number(savingsData.total);
   const sundays = sundaysSince(member.join_date);
@@ -68,85 +62,118 @@ export default async function Dashboard() {
   const weeksLeft = sundaysToShareout();
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-20">
+    <main className="min-h-screen bg-gray-50 pb-24">
       
-      <header className="bg-white px-6 py-4 shadow-sm flex items-center justify-between">
+      {/* Top Header */}
+      <header className="bg-white px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="Logo" width={32} height={32} />
-          <span className="font-semibold text-green-deep text-lg">GrowPesa</span>
+          <img src="/logo.svg" alt="Logo" width={28} height={28} />
+          <span className="font-bold text-green-deep text-lg">GrowPesa</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-gray-500">Hi, {member.name.split(' ')[0]}</span>
-          <Link href="/profile" className="text-sm font-semibold text-green-deep hover:underline">Profile</Link>
+          <Link href="/profile" className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">
+            {member.name.charAt(0)}
+          </Link>
         </div>
       </header>
 
-      <div className="max-w-md mx-auto p-6 space-y-6">
+      <div className="max-w-md mx-auto p-5 space-y-6">
         
-        {loan && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
-            <div>
-              <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">Active Loan</p>
-              <p className="text-lg font-bold text-gray-900">KSh {(loan.repay_total - loan.paid).toLocaleString()} owed</p>
-            </div>
-            <Link href="/loan/status" className="bg-amber-warm text-white px-4 py-2 rounded-lg text-sm font-semibold">
-              View
-            </Link>
-          </div>
-        )}
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <p className="text-sm text-gray-500 font-medium mb-1">Total Saved</p>
-          <h2 className="text-3xl font-bold text-gray-900">KSh {saved.toLocaleString()}</h2>
-          
-          <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
-            <div>
-              <p className="text-xs text-gray-500">Weekly Goal</p>
-              <p className="font-semibold text-gray-700">KSh {goal.toLocaleString()}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Status</p>
-              {behind > 0 ? (
-                <p className="font-semibold text-red-500 text-sm">Behind KSh {behind.toLocaleString()}</p>
-              ) : (
-                <p className="font-semibold text-green-600 text-sm">On Track</p>
-              )}
+        {/* Green Summary Card (From Mockup) */}
+        <div className="bg-green-deep rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
+          <div className="relative z-10">
+            <p className="text-sm font-medium opacity-90 mb-1">My Savings</p>
+            <h2 className="text-4xl font-bold mb-4">KSh {saved.toLocaleString()}</h2>
+            
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-xs opacity-80">Weekly Goal: KSh {weeklyGoal}</p>
+                {behind > 0 ? (
+                  <p className="text-xs text-red-300 font-semibold mt-1">Behind KSh {behind.toLocaleString()}</p>
+                ) : (
+                  <p className="text-xs text-green-300 font-semibold mt-1">On Track</p>
+                )}
+              </div>
+              <Link href="/savings" className="bg-white text-green-deep px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 transition">
+                Save Now
+              </Link>
             </div>
           </div>
+          {/* Decorative circle */}
+          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white opacity-10 rounded-full"></div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex justify-between items-center">
-          <div>
-            <p className="text-sm text-gray-500 font-medium mb-1">You can borrow up to</p>
-            <h2 className="text-2xl font-bold text-gray-900">KSh {limit.toLocaleString()}</h2>
-          </div>
-          {!loan && (
-            <Link href="/loan" className="bg-amber-warm text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm hover:bg-amber-600 transition">
-              Ask
-            </Link>
-          )}
-        </div>
-
+        {/* Two Column Stats (From Mockup) */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/savings" className="bg-green-deep text-white py-4 rounded-xl font-semibold shadow-sm flex justify-center items-center gap-2 hover:bg-green-800 transition">
-            Pay Savings
-          </Link>
-          <Link href="/loan/status" className="bg-white text-gray-700 border border-gray-200 py-4 rounded-xl font-semibold shadow-sm flex justify-center items-center hover:bg-gray-50 transition">
-            Loan Status
-          </Link>
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+            <p className="text-xs text-gray-500 font-medium mb-1">Active Loan</p>
+            <p className="text-lg font-bold text-gray-900">
+              {loan ? `KSh ${(loan.repay_total - loan.paid).toLocaleString()}` : 'KSh 0'}
+            </p>
+            <Link href="/loan/status" className="text-xs text-amber-warm font-semibold mt-2 block">
+              {loan ? 'View Loan' : 'Apply for Loan'}
+            </Link>
+          </div>
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+            <p className="text-xs text-gray-500 font-medium mb-1">Borrow Limit</p>
+            <p className="text-lg font-bold text-gray-900">KSh {limit.toLocaleString()}</p>
+            {!loan && (
+              <Link href="/loan" className="text-xs text-green-deep font-semibold mt-2 block">
+                Ask for Loan
+              </Link>
+            )}
+          </div>
         </div>
 
-        <Link href="/referral" className="bg-amber-50 text-amber-warm border border-amber-200 py-4 rounded-xl font-semibold flex justify-center items-center shadow-sm hover:bg-amber-100 transition">
-          Refer a Friend & Earn KSh 3
-        </Link>
-
-        <div className="text-center pt-4">
-          <p className="text-sm text-gray-500 font-medium">
-            Share-out in <span className="text-amber-warm font-bold">{weeksLeft} Sundays</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{shareoutDate}</p>
+        {/* Quick Actions Grid (From Mockup) */}
+        <div>
+          <h3 className="text-sm font-bold text-gray-800 mb-3">Quick Actions</h3>
+          <div className="grid grid-cols-4 gap-3">
+            <Link href="/savings" className="flex flex-col items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center mb-2 text-green-deep">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+              </div>
+              <span className="text-[10px] font-medium text-gray-700">Save</span>
+            </Link>
+            <Link href="/loan" className="flex flex-col items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center mb-2 text-amber-warm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </div>
+              <span className="text-[10px] font-medium text-gray-700">Loans</span>
+            </Link>
+            <Link href="/referral" className="flex flex-col items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center mb-2 text-purple-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              </div>
+              <span className="text-[10px] font-medium text-gray-700">Referrals</span>
+            </Link>
+            <Link href="/profile" className="flex flex-col items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mb-2 text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              </div>
+              <span className="text-[10px] font-medium text-gray-700">Profile</span>
+            </Link>
+          </div>
         </div>
+
+        {/* Shareout Countdown */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-500 font-medium">Next Share-out</p>
+            <p className="font-bold text-gray-900">{settings.shareout_date || '2026-12-27'}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-bold text-amber-warm bg-amber-50 px-3 py-1 rounded-full">
+              {weeksLeft} Sundays left
+            </p>
+          </div>
+        </div>
+
       </div>
+
+      {/* The New Bottom Nav Bar */}
+      <BottomNav />
     </main>
   );
 }
