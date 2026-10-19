@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const [treasurer] = await sql`select role from members where id = ${treasurerId}`;
   if (treasurer?.role !== 'treasurer') return Response.json({ error: 'Access Denied' }, { status: 403 });
 
-  const { withdrawalId, action } = await req.json(); // action: 'approve' or 'complete'
+  const { withdrawalId, action } = await req.json();
 
   try {
     if (action === 'approve') {
