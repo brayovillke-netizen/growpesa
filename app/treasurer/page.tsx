@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import TreasurerBottomNav from '../components/TreasurerBottomNav';
 
 export default function TreasurerPage() {
   const router = useRouter();
@@ -10,7 +11,6 @@ export default function TreasurerPage() {
   const [pin, setPin] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
 
-  // Check if already unlocked in this session
   useEffect(() => {
     if (sessionStorage.getItem('treasurer_unlocked') === 'true') {
       setIsUnlocked(true);
@@ -21,12 +21,10 @@ export default function TreasurerPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-
     const res = await fetch('/api/treasurer/verify-pin', {
       method: 'POST',
       body: JSON.stringify({ pin }),
     });
-
     if (res.ok) {
       sessionStorage.setItem('treasurer_unlocked', 'true');
       setIsUnlocked(true);
@@ -42,7 +40,6 @@ export default function TreasurerPage() {
     fetch('/api/treasurer/data')
       .then(async (res) => {
         if (!res.ok) {
-          alert('Access Denied. Please log in with your Treasurer account.');
           router.push('/login');
           return;
         }
@@ -53,9 +50,6 @@ export default function TreasurerPage() {
           setData(d);
           setLoading(false);
         }
-      })
-      .catch(() => {
-        router.push('/login');
       });
   }
 
@@ -86,13 +80,9 @@ export default function TreasurerPage() {
           <p className="text-sm text-gray-500 mb-6">Enter your secret 4-digit PIN</p>
           <form onSubmit={handleLogin}>
             <input 
-              type="password"
-              maxLength={4}
-              value={pin}
-              onChange={e => setPin(e.target.value)}
+              type="password" maxLength={4} value={pin} onChange={e => setPin(e.target.value)}
               className="w-full text-center text-3xl tracking-[0.5em] font-bold border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none mb-4"
-              placeholder="••••"
-              required
+              placeholder="••••" required
             />
             <button type="submit" disabled={loading} className="w-full bg-green-deep text-white font-semibold p-3 rounded-xl hover:bg-green-800 transition">
               {loading ? 'Verifying...' : 'Unlock Dashboard'}
@@ -107,52 +97,52 @@ export default function TreasurerPage() {
   if (loading || !data) return <div className="p-6 text-center text-gray-500">Loading dashboard...</div>;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 pb-20">
-      <div className="max-w-md mx-auto space-y-6">
-        
-        <header className="flex items-center justify-between mb-2">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Treasurer</h1>
-            <p className="text-xs text-gray-500">Group Overview</p>
-          </div>
-          <div className="flex gap-4">
-            <button onClick={() => { sessionStorage.removeItem('treasurer_unlocked'); setIsUnlocked(false); }} className="text-sm text-red-500 font-semibold hover:underline">Lock</button>
-            <Link href="/treasurer/settings" className="text-sm text-gray-500 font-semibold hover:underline">Settings</Link>
-          </div>
-        </header>
+    <main className="min-h-screen bg-gray-50 pb-24">
+      
+      <header className="bg-white px-6 py-4 flex items-center justify-between shadow-sm">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Admin</h1>
+          <p className="text-xs text-gray-500">Group Overview</p>
+        </div>
+        <button onClick={() => { sessionStorage.removeItem('treasurer_unlocked'); setIsUnlocked(false); }} className="text-sm font-semibold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg">
+          Lock
+        </button>
+      </header>
 
-        {/* Totals */}
+      <div className="max-w-md mx-auto p-5 space-y-6">
+        
+        {/* Top Stats Grid */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-green-deep rounded-2xl p-5 shadow-sm text-white">
+          <div className="bg-green-deep rounded-3xl p-5 shadow-lg text-white">
             <p className="text-xs font-medium opacity-80 mb-1">Total Pool</p>
             <h2 className="text-2xl font-bold">KSh {data.pool?.toLocaleString() || '0'}</h2>
           </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 font-medium mb-1">Cash Out (Loans)</p>
+          <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+            <p className="text-xs text-gray-500 font-medium mb-1">Cash Out</p>
             <h2 className="text-2xl font-bold text-gray-900">KSh {data.cashOut?.toLocaleString() || '0'}</h2>
           </div>
         </div>
 
-        {/* Navigation Action Buttons */}
-        <div className="grid grid-cols-2 gap-4">
-          <Link href="/treasurer/members" className="block w-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-center font-bold text-gray-900 hover:bg-gray-50 transition">
-            👥 Members
-          </Link>
-          <Link href="/treasurer/shareout" className="block w-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-center font-bold text-gray-900 hover:bg-gray-50 transition">
-            🎉 Share-out
-          </Link>
-        </div>
+        {/* Alerts / Pending Actions */}
+        {(data.pendingSavings?.length > 0 || data.requests?.length > 0) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <p className="text-sm font-bold text-amber-800">Action Required</p>
+              <p className="text-xs text-amber-700">You have pending approvals.</p>
+            </div>
+            <span className="bg-amber-warm text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">
+              {(data.pendingSavings?.length || 0) + (data.requests?.length || 0)}
+            </span>
+          </div>
+        )}
 
         {/* Pending Savings */}
         {data.pendingSavings?.length > 0 && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              Savings to Verify
-              <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">{data.pendingSavings.length}</span>
-            </h3>
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Savings to Verify</h3>
             <div className="space-y-3">
               {data.pendingSavings.map((s: any) => (
-                <div key={s.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex justify-between items-center">
+                <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex justify-between items-center">
                   <div>
                     <p className="font-bold text-gray-900">{s.name}</p>
                     <p className="text-xs text-gray-500 font-mono mt-1">{s.code}</p>
@@ -169,14 +159,9 @@ export default function TreasurerPage() {
           </div>
         )}
 
-        {/* Pending Loan Requests */}
+        {/* Loan Requests */}
         <div>
-          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            Loan Requests 
-            {data.requests?.length > 0 && (
-              <span className="bg-amber-warm text-white text-xs px-2 py-0.5 rounded-full">{data.requests.length}</span>
-            )}
-          </h3>
+          <h3 className="text-sm font-bold text-gray-800 mb-3">Loan Requests</h3>
           {!data.requests || data.requests.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 text-center border border-gray-100 shadow-sm">
               <p className="text-sm text-gray-500">No pending requests.</p>
@@ -184,7 +169,7 @@ export default function TreasurerPage() {
           ) : (
             <div className="space-y-3">
               {data.requests.map((req: any) => (
-                <div key={req.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div key={req.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <p className="font-bold text-gray-900">{req.name}</p>
@@ -195,8 +180,7 @@ export default function TreasurerPage() {
                       <p className="text-xs text-gray-500">{req.weeks} Week{req.weeks > 1 ? 's' : ''}</p>
                     </div>
                   </div>
-                  {req.reason && <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg mb-4 mt-2">"{req.reason}"</p>}
-                  <button onClick={() => handleApproveLoan(req.id)} className="w-full bg-amber-warm text-white font-semibold py-2.5 rounded-xl hover:bg-amber-600 transition">
+                  <button onClick={() => handleApproveLoan(req.id)} className="w-full bg-amber-warm text-white font-semibold py-2.5 rounded-xl hover:bg-amber-600 transition text-sm mt-2">
                     Approve Request
                   </button>
                 </div>
@@ -205,15 +189,13 @@ export default function TreasurerPage() {
           )}
         </div>
 
-        {/* Approved Loans Waiting for M-Pesa Send */}
+        {/* Awaiting Manual Send */}
         {data.awaitingPayout?.length > 0 && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              Awaiting Manual M-Pesa Send
-            </h3>
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Awaiting M-Pesa Send</h3>
             <div className="space-y-3">
               {data.awaitingPayout.map((loan: any) => (
-                <div key={loan.id} className="bg-amber-50 rounded-2xl p-5 shadow-sm border border-amber-200">
+                <div key={loan.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <p className="font-bold text-gray-900">{loan.name}</p>
@@ -221,10 +203,10 @@ export default function TreasurerPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-gray-900">Send: KSh {loan.payout.toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">(Loan is {loan.amount})</p>
+                      <p className="text-[10px] text-gray-500">(Request was {loan.amount})</p>
                     </div>
                   </div>
-                  <button onClick={() => handleMarkPaid(loan.id)} className="w-full bg-gray-900 text-white font-semibold py-2.5 rounded-xl hover:bg-gray-800 transition">
+                  <button onClick={() => handleMarkPaid(loan.id)} className="w-full bg-gray-900 text-white font-semibold py-2.5 rounded-xl hover:bg-gray-800 transition text-sm">
                     Mark as Sent
                   </button>
                 </div>
@@ -234,6 +216,8 @@ export default function TreasurerPage() {
         )}
 
       </div>
+
+      <TreasurerBottomNav />
     </main>
   );
 }

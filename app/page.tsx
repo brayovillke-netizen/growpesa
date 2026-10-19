@@ -4,7 +4,6 @@ import { sql } from '@/lib/db';
 import { sundaysSince, sundaysToShareout } from '@/lib/rules';
 import { redirect } from 'next/navigation';
 import BottomNav from './components/BottomNav';
-import LogoutButton from './components/LogoutButton';
 
 export default async function Dashboard() {
   const memberId = await getSession();
@@ -60,6 +59,9 @@ export default async function Dashboard() {
   const behind = Math.max(0, goal - saved);
   const limit = Math.floor(saved * (borrowLimitPct / 100));
   const weeksLeft = sundaysToShareout();
+  
+  // This removes the quotation marks from the database string
+  const formattedShareoutDate = String(settings.shareout_date || '2026-12-27').replace(/"/g, '');
 
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
@@ -80,7 +82,7 @@ export default async function Dashboard() {
 
       <div className="max-w-md mx-auto p-5 space-y-6">
         
-        {/* Green Summary Card (From Mockup) */}
+        {/* Green Summary Card */}
         <div className="bg-green-deep rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
           <div className="relative z-10">
             <p className="text-sm font-medium opacity-90 mb-1">My Savings</p>
@@ -100,11 +102,10 @@ export default async function Dashboard() {
               </Link>
             </div>
           </div>
-          {/* Decorative circle */}
           <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white opacity-10 rounded-full"></div>
         </div>
 
-        {/* Two Column Stats (From Mockup) */}
+        {/* Two Column Stats */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
             <p className="text-xs text-gray-500 font-medium mb-1">Active Loan</p>
@@ -126,7 +127,7 @@ export default async function Dashboard() {
           </div>
         </div>
 
-        {/* Quick Actions Grid (From Mockup) */}
+        {/* Quick Actions Grid */}
         <div>
           <h3 className="text-sm font-bold text-gray-800 mb-3">Quick Actions</h3>
           <div className="grid grid-cols-4 gap-3">
@@ -161,7 +162,7 @@ export default async function Dashboard() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-500 font-medium">Next Share-out</p>
-            <p className="font-bold text-gray-900">{settings.shareout_date || '2026-12-27'}</p>
+            <p className="font-bold text-gray-900">{formattedShareoutDate}</p>
           </div>
           <div className="text-right">
             <p className="text-xs font-bold text-amber-warm bg-amber-50 px-3 py-1 rounded-full">
@@ -172,7 +173,6 @@ export default async function Dashboard() {
 
       </div>
 
-      {/* The New Bottom Nav Bar */}
       <BottomNav />
     </main>
   );
