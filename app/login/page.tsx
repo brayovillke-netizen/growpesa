@@ -12,17 +12,24 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({ phone, pin }),
-    });
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, pin }),
+      });
 
-    if (res.ok) {
-      router.push('/');
-      router.refresh();
-    } else {
-      const data = await res.json();
-      alert(data.error);
+      if (res.ok) {
+        router.push('/');
+        router.refresh();
+      } else {
+        // Safely try to read the error message
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Login failed (Status: ${res.status})`);
+        setLoading(false);
+      }
+    } catch (err) {
+      alert('Network error. Check your internet connection.');
       setLoading(false);
     }
   }
@@ -53,8 +60,8 @@ export default function LoginPage() {
             onChange={e => setPin(e.target.value)} 
           />
 
-          <button type="submit" disabled={loading} className="w-full bg-green-deep text-white font-semibold p-3.5 rounded-xl mt-2 hover:bg-green-800 transition">
-            {loading ? 'Logging in...' : 'Log In'}
+          <button type="submit" disabled={loading} className="w-full bg-green-deep text-white font-semibold p-3.5 rounded-xl mt-2 hover:bg-green-800 transition disabled:opacity-50">
+            {loading ? 'Verifying...' : 'Log In'}
           </button>
         </form>
 
