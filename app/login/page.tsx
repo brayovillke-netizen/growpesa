@@ -17,11 +17,18 @@ export default function LoginPage() {
         body: JSON.stringify({ phone, pin }),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        // Force full page reload to apply session perfectly
-        window.location.href = '/';
+        // If they are the treasurer, unlock the session and go to /treasurer
+        if (data.role === 'treasurer') {
+          sessionStorage.setItem('treasurer_unlocked', 'true'); 
+          window.location.href = '/treasurer';
+        } else {
+          // Otherwise, go to the member dashboard
+          window.location.href = '/';
+        }
       } else {
-        const data = await res.json().catch(() => ({}));
         alert(data.error || 'Incorrect PIN or Phone Number');
         setLoading(false);
       }

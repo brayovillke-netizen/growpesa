@@ -3,8 +3,12 @@ import { sql } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  // 1. Get all members
-  const members = await sql`select id, name, phone from members where status = 'active'`;
+  // 1. Get all members (EXCLUDING the treasurer)
+  const members = await sql`
+    select id, name, phone 
+    from members 
+    where status = 'active' and role != 'treasurer'
+  `;
 
   const shareoutList = [];
 
@@ -16,7 +20,7 @@ export async function GET() {
     `;
     const saved = Number(savingsData.total);
 
-    // 3. Get total loan debt (repay_total - paid)
+    // 3. Get total loan debt
     const [loanData] = await sql`
       select coalesce(sum(repay_total - paid), 0) as total 
       from loans where member_id = ${member.id} and status in ('accepted', 'paid_out')
@@ -39,7 +43,7 @@ export async function GET() {
     });
   }
 
-  // Sort by name
+  // Sort alphabetically by name
   shareoutList.sort((a, b) => a.name.localeCompare(b.name));
 
   return Response.json({ shareoutList });
