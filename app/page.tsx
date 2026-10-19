@@ -4,6 +4,7 @@ import { sql } from '@/lib/db';
 import { sundaysSince, sundaysToShareout } from '@/lib/rules';
 import { redirect } from 'next/navigation';
 import BottomNav from './components/BottomNav';
+import PWAInstall from './components/PWAInstall'; // <-- Added import
 
 export default async function Dashboard() {
   const memberId = await getSession();
@@ -45,7 +46,6 @@ export default async function Dashboard() {
     limit 1
   `;
 
-  // FETCH RECENT ACTIVITY (This was missing!)
   const recentActivity = await sql`
     (
       SELECT 'Savings' as type, amount, created_at, status 
@@ -71,13 +71,12 @@ export default async function Dashboard() {
 
   const weeklyGoal = settings.weekly_goal || 100;
   const borrowLimitPct = settings.borrow_limit_pct || 25;
-  const dividendRate = settings.dividend_rate || 1; // Default 1%
+  const dividendRate = settings.dividend_rate || 1;
 
   const saved = Number(savingsData.total);
   const sundays = sundaysSince(member.join_date);
   const monthsInGroup = Math.max(1, Math.floor(sundays / 4)); 
   
-  // Projected growth calculation
   const projectedGrowth = Math.floor(saved * (dividendRate / 100) * monthsInGroup);
   const totalWithGrowth = saved + projectedGrowth;
 
@@ -251,6 +250,7 @@ export default async function Dashboard() {
       </div>
 
       <BottomNav />
+      <PWAInstall />
     </main>
   );
 }
