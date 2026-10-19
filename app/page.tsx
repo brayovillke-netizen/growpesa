@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { sundaysSince, sundaysToShareout } from '@/lib/rules';
-import LogoutButton from './components/LogoutButton'; // <-- Added Logout Import
+import { redirect } from 'next/navigation';
 
 export default async function Dashboard() {
   const memberId = await getSession();
@@ -28,8 +28,18 @@ export default async function Dashboard() {
     );
   }
 
-  const [member] = await sql`select name, join_date from members where id = ${memberId}`;
-  
+  const [member] = await sql`select name, join_date, role, status from members where id = ${memberId}`;
+
+  // If the Treasurer accidentally lands here, push them to their dashboard
+  if (member?.role === 'treasurer') {
+    redirect('/treasurer');
+  }
+
+  // If account is deleted, kick them out
+  if (member?.status === 'deleted') {
+    redirect('/api/logout');
+  }
+
   const [savingsData] = await sql`
     select coalesce(sum(amount), 0) as total 
     from savings where member_id = ${memberId} and status = 'confirmed'
@@ -60,7 +70,6 @@ export default async function Dashboard() {
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
       
-      {/* HEADER WITH LOGOUT BUTTON */}
       <header className="bg-white px-6 py-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Logo" width={32} height={32} />
@@ -68,7 +77,7 @@ export default async function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium text-gray-500">Hi, {member.name.split(' ')[0]}</span>
-          <LogoutButton />
+          <Link href="/profile" className="text-sm font-semibold text-green-deep hover:underline">Profile</Link>
         </div>
       </header>
 

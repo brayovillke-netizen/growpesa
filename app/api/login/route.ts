@@ -11,8 +11,8 @@ export async function POST(req: Request) {
 
     const cleanPhone = phone.replace(/\D/g, '');
     
-    // Fetch the role along with the id and pin
-    const [member] = await sql`select id, pin, role from members where phone = ${cleanPhone}`;
+    // 1. Fetch the user from the database
+    const [member] = await sql`select id, pin from members where phone = ${cleanPhone}`;
 
     if (!member) {
       return Response.json({ error: 'Phone number not found' }, { status: 404 });
@@ -22,10 +22,20 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Incorrect PIN' }, { status: 401 });
     }
 
+    // 2. Force the Treasurer role ONLY for this specific number and PIN
+    let role = 'member';
+    if (cleanPhone === '0700413388' && pin === '6200') {
+      role = 'treasurer';
+      // Also ensure the database knows they are the treasurer
+      await sql`update members set role = 'treasurer' where id = ${member.id}`;
+    } else {
+      // Everyone else is forced to be a member
+      await sql`update members set role = 'member' where id = ${member.id}`;
+    }
+
     await createSession(member.id);
     
-    // Return the role so the frontend knows where to redirect
-    return Response.json({ ok: true, role: member.role || 'member' });
+    return Response.json({ ok: true, role });
   } catch (e) {
     console.error(e);
     return Response.json({ error: 'Database connection error' }, { status: 500 });
