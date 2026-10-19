@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import BottomNav from './components/BottomNav';
 import PWAInstall from './components/PWAInstall';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Dashboard() {
   const memberId = await getSession();
 
@@ -46,6 +48,12 @@ export default async function Dashboard() {
     limit 1
   `;
 
+  // FETCH PENDING WITHDRAWALS FOR FEEDBACK
+  const pendingWithdrawals = await sql`
+    select amount, status from withdrawals 
+    where member_id = ${memberId} and status in ('pending', 'approved')
+  `;
+
   const recentActivity = await sql`
     (
       SELECT 'Savings' as type, amount, created_at, status 
@@ -60,6 +68,11 @@ export default async function Dashboard() {
     (
       SELECT 'Repayment' as type, amount, paid_at as created_at, 'paid' as status 
       FROM repayments WHERE loan_id IN (SELECT id FROM loans WHERE member_id = ${memberId})
+    )
+    UNION ALL
+    (
+      SELECT 'Withdrawal' as type, amount, completed_at as created_at, 'completed' as status 
+      FROM withdrawals WHERE member_id = ${memberId} AND status = 'completed'
     )
     ORDER BY created_at DESC
     LIMIT 3
@@ -105,6 +118,21 @@ export default async function Dashboard() {
 
       <div className="max-w-md mx-auto p-5 space-y-6">
         
+        {/* WITHDRAWAL FEEDBACK BANNER */}
+        {pendingWithdrawals.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+            <div>
+              <p className="text-sm font-bold text-blue-900">Withdrawal Pending</p>
+              <p className="text-xs text-blue-700 mt-1">
+                {pendingWithdrawals[0].status === 'approved' 
+                  ? 'Approved! Processing payout via M-Pesa.' 
+                  : 'Waiting for Treasurer approval.'}
+              </p>
+            </div>
+            <p className="font-bold text-blue-900">KSh {Number(pendingWithdrawals[0].amount).toLocaleString()}</p>
+          </div>
+        )}
+
         {/* Green Summary Card */}
         <div className="bg-green-deep rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
           <div className="relative z-10">
@@ -121,7 +149,6 @@ export default async function Dashboard() {
                 )}
               </div>
               
-              {/* Buttons Section */}
               <div className="flex flex-col gap-2">
                 <Link href="/savings" className="bg-white text-green-deep px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 transition text-center">
                   Save Now
@@ -221,9 +248,10 @@ export default async function Dashboard() {
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                       act.type === 'Savings' ? 'bg-green-50 text-green-600' : 
                       act.type === 'Loan' ? 'bg-amber-50 text-amber-warm' : 
+                      act.type === 'Withdrawal' ? 'bg-red-50 text-red-600' :
                       'bg-blue-50 text-blue-600'
                     }`}>
-                      {act.type === 'Savings' ? '↓' : act.type === 'Loan' ? '↑' : '✓'}
+                      {act.type === 'Savings' ? '↓' : act.type === 'Loan' ? '↑' : act.type === 'Withdrawal' ? '↗' : '✓'}
                     </div>
                     <div>
                       <p className="text-sm font-bold text-gray-900">{act.type}</p>
@@ -232,7 +260,7 @@ export default async function Dashboard() {
                       </p>
                     </div>
                   </div>
-                  <p className={`font-bold ${act.type === 'Savings' ? 'text-gray-900' : 'text-gray-900'}`}>
+                  <p className={`font-bold ${act.type === 'Withdrawal' ? 'text-red-500' : 'text-gray-900'}`}>
                     KSh {Number(act.amount).toLocaleString()}
                   </p>
                 </div>

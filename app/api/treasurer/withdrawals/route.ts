@@ -3,7 +3,6 @@ import { getSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-// GET pending and approved withdrawals for the Treasurer
 export async function GET() {
   const treasurerId = await getSession();
   if (!treasurerId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -22,7 +21,6 @@ export async function GET() {
   return Response.json({ withdrawals });
 }
 
-// POST to update status (Approve or Complete)
 export async function POST(req: Request) {
   const treasurerId = await getSession();
   if (!treasurerId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,31 +29,36 @@ export async function POST(req: Request) {
   if (treasurer?.role !== 'treasurer') return Response.json({ error: 'Access Denied' }, { status: 403 });
 
   const { withdrawalId, action } = await req.json();
+  const id = Number(withdrawalId);
 
   try {
     if (action === 'approve') {
       await sql`
         update withdrawals set status = 'approved', approved_at = now() 
-        where id = ${withdrawalId} and status = 'pending'
+        where id = ${id} and status = 'pending'
       `;
     } else if (action === 'complete') {
-      // 1. Mark as completed
-      const [w] = await sql`
-        update withdrawals set status = 'completed', completed_at = now() 
-        where id = ${withdrawalId} and status = 'approved'
-        returning member_id, amount
-      `;
-
-      // 2. Deduct the withdrawal amount from their savings ledger
-      if (w) {
-        await sql`
-          insert into savings (member_id, amount, week_date, kind, status)
-          values (${w.member_id}, ${-w.amount}, current_date, 'withdrawal', 'confirmed')
+      await sql.begin(async (tx) => {
+        const [w] = await tx`
+          update withdrawals set status = 'completed', completed_at = now() 
+          where id = ${id} and status = 'approved'
+          returning member_id, amount
         `;
-      }
+
+        if (!w) throw new Error("Withdrawal not found or already completed");
+
+        // Force the amount to be a negative number
+        const deduction = Number(w.amount) * -1;
+        
+        await tx`
+          insert into savings (member_id, amount, week_date, kind, status)
+          values (${Number(w.member_id)}, ${deduction}, current_date, 'withdrawal', 'confirmed')
+        `;
+      });
     }
     return Response.json({ ok: true });
-  } catch (e) {
-    return Response.json({ error: 'Failed to update withdrawal' }, { status: 500 });
+  } catch (e: any) {
+    console.error(e);
+    return Response.json({ error: e.message || 'Failed to update withdrawal' }, { status: 500 });
   }
 }
