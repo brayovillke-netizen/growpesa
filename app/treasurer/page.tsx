@@ -43,7 +43,7 @@ export default function TreasurerPage() {
       .then(async (res) => {
         if (!res.ok) {
           alert('Access Denied. Please log in with your Treasurer account.');
-          router.push('/login'); // Redirects to login if not authenticated
+          router.push('/login');
           return;
         }
         return res.json();
@@ -121,6 +121,7 @@ export default function TreasurerPage() {
           </div>
         </header>
 
+        {/* Totals */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-green-deep rounded-2xl p-5 shadow-sm text-white">
             <p className="text-xs font-medium opacity-80 mb-1">Total Pool</p>
@@ -132,10 +133,17 @@ export default function TreasurerPage() {
           </div>
         </div>
 
-        <Link href="/treasurer/shareout" className="block w-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-center font-bold text-gray-900 hover:bg-gray-50 transition">
-          🎉 Run Share-out Calculation
-        </Link>
+        {/* Navigation Action Buttons */}
+        <div className="grid grid-cols-2 gap-4">
+          <Link href="/treasurer/members" className="block w-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-center font-bold text-gray-900 hover:bg-gray-50 transition">
+            👥 Members
+          </Link>
+          <Link href="/treasurer/shareout" className="block w-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-center font-bold text-gray-900 hover:bg-gray-50 transition">
+            🎉 Share-out
+          </Link>
+        </div>
 
+        {/* Pending Savings */}
         {data.pendingSavings?.length > 0 && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -161,6 +169,7 @@ export default function TreasurerPage() {
           </div>
         )}
 
+        {/* Pending Loan Requests */}
         <div>
           <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
             Loan Requests 
@@ -196,6 +205,7 @@ export default function TreasurerPage() {
           )}
         </div>
 
+        {/* Approved Loans Waiting for M-Pesa Send */}
         {data.awaitingPayout?.length > 0 && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
