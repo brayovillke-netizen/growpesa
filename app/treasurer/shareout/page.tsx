@@ -7,6 +7,7 @@ export default function ShareoutPage() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (sessionStorage.getItem('treasurer_unlocked') !== 'true') {
@@ -31,6 +32,12 @@ export default function ShareoutPage() {
   const totalPayout = data.shareoutList.reduce((sum: number, m: any) => sum + m.net, 0);
   const totalFees = data.shareoutList.reduce((sum: number, m: any) => sum + m.fee, 0);
 
+  // Filter the shareout list
+  const filteredList = data.shareoutList.filter((member: any) => {
+    const search = searchTerm.toLowerCase();
+    return member.name.toLowerCase().includes(search) || member.phone.includes(search);
+  });
+
   return (
     <main className="min-h-screen bg-gray-50 p-6 pb-24">
       <div className="max-w-md mx-auto space-y-6">
@@ -53,42 +60,59 @@ export default function ShareoutPage() {
           </div>
         </div>
 
-        <div className="space-y-3">
-          {data.shareoutList.map((member: any) => (
-            <div key={member.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <p className="font-bold text-gray-900">{member.name}</p>
-                  <p className="text-xs text-gray-500">{member.phone}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1">Send via M-Pesa</p>
-                  <p className="font-bold text-green-deep text-lg">KSh {member.net.toLocaleString()}</p>
-                </div>
-              </div>
-              
-              <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <p className="text-gray-500">Saved</p>
-                  <p className="font-semibold text-gray-900">{member.saved.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Loan Debt</p>
-                  <p className="font-semibold text-red-500">-{member.debt.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">5% Fee</p>
-                  <p className="font-semibold text-amber-warm">-{member.fee.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-          ))}
+        {/* SEARCH BAR */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search member name or phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-2xl focus:ring-green-deep focus:border-green-deep block pl-11 p-3.5 shadow-sm outline-none"
+          />
         </div>
 
-        {data.shareoutList.length === 0 && (
-          <div className="text-center text-gray-500 py-10">No active members to pay out.</div>
-        )}
-
+        <div className="space-y-3">
+          {filteredList.length === 0 ? (
+             <div className="text-center text-gray-500 text-sm py-8 bg-white rounded-2xl border border-gray-100">
+               No members found matching "{searchTerm}"
+             </div>
+          ) : (
+            filteredList.map((member: any) => (
+              <div key={member.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="font-bold text-gray-900">{member.name}</p>
+                    <p className="text-xs text-gray-500">{member.phone}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1">Send via M-Pesa</p>
+                    <p className="font-bold text-green-deep text-lg">KSh {member.net.toLocaleString()}</p>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p className="text-gray-500">Saved</p>
+                    <p className="font-semibold text-gray-900">{member.saved.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Loan Debt</p>
+                    <p className="font-semibold text-red-500">-{member.debt.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">5% Fee</p>
+                    <p className="font-semibold text-amber-warm">-{member.fee.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
       <TreasurerBottomNav />
     </main>

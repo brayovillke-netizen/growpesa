@@ -177,10 +177,11 @@ export default async function Dashboard() {
           </div>
         </div>
 
-        {/* NEW: Latest Activity Feed */}
+        {/* Latest Activity Feed */}
         <div>
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-sm font-bold text-gray-800">Latest Activity</h3>
+            <Link href="/history" className="text-xs text-green-deep font-semibold hover:underline">See All</Link>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
             {recentActivity.length === 0 ? (
