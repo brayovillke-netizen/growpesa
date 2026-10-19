@@ -1,10 +1,19 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function LoginPage() {
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    // Check if the URL has ?expired=true
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('expired') === 'true') {
+      setExpired(true);
+    }
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -20,20 +29,18 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // If they are the treasurer, unlock the session and go to /treasurer
         if (data.role === 'treasurer') {
           sessionStorage.setItem('treasurer_unlocked', 'true'); 
           window.location.href = '/treasurer';
         } else {
-          // Otherwise, go to the member dashboard
           window.location.href = '/';
         }
       } else {
-        alert(data.error || 'Incorrect PIN or Phone Number');
+        alert(data.error || 'Login failed');
         setLoading(false);
       }
     } catch (err) {
-      alert('Network error. Check your internet connection.');
+      alert('Network error.');
       setLoading(false);
     }
   }
@@ -47,19 +54,20 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm mt-1">Log in to your GrowPesa account</p>
         </div>
 
+        {expired && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm p-3 rounded-xl mb-4 text-center">
+            You were logged out due to inactivity.
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-4">
           <input 
-            type="tel" 
-            required 
-            placeholder="Phone (e.g., 0712345678)"
+            type="tel" required placeholder="Phone (e.g., 0712345678)"
             className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
             onChange={e => setPhone(e.target.value)} 
           />
           <input 
-            type="password" 
-            required 
-            maxLength={4}
-            placeholder="4-Digit PIN"
+            type="password" required maxLength={4} placeholder="4-Digit PIN"
             className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none tracking-widest text-lg" 
             onChange={e => setPin(e.target.value)} 
           />

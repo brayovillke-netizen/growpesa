@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import IdleTimer from './IdleTimer'; // <-- Imported here
 
 export default function TreasurerBottomNav() {
   const pathname = usePathname();
@@ -13,29 +14,32 @@ export default function TreasurerBottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-      <div className="flex justify-around items-center h-16 max-w-md mx-auto">
-        {navItems.map((item) => {
-          // Check if path is exactly active, or if it's a sub-route
-          const isActive = item.path === '/treasurer' 
-            ? pathname === '/treasurer' 
-            : pathname.startsWith(item.path);
-            
-          return (
-            <Link key={item.name} href={item.path} className="flex flex-col items-center justify-center w-full h-full space-y-1">
-              <svg 
-                className={`w-6 h-6 ${isActive ? 'text-green-deep' : 'text-gray-400'}`} 
-                fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              <span className={`text-[10px] font-medium ${isActive ? 'text-green-deep' : 'text-gray-400'}`}>
-                {item.name}
-              </span>
-            </Link>
-          );
-        })}
+    <>
+      <IdleTimer timeoutMinutes={5} /> {/* Locks after 5 mins of inactivity */}
+      
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-around items-center h-16 max-w-md mx-auto">
+          {navItems.map((item) => {
+            const isActive = item.path === '/treasurer' 
+              ? pathname === '/treasurer' 
+              : pathname.startsWith(item.path);
+              
+            return (
+              <Link key={item.name} href={item.path} className="flex flex-col items-center justify-center w-full h-full space-y-1">
+                <svg 
+                  className={`w-6 h-6 ${isActive ? 'text-green-deep' : 'text-gray-400'}`} 
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                </svg>
+                <span className={`text-[10px] font-medium ${isActive ? 'text-green-deep' : 'text-gray-400'}`}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
