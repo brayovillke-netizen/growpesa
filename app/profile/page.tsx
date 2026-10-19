@@ -18,13 +18,20 @@ export default function ProfilePage() {
     if (!confirmDelete) return;
 
     setLoading(true);
-    const res = await fetch('/api/delete-account', { method: 'POST' });
-    
-    if (res.ok) {
-      alert('Your account has been deleted.');
-      window.location.href = '/';
-    } else {
-      alert('Failed to delete account.');
+    try {
+      const res = await fetch('/api/delete-account', { method: 'POST' });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert('Your account has been deleted.');
+        window.location.href = '/';
+      } else {
+        // Show the exact error from the database
+        alert(data.error || 'Failed to delete account.');
+        setLoading(false);
+      }
+    } catch (err) {
+      alert('Network error. Failed to delete account.');
       setLoading(false);
     }
   }

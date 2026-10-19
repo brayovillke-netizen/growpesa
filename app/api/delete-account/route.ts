@@ -7,20 +7,30 @@ export async function POST() {
   if (!memberId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    // Soft delete: We set status to 'deleted' so their financial history remains intact for the group ledger,
-    // but they disappear from the active member list, loans, and share-outs.
+    // 1. Prevent the Treasurer from deleting their own account
+    const [member] = await sql`select role from members where id = ${memberId}`;
+    if (member?.role === 'treasurer') {
+      return Response.json({ error: 'The Treasurer cannot delete their own account.' }, { status: 403 });
+    }
+
+    // 2. Soft delete the account. 
+    // We append '_deleted_[timestamp]' to the phone so that if they ever want to rejoin, 
+    // they can use their original number again.
+    const timestamp = Date.now();
+    
     await sql`
       update members 
-      set status = 'deleted', phone = concat(phone, '_deleted_', extract(epoch from now())) 
+      set status = 'deleted', phone = concat(phone, '_deleted_', ${timestamp}) 
       where id = ${memberId}
     `;
 
-    // Clear their session cookie so they are logged out
+    // 3. Clear their session cookie
     cookies().set('growpesa_session', '', { maxAge: 0, path: '/' });
 
     return Response.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    return Response.json({ error: 'Failed to delete account' }, { status: 500 });
+  } catch (e: any) {
+    console.error('Delete Error:', e);
+    // Return the actual database error so we can see it on the screen
+    return Response.json({ error: e.message || 'Failed to delete account' }, { status: 500 });
   }
 }
