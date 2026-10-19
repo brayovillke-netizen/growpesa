@@ -1,8 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import TreasurerBottomNav from '../../components/TreasurerBottomNav';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [settings, setSettings] = useState<any>({
     weekly_goal: 100,
     borrow_limit_pct: 25,
@@ -16,10 +18,14 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (sessionStorage.getItem('treasurer_unlocked') !== 'true') {
+      router.push('/treasurer');
+      return;
+    }
+
     fetch('/api/treasurer/settings')
       .then(res => res.json())
       .then(d => {
-        // Sanitize the data so empty strings don't break the inputs
         setSettings({
           weekly_goal: Number(d.weekly_goal) || 100,
           borrow_limit_pct: Number(d.borrow_limit_pct) || 25,
@@ -31,7 +37,7 @@ export default function SettingsPage() {
         });
         setLoading(false);
       });
-  }, []);
+  }, [router]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -53,7 +59,7 @@ export default function SettingsPage() {
   if (loading) return <div className="p-6 text-center text-gray-500">Loading...</div>;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 pb-20">
+    <main className="min-h-screen bg-gray-50 p-6 pb-24">
       <div className="max-w-md mx-auto space-y-6">
         
         <header className="flex items-center justify-between mb-2">
@@ -61,19 +67,14 @@ export default function SettingsPage() {
             <h1 className="text-xl font-bold text-gray-900">Group Settings</h1>
             <p className="text-xs text-gray-500">Rules & Parameters</p>
           </div>
-          <Link href="/treasurer" className="text-sm text-green-deep font-semibold hover:underline">
-            Back &rarr;
-          </Link>
         </header>
 
-        <form onSubmit={handleSave} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+        <form onSubmit={handleSave} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-5">
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Savings Goal (KSh)</label>
             <input 
-              type="number" 
-              required
-              value={settings.weekly_goal}
+              type="number" required value={settings.weekly_goal}
               className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
               onChange={e => setSettings({ ...settings, weekly_goal: Number(e.target.value) })} 
             />
@@ -82,9 +83,7 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Borrow Limit (% of savings)</label>
             <input 
-              type="number" 
-              required
-              value={settings.borrow_limit_pct}
+              type="number" required value={settings.borrow_limit_pct}
               className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
               onChange={e => setSettings({ ...settings, borrow_limit_pct: Number(e.target.value) })} 
             />
@@ -93,9 +92,7 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Loan Fee (%)</label>
             <input 
-              type="number" 
-              required
-              value={settings.loan_fee_pct}
+              type="number" required value={settings.loan_fee_pct}
               className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
               onChange={e => setSettings({ ...settings, loan_fee_pct: Number(e.target.value) })} 
             />
@@ -104,16 +101,14 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Share-out Date</label>
             <input 
-              type="date" 
-              required
-              value={settings.shareout_date}
+              type="date" required value={settings.shareout_date}
               className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none" 
               onChange={e => setSettings({ ...settings, shareout_date: e.target.value })} 
             />
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Interest Rates (%)</h3>
+          <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+            <h3 className="text-sm font-bold text-gray-900 mb-3">Interest Rates (%)</h3>
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">1 Week</label>
@@ -131,14 +126,14 @@ export default function SettingsPage() {
           </div>
 
           <button 
-            type="submit" 
-            disabled={saving} 
+            type="submit" disabled={saving} 
             className="w-full bg-green-deep text-white font-semibold p-3.5 rounded-xl mt-2 hover:bg-green-800 transition disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </form>
       </div>
+      <TreasurerBottomNav />
     </main>
   );
 }

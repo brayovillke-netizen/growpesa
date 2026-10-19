@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import TreasurerBottomNav from '../../components/TreasurerBottomNav';
 
 export default function MembersPage() {
   const router = useRouter();
@@ -9,7 +10,6 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if the treasurer has unlocked the session
     if (sessionStorage.getItem('treasurer_unlocked') !== 'true') {
       router.push('/treasurer');
       return;
@@ -30,7 +30,7 @@ export default function MembersPage() {
   if (loading) return <div className="p-6 text-center text-gray-500">Loading members...</div>;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 pb-20">
+    <main className="min-h-screen bg-gray-50 p-6 pb-24">
       <div className="max-w-md mx-auto space-y-6">
         
         <header className="flex items-center justify-between mb-2">
@@ -38,9 +38,6 @@ export default function MembersPage() {
             <h1 className="text-xl font-bold text-gray-900">Members</h1>
             <p className="text-xs text-gray-500">Total: {members.length}</p>
           </div>
-          <Link href="/treasurer" className="text-sm text-green-deep font-semibold hover:underline">
-            Back &rarr;
-          </Link>
         </header>
 
         <div className="space-y-3">
@@ -59,9 +56,13 @@ export default function MembersPage() {
               </a>
             </div>
           ))}
+          {members.length === 0 && (
+            <p className="text-center text-gray-500 text-sm">No active members yet.</p>
+          )}
         </div>
 
       </div>
+      <TreasurerBottomNav />
     </main>
   );
 }
