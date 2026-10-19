@@ -51,3 +51,6 @@ export default function JoinPage() {
     </main>
   );
 }
+<p className="text-center text-sm text-gray-500 mt-4">
+  Already have an account? <a href="/login" className="text-green-deep font-semibold">Log In</a>
+</p>

@@ -14,9 +14,15 @@ export default async function Dashboard() {
           Grow<span className="text-amber-warm">Pesa</span>
         </h1>
         <p className="mt-3 text-base text-gray-600">Save weekly. Borrow when ready.</p>
-        <Link href="/join" className="mt-8 bg-green-deep text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-800 transition">
-          Join the Group
-        </Link>
+        
+        <div className="mt-8 flex flex-col gap-3 w-full max-w-xs">
+          <Link href="/join" className="bg-green-deep text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-800 transition">
+            Join the Group
+          </Link>
+          <Link href="/login" className="bg-white text-green-deep border-2 border-green-deep px-6 py-3 rounded-xl font-semibold hover:bg-green-50 transition">
+            Log In (Existing Member)
+          </Link>
+        </div>
       </main>
     );
   }
@@ -25,18 +31,15 @@ export default async function Dashboard() {
   
   const [savingsData] = await sql`
     select coalesce(sum(amount), 0) as total 
-    from savings 
-    where member_id = ${memberId} and status = 'confirmed'
+    from savings where member_id = ${memberId} and status = 'confirmed'
   `;
 
   const [loan] = await sql`
     select id, repay_total, paid 
-    from loans 
-    where member_id = ${memberId} and status in ('accepted', 'paid_out')
+    from loans where member_id = ${memberId} and status in ('accepted', 'paid_out')
     limit 1
   `;
 
-  // FETCH SETTINGS FROM DATABASE
   const settingsRows = await sql`select key, value from settings`;
   const settings: any = {};
   settingsRows.forEach(r => settings[r.key] = r.value);
@@ -51,7 +54,7 @@ export default async function Dashboard() {
   const goal = sundays * weeklyGoal;
   const behind = Math.max(0, goal - saved);
   const limit = Math.floor(saved * (borrowLimitPct / 100));
-  const weeksLeft = sundaysToShareout(); // Keep using the default function for now
+  const weeksLeft = sundaysToShareout();
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
@@ -64,7 +67,6 @@ export default async function Dashboard() {
       </header>
 
       <div className="max-w-md mx-auto p-6 space-y-6">
-        
         {loan && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
             <div>
@@ -128,7 +130,6 @@ export default async function Dashboard() {
           </p>
           <p className="text-xs text-gray-400 mt-1">{shareoutDate}</p>
         </div>
-
       </div>
     </main>
   );
