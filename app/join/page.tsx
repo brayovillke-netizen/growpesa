@@ -1,9 +1,18 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function JoinPage() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', is18: false, referralCode: '', pin: '' });
+
+  // This reads the URL when the page loads and fills in the referral code
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      setForm(prev => ({ ...prev, referralCode: ref }));
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -17,7 +26,6 @@ export default function JoinPage() {
       });
       
       if (res.ok) {
-        // Force full page reload
         window.location.href = '/';
       } else {
         const data = await res.json().catch(() => ({}));
@@ -44,8 +52,12 @@ export default function JoinPage() {
         <input required type="password" maxLength={4} placeholder="Create a 4-Digit PIN" className="w-full border border-gray-300 p-3 rounded-xl outline-none tracking-widest text-lg" 
           onChange={e => setForm({ ...form, pin: e.target.value })} />
         
-        <input placeholder="Referral Code (Optional)" className="w-full border border-gray-300 p-3 rounded-xl outline-none" 
-          onChange={e => setForm({ ...form, referralCode: e.target.value })} />
+        <input 
+          placeholder="Referral Code (Optional)" 
+          value={form.referralCode}
+          className="w-full border border-gray-300 p-3 rounded-xl outline-none bg-gray-50" 
+          onChange={e => setForm({ ...form, referralCode: e.target.value })} 
+        />
 
         <label className="flex items-center space-x-2 text-sm text-gray-700 pt-2">
           <input type="checkbox" required 
