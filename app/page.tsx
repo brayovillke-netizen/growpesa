@@ -45,6 +45,26 @@ export default async function Dashboard() {
     limit 1
   `;
 
+  // FETCH RECENT ACTIVITY (This was missing!)
+  const recentActivity = await sql`
+    (
+      SELECT 'Savings' as type, amount, created_at, status 
+      FROM savings WHERE member_id = ${memberId} AND status = 'confirmed'
+    )
+    UNION ALL
+    (
+      SELECT 'Loan' as type, amount, created_at, status 
+      FROM loans WHERE member_id = ${memberId} AND status != 'asked'
+    )
+    UNION ALL
+    (
+      SELECT 'Repayment' as type, amount, paid_at as created_at, 'paid' as status 
+      FROM repayments WHERE loan_id IN (SELECT id FROM loans WHERE member_id = ${memberId})
+    )
+    ORDER BY created_at DESC
+    LIMIT 3
+  `;
+
   const settingsRows = await sql`select key, value from settings`;
   const settings: any = {};
   settingsRows.forEach(r => settings[r.key] = r.value);
