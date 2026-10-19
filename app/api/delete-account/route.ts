@@ -3,8 +3,11 @@ import { getSession } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
 export async function POST() {
-  const memberId = await getSession();
-  if (!memberId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const rawId = await getSession();
+  if (!rawId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  
+  const memberId = Number(rawId);
+  if (isNaN(memberId)) return Response.json({ error: 'Invalid session' }, { status: 400 });
 
   try {
     // 1. Prevent the Treasurer from deleting their own account
@@ -13,13 +16,14 @@ export async function POST() {
       return Response.json({ error: 'The Treasurer cannot delete their own account.' }, { status: 403 });
     }
 
-    // 2. Safely format the new phone string in JavaScript
+    // 2. Create the new phone string safely
     const deletedSuffix = `_deleted_${Date.now()}`;
     
-    // 3. Update the member status to 'deleted'
+    // 3. Update the member status to 'deleted' 
+    // We use || instead of concat() to fix the type error
     await sql`
       update members 
-      set status = 'deleted', phone = concat(phone, ${deletedSuffix}) 
+      set status = 'deleted', phone = phone || ${deletedSuffix} 
       where id = ${memberId}
     `;
 
