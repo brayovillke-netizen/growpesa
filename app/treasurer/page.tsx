@@ -6,15 +6,44 @@ import { useRouter } from 'next/navigation';
 export default function TreasurerPage() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [pin, setPin] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
+  // Check if already unlocked in this session
+  useEffect(() => {
+    if (sessionStorage.getItem('treasurer_unlocked') === 'true') {
+      setIsUnlocked(true);
+      loadData();
+    }
+  }, []);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+
+    const res = await fetch('/api/treasurer/verify-pin', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    });
+
+    if (res.ok) {
+      sessionStorage.setItem('treasurer_unlocked', 'true');
+      setIsUnlocked(true);
+      loadData();
+    } else {
+      alert('Incorrect PIN');
+      setLoading(false);
+    }
+  }
 
   function loadData() {
+    setLoading(true);
     fetch('/api/treasurer/data')
       .then(async (res) => {
         if (!res.ok) {
-          // If it's a 403 (Forbidden) or 401 (Unauthorized), kick them out
-          alert('Access Denied. You are not the Treasurer.');
-          router.push('/');
+          alert('Access Denied. Please log in with your Treasurer account.');
+          router.push('/login'); // Redirects to login if not authenticated
           return;
         }
         return res.json();
@@ -25,43 +54,57 @@ export default function TreasurerPage() {
           setLoading(false);
         }
       })
-      .catch((e) => {
-        console.error(e);
-        router.push('/');
+      .catch(() => {
+        router.push('/login');
       });
   }
 
-  useEffect(() => { loadData(); }, []);
-
   async function handleApproveLoan(loanId: number) {
     if (!confirm('Approve this loan request?')) return;
-    const res = await fetch('/api/treasurer/approve', {
-      method: 'POST',
-      body: JSON.stringify({ loanId }),
-    });
+    const res = await fetch('/api/treasurer/approve', { method: 'POST', body: JSON.stringify({ loanId }) });
     if (res.ok) loadData();
   }
 
   async function handleMarkPaid(loanId: number) {
-    if (!confirm('Have you sent the M-Pesa to the member? This will activate the loan.')) return;
-    const res = await fetch('/api/treasurer/mark-paid', {
-      method: 'POST',
-      body: JSON.stringify({ loanId }),
-    });
+    if (!confirm('Have you sent the M-Pesa to the member?')) return;
+    const res = await fetch('/api/treasurer/mark-paid', { method: 'POST', body: JSON.stringify({ loanId }) });
     if (res.ok) loadData();
   }
 
   async function handleApproveSaving(savingId: number) {
     if (!confirm('Verify M-Pesa code and approve savings?')) return;
-    const res = await fetch('/api/treasurer/approve-savings', {
-      method: 'POST',
-      body: JSON.stringify({ savingId }),
-    });
+    const res = await fetch('/api/treasurer/approve-savings', { method: 'POST', body: JSON.stringify({ savingId }) });
     if (res.ok) loadData();
   }
 
-  if (loading) return <div className="p-6 text-center text-gray-500">Checking permissions...</div>;
-  if (!data) return null;
+  // PIN SCREEN
+  if (!isUnlocked) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-sm w-full bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center">
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Treasurer Access</h1>
+          <p className="text-sm text-gray-500 mb-6">Enter your secret 4-digit PIN</p>
+          <form onSubmit={handleLogin}>
+            <input 
+              type="password"
+              maxLength={4}
+              value={pin}
+              onChange={e => setPin(e.target.value)}
+              className="w-full text-center text-3xl tracking-[0.5em] font-bold border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-green-deep outline-none mb-4"
+              placeholder="••••"
+              required
+            />
+            <button type="submit" disabled={loading} className="w-full bg-green-deep text-white font-semibold p-3 rounded-xl hover:bg-green-800 transition">
+              {loading ? 'Verifying...' : 'Unlock Dashboard'}
+            </button>
+          </form>
+          <Link href="/" className="block mt-4 text-sm text-gray-500 hover:text-gray-900">Back to Member View</Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (loading || !data) return <div className="p-6 text-center text-gray-500">Loading dashboard...</div>;
 
   return (
     <main className="min-h-screen bg-gray-50 p-6 pb-20">
@@ -73,12 +116,8 @@ export default function TreasurerPage() {
             <p className="text-xs text-gray-500">Group Overview</p>
           </div>
           <div className="flex gap-4">
-            <Link href="/treasurer/settings" className="text-sm text-gray-500 font-semibold hover:underline">
-              Settings
-            </Link>
-            <Link href="/" className="text-sm text-green-deep font-semibold hover:underline">
-              Member View &rarr;
-            </Link>
+            <button onClick={() => { sessionStorage.removeItem('treasurer_unlocked'); setIsUnlocked(false); }} className="text-sm text-red-500 font-semibold hover:underline">Lock</button>
+            <Link href="/treasurer/settings" className="text-sm text-gray-500 font-semibold hover:underline">Settings</Link>
           </div>
         </header>
 
