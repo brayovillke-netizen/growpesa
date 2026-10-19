@@ -1,9 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,12 +18,11 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        router.push('/');
-        router.refresh();
+        // Force full page reload to apply session perfectly
+        window.location.href = '/';
       } else {
-        // Safely try to read the error message
         const data = await res.json().catch(() => ({}));
-        alert(data.error || `Login failed (Status: ${res.status})`);
+        alert(data.error || 'Incorrect PIN or Phone Number');
         setLoading(false);
       }
     } catch (err) {
@@ -61,7 +58,7 @@ export default function LoginPage() {
           />
 
           <button type="submit" disabled={loading} className="w-full bg-green-deep text-white font-semibold p-3.5 rounded-xl mt-2 hover:bg-green-800 transition disabled:opacity-50">
-            {loading ? 'Verifying...' : 'Log In'}
+            {loading ? 'Logging in...' : 'Log In'}
           </button>
         </form>
 

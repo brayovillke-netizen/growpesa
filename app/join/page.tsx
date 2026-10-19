@@ -1,9 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function JoinPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', is18: false, referralCode: '', pin: '' });
 
@@ -11,17 +9,23 @@ export default function JoinPage() {
     e.preventDefault();
     setLoading(true);
     
-    const res = await fetch('/api/join', {
-      method: 'POST',
-      body: JSON.stringify(form),
-    });
-    
-    if (res.ok) {
-      router.push('/');
-      router.refresh();
-    } else {
-      const data = await res.json();
-      alert(data.error || 'Failed to join');
+    try {
+      const res = await fetch('/api/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      
+      if (res.ok) {
+        // Force full page reload
+        window.location.href = '/';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to join. Phone might already exist.');
+        setLoading(false);
+      }
+    } catch (err) {
+      alert('Network error.');
       setLoading(false);
     }
   }
@@ -53,7 +57,6 @@ export default function JoinPage() {
           {loading ? 'Joining...' : 'Join Now'}
         </button>
 
-        {/* THIS IS WHERE THE LINK BELONGS - INSIDE THE FORM */}
         <p className="text-center text-sm text-gray-500 mt-4">
           Already have an account? <a href="/login" className="text-green-deep font-semibold hover:underline">Log In</a>
         </p>
