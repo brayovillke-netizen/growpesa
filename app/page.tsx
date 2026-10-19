@@ -4,7 +4,7 @@ import { sql } from '@/lib/db';
 import { sundaysSince, sundaysToShareout } from '@/lib/rules';
 import { redirect } from 'next/navigation';
 import BottomNav from './components/BottomNav';
-import PWAInstall from './components/PWAInstall'; // <-- Added import
+import PWAInstall from './components/PWAInstall';
 
 export default async function Dashboard() {
   const memberId = await getSession();
@@ -49,7 +49,7 @@ export default async function Dashboard() {
   const recentActivity = await sql`
     (
       SELECT 'Savings' as type, amount, created_at, status 
-      FROM savings WHERE member_id = ${memberId} AND status = 'confirmed'
+      FROM savings WHERE member_id = ${memberId} AND status = 'confirmed' AND kind != 'withdrawal'
     )
     UNION ALL
     (
@@ -120,9 +120,16 @@ export default async function Dashboard() {
                   <p className="text-xs text-green-300 font-semibold mt-1">On Track</p>
                 )}
               </div>
-              <Link href="/savings" className="bg-white text-green-deep px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 transition">
-                Save Now
-              </Link>
+              
+              {/* Buttons Section */}
+              <div className="flex flex-col gap-2">
+                <Link href="/savings" className="bg-white text-green-deep px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 transition text-center">
+                  Save Now
+                </Link>
+                <Link href="/withdraw" className="bg-green-800 text-white border border-green-700 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-green-900 transition text-center">
+                  Withdraw
+                </Link>
+              </div>
             </div>
           </div>
           <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white opacity-10 rounded-full"></div>
