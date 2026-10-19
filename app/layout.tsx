@@ -5,7 +5,6 @@ import RegisterSW from './components/RegisterSW';
 export const metadata: Metadata = {
   title: 'GrowPesa',
   description: 'Save weekly. Borrow when ready.',
-  manifest: '/manifest.webmanifest', // Links the manifest
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
