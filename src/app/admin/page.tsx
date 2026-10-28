@@ -35,6 +35,7 @@ export default function AdminPage() {
     try {
       setSyncing(true);
       
+      // Fetch Global Pool
       const { data: poolData, error: poolError } = await supabase
         .from('treasury_pool')
         .select('pool_balance')
@@ -44,6 +45,7 @@ export default function AdminPage() {
       if (poolError) throw poolError;
       if (poolData) setMainPool(Math.round(Number(poolData.pool_balance)));
 
+      // Fetch ALL Ledger Items
       const { data: queueData, error: queueError } = await supabase
         .from('ledger_items')
         .select('*')
@@ -64,7 +66,6 @@ export default function AdminPage() {
 
       setQueue(mappedQueue);
     } catch (err: any) {
-      // Silently log sync errors so they don't clutter the screen
       console.error('Sync error:', err.message);
     } finally {
       setSyncing(false);
@@ -90,7 +91,7 @@ export default function AdminPage() {
     }
 
     fetchQueue();
-    const interval = setInterval(fetchQueue, 5000); // 5 seconds to reduce rate limiting
+    const interval = setInterval(fetchQueue, 5000);
     return () => clearInterval(interval);
   }, [fetchQueue]);
 
@@ -99,27 +100,55 @@ export default function AdminPage() {
       let poolUpdate: number | undefined = undefined;
       const amt = Math.round(Number(item.amount));
       
-      if (item.type.includes('Deposit') || item.type.includes('Loan Repayment')) {
-        poolUpdate = Math.round(mainPool + amt);
-      } else if (item.type.includes('Withdrawal') || item.type.includes('Loan Request')) {
-        poolUpdate = Math.max(0, Math.round(mainPool - amt));
+      // 1. Fetch the Member's Current Savings
+      let currentSavings = 0;
+      if (item.phone) {
+        const { data: memberData } = await supabase
+          .from('members')
+          .select('savings_balance')
+          .eq('phone', item.phone)
+          .single();
+        if (memberData) currentSavings = Number(memberData.savings_balance) || 0;
       }
 
+      // 2. Calculate New Global Pool and Member Savings
+      let newMemberSavings = currentSavings;
+
+      if (item.type.includes('Deposit')) {
+        poolUpdate = Math.round(mainPool + amt);
+        newMemberSavings = currentSavings + amt;
+      } else if (item.type.includes('Withdrawal')) {
+        poolUpdate = Math.max(0, Math.round(mainPool - amt));
+        newMemberSavings = Math.max(0, currentSavings - amt);
+      } else if (item.type.includes('Loan Request')) {
+        poolUpdate = Math.max(0, Math.round(mainPool - amt)); // Pool pays out loan
+      } else if (item.type.includes('Loan Repayment')) {
+        poolUpdate = Math.round(mainPool + amt); // Pool gets money back
+      }
+
+      // 3. Update Item Status
       const { error: itemError } = await supabase
         .from('ledger_items')
         .update({ status: 'COMPLETED' })
         .eq('id', String(item.id));
-
       if (itemError) throw itemError;
 
+      // 4. Update Global Pool
       if (poolUpdate !== undefined) {
         const { error: poolError } = await supabase
           .from('treasury_pool')
           .update({ pool_balance: poolUpdate, updated_at: new Date().toISOString() })
           .eq('id', 1);
-        
         if (poolError) throw poolError;
         setMainPool(poolUpdate);
+      }
+
+      // 5. Update Member's Savings (only for Deposit or Withdrawal)
+      if (item.phone && (item.type.includes('Deposit') || item.type.includes('Withdrawal'))) {
+        await supabase
+          .from('members')
+          .update({ savings_balance: newMemberSavings })
+          .eq('phone', item.phone);
       }
 
       await fetchQueue();
@@ -196,7 +225,7 @@ export default function AdminPage() {
 
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total Main Pool</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Global Treasury Pool</p>
           <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
         </div>
         <div className="bg-amber-600 p-3 rounded-2xl text-slate-950 shadow-md">

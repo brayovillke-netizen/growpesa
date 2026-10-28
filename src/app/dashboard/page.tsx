@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
-  const [mainPool, setMainPool] = useState<number>(6000);
+  const [mainPool, setMainPool] = useState<number>(0); // Now represents Personal Savings
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
   
@@ -139,8 +139,8 @@ export default function DashboardPage() {
     if (savedLedger) {
       try { setLedger(JSON.parse(savedLedger)); } catch {}
     }
-    const savedPool = localStorage.getItem('tibapay_pool');
-    if (savedPool) setMainPool(Math.round(Number(savedPool)) || 6000);
+    const savedSavings = localStorage.getItem(`tibapay_savings_${u.phone}`);
+    if (savedSavings) setMainPool(Math.round(Number(savedSavings)) || 0);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const savedSubs = localStorage.getItem(`tibapay_subs_${u.phone}`);
@@ -195,10 +195,13 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  const updateMainPool = (newPoolAmount: number) => {
+  const updateMainPool = async (newPoolAmount: number) => {
+    if (!user) return;
     const rounded = Math.round(newPoolAmount);
     setMainPool(rounded);
-    localStorage.setItem('tibapay_pool', String(rounded));
+    localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded));
+    // Sync personal savings directly to DB (for internal package sweeps)
+    await supabase.from('members').update({ savings_balance: rounded }).eq('phone', user.phone);
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
@@ -216,15 +219,20 @@ export default function DashboardPage() {
 
   const syncFromServer = useCallback(async (currentUser: MemberUser) => {
     try {
-      // 1. Fetch Global Pool (updates on every poll so Admin approval reflects immediately)
-      const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
-      if (poolData) {
-        const pool = Math.round(Number(poolData.pool_balance));
-        setMainPool(pool);
-        localStorage.setItem('tibapay_pool', String(pool));
+      // 1. Fetch Member's Personal Savings
+      const { data: memberData } = await supabase
+        .from('members')
+        .select('savings_balance')
+        .eq('phone', currentUser.phone)
+        .single();
+        
+      if (memberData) {
+        const savings = Math.round(Number(memberData.savings_balance)) || 0;
+        setMainPool(savings);
+        localStorage.setItem(`tibapay_savings_${currentUser.phone}`, String(savings));
       }
 
-      // 2. Fetch ONLY this user's items
+      // 2. Fetch only this user's items
       const { data: queueData } = await supabase
         .from('ledger_items')
         .select('*')
@@ -233,7 +241,7 @@ export default function DashboardPage() {
 
       const serverQueue = queueData || [];
       
-      // 3. Completely overwrite the ledger with the server's truth (fixes stuck statuses)
+      // 3. Overwrite local ledger with server state
       const mappedQueue = serverQueue.map((row: any) => ({
         id: String(row.id),
         phone: row.phone,
@@ -248,7 +256,7 @@ export default function DashboardPage() {
       setLedger(mappedQueue);
       localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
-      // 4. Loan approval / repayment logic
+      // 4. Loan logic
       const currentLoan = loanRef.current;
       if (currentLoan) {
         if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
@@ -335,10 +343,10 @@ export default function DashboardPage() {
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
     
-    // Clear previous user's data so no data bleeding
     setLedger([]);
     setActiveSubscriptions([]);
     setActiveLoan(null);
+    setMainPool(0);
     
     setUser(loggedInUser);
     setPhoneInput(loggedInUser.phone);
@@ -366,7 +374,8 @@ export default function DashboardPage() {
       phone: cleanPhone,
       full_name: regName.trim(),
       pin: regPin,
-      role: 'member'
+      role: 'member',
+      savings_balance: 0
     });
 
     setLoading(false);
@@ -395,6 +404,7 @@ export default function DashboardPage() {
     setLedger([]);
     setActiveSubscriptions([]);
     setActiveLoan(null);
+    setMainPool(0);
     localStorage.removeItem('tibapay_auth_user');
   };
 
@@ -418,6 +428,8 @@ export default function DashboardPage() {
     }
     const totalGroupCut = sub.accumulatedBalance * 0.1;
     const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
+    
+    // Adds to personal savings directly
     updateMainPool(mainPool + totalNetSweep);
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -438,17 +450,19 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger]);
-    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Pool (10% group fee: KES ${Math.round(totalGroupCut)}).`);
+    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Personal Savings (10% group fee: KES ${Math.round(totalGroupCut)}).`);
   };
 
   const handleSubscribeTier = (tierId: number) => {
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
     if (mainPool < tier.entry) {
-      setMessage(`Insufficient funds: need KES ${tier.entry.toLocaleString()}. Pool: KES ${mainPool.toLocaleString()}.`);
+      setMessage(`Insufficient funds: need KES ${tier.entry.toLocaleString()}. Savings: KES ${mainPool.toLocaleString()}.`);
       return;
     }
+    // Deducts from personal savings directly
     updateMainPool(mainPool - tier.entry);
+    
     const startDate = new Date().toISOString().split('T')[0];
     const end = new Date();
     end.setDate(end.getDate() + tier.lockDays);
@@ -563,7 +577,7 @@ export default function DashboardPage() {
       status: 'PENDING ADMIN APPROVAL',
       code: extractedCode,
       smsMessage: manualSmsText,
-      phone: user?.phone, // Use registered phone for filtering
+      phone: user?.phone,
     };
     saveLedger([item, ...ledger], item);
     setManualSmsText('');
@@ -594,7 +608,7 @@ export default function DashboardPage() {
   const handleWithdraw = async () => {
     const grossAmt = Math.round(parseFloat(withdrawAmountInput));
     if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
-    if (grossAmt > mainPool) return setMessage(`Insufficient funds. Pool: KES ${mainPool.toLocaleString()}.`);
+    if (grossAmt > mainPool) return setMessage(`Insufficient savings. Balance: KES ${mainPool.toLocaleString()}.`);
 
     const gwfFee = calculateGWF(grossAmt);
     const netPayout = Math.round(grossAmt - gwfFee);
@@ -680,7 +694,7 @@ export default function DashboardPage() {
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
       code: reqCode,
-      phone: user?.phone, // Use registered phone for filtering
+      phone: user?.phone,
     };
     saveLedger([newItem, ...ledger], newItem);
 
@@ -984,7 +998,7 @@ export default function DashboardPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Main Pool</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">My Savings</p>
               <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
             </div>
             <div className="bg-sky-600 p-3 rounded-2xl text-white shadow-md">
@@ -1191,7 +1205,7 @@ export default function DashboardPage() {
                         disabled={sub.accumulatedBalance <= 0}
                         className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-[10px] transition cursor-pointer disabled:opacity-50 shadow-md"
                       >
-                        Sweep to Main Pool
+                        Sweep to Savings
                       </button>
                     </div>
                   </div>
@@ -1249,7 +1263,7 @@ export default function DashboardPage() {
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
             <h3 className="font-bold text-sm text-white">Graduated Withdrawal (GWF v6)</h3>
             <p className="text-xs text-slate-400">
-              Available Pool Balance: <strong className="text-emerald-400">KES {mainPool.toLocaleString()}</strong>
+              Available Savings Balance: <strong className="text-emerald-400">KES {mainPool.toLocaleString()}</strong>
             </p>
             <div className="space-y-1.5 pt-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Withdrawal Amount (Min KSh 50)</label>
@@ -1359,7 +1373,7 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-slate-400">
-                  You may borrow up to 40% of your Main Pool savings (<strong className="text-white">KES {mainPool.toLocaleString()}</strong>). All loans require Treasurer approval and 24-hour M-Pesa disbursement.
+                  You may borrow up to 40% of your Savings (<strong className="text-white">KES {mainPool.toLocaleString()}</strong>). All loans require Treasurer approval and 24-hour M-Pesa disbursement.
                 </p>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
