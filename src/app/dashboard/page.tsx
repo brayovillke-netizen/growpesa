@@ -20,6 +20,9 @@ interface MemberUser {
   phone: string;
   name: string;
   role: 'member' | 'admin';
+  joined_at?: string;
+  account_status?: string;
+  loan_limit?: number;
 }
 
 interface PackageTier {
@@ -54,12 +57,11 @@ interface ActiveLoan {
   interestAmount: number;
   totalRepay: number;
   amountPaid: number;
-  status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED' | 'REJECTED';
+  status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
   phone?: string;
 }
 
-// 👇 UPDATED WITH EXACT MAXIMUM ATTRACTION TIERS
 const PACKAGE_TIERS: PackageTier[] = [
   { id: 1, name: 'Tier 1', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
   { id: 2, name: 'Tier 2', entry: 500, dailyLimit: 45, lockDays: 13, groupCut: 4.5, netSweep: 40.5, totalPayout: 585, roi: 85, icon: '🥈', sizeClass: 'text-4xl' },
@@ -112,7 +114,7 @@ export default function DashboardPage() {
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
   
-  const [loanAmountInput, setLoanAmountInput] = useState('2000');
+  const [loanAmountInput, setLoanAmountInput] = useState('1000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
   
   // Repayment States
@@ -237,7 +239,7 @@ export default function DashboardPage() {
     try {
       const { data: memberData } = await supabase
         .from('members')
-        .select('savings_balance')
+        .select('savings_balance, account_status, loan_limit')
         .eq('phone', currentUser.phone)
         .single();
         
@@ -245,6 +247,12 @@ export default function DashboardPage() {
         const savings = Math.round(Number(memberData.savings_balance)) || 0;
         setMainPool(savings);
         localStorage.setItem(`tibapay_savings_${currentUser.phone}`, String(savings));
+        
+        setUser(prev => prev ? { 
+          ...prev, 
+          account_status: memberData.account_status,
+          loan_limit: Number(memberData.loan_limit)
+        } : null);
       }
 
       const { data: queueData } = await supabase
@@ -271,6 +279,17 @@ export default function DashboardPage() {
 
       const currentLoan = loanRef.current;
       if (currentLoan) {
+        // Check for Overdue Status (Automated Review)
+        if (currentLoan.status === 'ACTIVE') {
+          const today = new Date().toISOString().split('T')[0];
+          if (today > currentLoan.dueDate) {
+            const overdueLoan: ActiveLoan = { ...currentLoan, status: 'OVERDUE' };
+            setActiveLoan(overdueLoan);
+            loanRef.current = overdueLoan;
+            localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(overdueLoan));
+          }
+        }
+
         if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
           const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
           if (loanItem?.status === 'COMPLETED') {
@@ -285,7 +304,7 @@ export default function DashboardPage() {
           }
         }
         
-        if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'CLOSED') {
+        if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE' || currentLoan.status === 'CLOSED') {
           const approvedRepayments = serverQueue.filter(
             (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
           );
@@ -298,7 +317,8 @@ export default function DashboardPage() {
               updated.status = 'CLOSED';
               setMessage('Your loan has been fully repaid!');
             } else {
-              updated.status = 'ACTIVE';
+              // If they paid partially while overdue, keep them blocked until fully paid
+              updated.status = currentLoan.status === 'OVERDUE' ? 'OVERDUE' : 'ACTIVE';
             }
             
             setActiveLoan(updated);
@@ -360,6 +380,9 @@ export default function DashboardPage() {
       phone: data.phone,
       name: data.full_name,
       role: data.role,
+      joined_at: data.created_at,
+      account_status: data.account_status || 'active',
+      loan_limit: Number(data.loan_limit) || 0,
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
@@ -396,7 +419,9 @@ export default function DashboardPage() {
       full_name: regName.trim(),
       pin: regPin,
       role: 'member',
-      savings_balance: 0
+      savings_balance: 0,
+      loan_limit: 0,
+      account_status: 'active'
     });
 
     setLoading(false);
@@ -645,7 +670,31 @@ export default function DashboardPage() {
     setMessage(`Withdrawal of KES ${grossAmt.toLocaleString()} submitted (GWF: KES ${gwfFee}, Net: KES ${netPayout.toLocaleString()}).`);
   };
 
-  const maxBorrowingLimit = Math.floor(mainPool * 0.4);
+  // ==========================================
+  // LOAN RISK MANAGEMENT & ELIGIBILITY CHECKS
+  // ==========================================
+  
+  const daysActive = user?.joined_at ? Math.floor((Date.now() - new Date(user.joined_at).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  const hasMinSavings = mainPool >= 1000;
+  const depositCount = ledger.filter(i => i.type.includes('Deposit') && i.status === 'COMPLETED').length;
+  const hasConsistentSavings = depositCount >= 4;
+  const isAccountActive = user?.account_status === 'active';
+  
+  // Base Eligibility (4 weeks, KES 1,000, 4 deposits, Active Account)
+  const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && hasConsistentSavings && isAccountActive;
+  
+  // Limit Calculation Rules
+  // Max 40% of savings, but capped at 50,000 KES absolute max
+  const calculatedMaxLimit = Math.min(Math.floor(mainPool * 0.4), 50000);
+  
+  // If they don't meet base eligibility, limit is 0. If they do, they get the calculated limit.
+  // We also use the DB loan_limit if it's already set and higher (to allow growth up to the max).
+  const assignedLimit = meetsBaseEligibility ? Math.max(calculatedMaxLimit, user?.loan_limit || 0) : 0;
+  
+  // Dynamic Borrowing Limit (Prevents new loans if they have an OVERDUE loan)
+  const isBlockedByOverdue = activeLoan?.status === 'OVERDUE';
+  const isEligibleForNewLoan = meetsBaseEligibility && !isBlockedByOverdue;
+
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
   const loanFee = Math.round(parsedLoanAmt * 0.05);
   const amountSentToMpesa = parsedLoanAmt - loanFee;
@@ -653,13 +702,26 @@ export default function DashboardPage() {
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
-  const handleApplyLoan = () => {
+  const handleApplyLoan = async () => {
     if (activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') {
       return setMessage(`Repay active loan completely before borrowing again.`);
     }
+    
+    if (isBlockedByOverdue) {
+      return setMessage(`Your account has an overdue loan. Please clear it to restore borrowing privileges.`);
+    }
+    
+    if (!isAccountActive) {
+      return setMessage(`Your account is under review. Borrowing is temporarily suspended.`);
+    }
+
+    if (!meetsBaseEligibility) {
+      return setMessage(`You do not meet the loan eligibility requirements yet.`);
+    }
+    
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
-    if (parsedLoanAmt > maxBorrowingLimit) {
-      return setMessage(`Exceeds limit of KES ${maxBorrowingLimit.toLocaleString()} (40% of savings).`);
+    if (parsedLoanAmt > assignedLimit) {
+      return setMessage(`Exceeds your approved limit of KES ${assignedLimit.toLocaleString()}.`);
     }
 
     const due = new Date();
@@ -682,6 +744,15 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLoanState(newLoan);
+
+    // Audit Log
+    await supabase.from('audit_logs').insert({
+      phone: user?.phone,
+      action: 'LOAN_REQUEST_SUBMITTED',
+      previous_value: 'None',
+      new_value: parsedLoanAmt.toString(),
+      reason: 'Member requested loan',
+    });
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -1367,8 +1438,12 @@ export default function DashboardPage() {
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-4 shadow-lg">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-sm text-white">TibaPay Loan Engine</h3>
-              <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-2.5 py-1 rounded-xl border border-sky-500/20">
-                Max Limit: KES {maxBorrowingLimit.toLocaleString()}
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border ${
+                isEligibleForNewLoan 
+                  ? 'text-sky-400 bg-sky-500/10 border-sky-500/20' 
+                  : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+              }`}>
+                Max Limit: KES {isEligibleForNewLoan ? assignedLimit.toLocaleString() : 'Locked'}
               </span>
             </div>
 
@@ -1381,6 +1456,7 @@ export default function DashboardPage() {
                   </div>
                   <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
                     activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 
+                    activeLoan.status === 'OVERDUE' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                     activeLoan.status === 'CLOSED' ? 'bg-slate-500/20 text-slate-300 border border-slate-500/30' :
                     'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   }`}>
@@ -1411,10 +1487,9 @@ export default function DashboardPage() {
                   <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
                     Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
                   </div>
-                ) : activeLoan.status === 'ACTIVE' ? (
-                  <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
-                    <p className="text-xs font-bold text-amber-400">Make a Partial or Full Repayment:</p>
-                    
+                ) : activeLoan.status === 'OVERDUE' ? (
+                  <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-rose-500/30">
+                    <p className="text-xs font-bold text-rose-400">Your loan is overdue. Please clear the balance to restore borrowing privileges.</p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
@@ -1424,7 +1499,70 @@ export default function DashboardPage() {
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
                       />
                     </div>
+                    <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                      <button
+                        onClick={() => setRepayMode('stk')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                      >
+                        Pay via STK Push
+                      </button>
+                      <button
+                        onClick={() => setRepayMode('sms')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                      >
+                        Paste SMS
+                      </button>
+                    </div>
 
+                    {repayMode === 'stk' ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
+                          <input
+                            type="text"
+                            value={repayPhoneInput}
+                            onChange={(e) => setRepayPhoneInput(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                            placeholder="0712345678"
+                          />
+                        </div>
+                        <button
+                          onClick={handleRepaySTK}
+                          disabled={loading}
+                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md disabled:opacity-50"
+                        >
+                          {loading ? 'Sending STK Push...' : 'Trigger STK Push'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <textarea
+                          value={repaySmsText}
+                          onChange={(e) => setRepaySmsText(e.target.value)}
+                          placeholder="Paste M-Pesa confirmation SMS here..."
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 h-20 resize-none"
+                        />
+                        <button
+                          onClick={handleRepaySMS}
+                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md"
+                        >
+                          Submit SMS to Treasurer
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : activeLoan.status === 'ACTIVE' ? (
+                  <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
+                    <p className="text-xs font-bold text-amber-400">Make a Partial or Full Repayment:</p>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
+                      <input
+                        type="number"
+                        value={repayAmountInput}
+                        onChange={(e) => setRepayAmountInput(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
                     <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
                       <button
                         onClick={() => setRepayMode('stk')}
@@ -1485,72 +1623,120 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-slate-400">
-                  You may borrow up to 40% of your Savings (<strong className="text-white">KES {mainPool.toLocaleString()}</strong>). All loans require Treasurer approval and 24-hour M-Pesa disbursement.
-                </p>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-xl border border-slate-700">KES</span>
-                    <input
-                      type="number"
-                      value={loanAmountInput}
-                      onChange={(e) => setLoanAmountInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                    />
+                
+                {/* TRANSPARENT ELIGIBILITY PANEL */}
+                {!isEligibleForNewLoan ? (
+                  <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3">
+                    <p className="text-xs font-bold text-white mb-2 flex items-center gap-2">
+                      <span>🔒</span> Requirements to Unlock Borrowing:
+                    </p>
+                    
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={daysActive >= 28 ? "text-emerald-500" : "text-slate-500"}>
+                        {daysActive >= 28 ? '✅' : '❌'}
+                      </span>
+                      <span className={daysActive >= 28 ? "text-slate-300" : "text-slate-400"}>
+                        Minimum 4 weeks (28 days) membership ({daysActive}/28 days)
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={hasMinSavings ? "text-emerald-500" : "text-slate-500"}>
+                        {hasMinSavings ? '✅' : '❌'}
+                      </span>
+                      <span className={hasMinSavings ? "text-slate-300" : "text-slate-400"}>
+                        Minimum savings of KES 1,000 (Current: KES {mainPool.toLocaleString()})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={hasConsistentSavings ? "text-emerald-500" : "text-slate-500"}>
+                        {hasConsistentSavings ? '✅' : '❌'}
+                      </span>
+                      <span className={hasConsistentSavings ? "text-slate-300" : "text-slate-400"}>
+                        Consistent savings: 4 deposits ({depositCount}/4 completed)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={isAccountActive ? "text-emerald-500" : "text-rose-500"}>
+                        {isAccountActive ? '✅' : '❌'}
+                      </span>
+                      <span className={isAccountActive ? "text-slate-300" : "text-rose-400"}>
+                        Account in good standing
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { weeks: 1, rate: '3%' },
-                      { weeks: 2, rate: '5%' },
-                      { weeks: 4, rate: '10%' },
-                    ].map((term) => (
-                      <button
-                        key={term.weeks}
-                        onClick={() => setLoanTermWeeks(term.weeks)}
-                        className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                          loanTermWeeks === term.weeks
-                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
-                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
-                        }`}
-                      >
-                        {term.weeks} Week{term.weeks > 1 ? 's' : ''} ({term.rate})
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Requested Loan:</span>
-                    <span className="font-bold text-white">KES {parsedLoanAmt.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-rose-400">Loan Fee (5% upfront):</span>
-                    <span className="font-bold text-rose-400">-KES {loanFee.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-emerald-400">Amount Sent to M-Pesa:</span>
-                    <span className="font-bold text-emerald-400">KES {amountSentToMpesa.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
-                    <span className="font-bold text-white">+KES {loanInterestAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
-                    <span className="font-bold text-amber-400">Total Amount to Repay:</span>
-                    <span className="text-sm font-black text-amber-400">KES {totalLoanRepay.toLocaleString()}</span>
-                  </div>
-                </div>
-                <button
-                  onClick={handleApplyLoan}
-                  disabled={parsedLoanAmt <= 0 || parsedLoanAmt > maxBorrowingLimit}
-                  className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-2"
-                >
-                  Submit Loan Request for Admin Review (24 Hr)
-                </button>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-400">
+                      You qualify to borrow up to <strong className="text-white">KES {assignedLimit.toLocaleString()}</strong>. All loans require Treasurer approval and 24-hour disbursement.
+                    </p>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-xl border border-slate-700">KES</span>
+                        <input
+                          type="number"
+                          value={loanAmountInput}
+                          onChange={(e) => setLoanAmountInput(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { weeks: 1, rate: '3%' },
+                          { weeks: 2, rate: '5%' },
+                          { weeks: 4, rate: '10%' },
+                        ].map((term) => (
+                          <button
+                            key={term.weeks}
+                            onClick={() => setLoanTermWeeks(term.weeks)}
+                            className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                              loanTermWeeks === term.weeks
+                                ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
+                                : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
+                            }`}
+                          >
+                            {term.weeks} Week{term.weeks > 1 ? 's' : ''} ({term.rate})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Requested Loan:</span>
+                        <span className="font-bold text-white">KES {parsedLoanAmt.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-rose-400">Loan Fee (5% upfront):</span>
+                        <span className="font-bold text-rose-400">-KES {loanFee.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-emerald-400">Amount Sent to M-Pesa:</span>
+                        <span className="font-bold text-emerald-400">KES {amountSentToMpesa.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
+                        <span className="font-bold text-white">+KES {loanInterestAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
+                        <span className="font-bold text-amber-400">Total Amount to Repay:</span>
+                        <span className="text-sm font-black text-amber-400">KES {totalLoanRepay.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleApplyLoan}
+                      disabled={parsedLoanAmt <= 0 || parsedLoanAmt > assignedLimit}
+                      className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-2"
+                    >
+                      Submit Loan Request for Admin Review (24 Hr)
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
