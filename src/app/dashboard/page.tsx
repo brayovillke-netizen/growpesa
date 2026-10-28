@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import InstallPrompt from '@/components/InstallPrompt';
 
 interface LedgerItem {
@@ -11,6 +11,7 @@ interface LedgerItem {
   status: string;
   code: string;
   smsMessage?: string;
+  sms_message?: string;
   phone?: string;
 }
 
@@ -47,7 +48,7 @@ interface ActiveLoan {
   interestRate: number;
   interestAmount: number;
   totalRepay: number;
-  status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED';
+  status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
 }
 
@@ -73,119 +74,89 @@ function calculateGWF(amount: number): number {
   if (amount <= 20000) return 80;
   if (amount <= 50000) return 100;
   if (amount <= 100000) return 125;
-  const percentageFee = Math.ceil(amount * 0.0025);
-  return Math.max(percentageFee, 125);
+  return Math.max(Math.ceil(amount * 0.0025), 125);
 }
 
 export default function DashboardPage() {
   const [user, setUser] = useState<MemberUser | null>(null);
-  const [loginPhone, setLoginPhone] = useState<string>('');
-  const [loginPin, setLoginPin] = useState<string>('');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPin, setLoginPin] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
   const [mainPool, setMainPool] = useState<number>(6000);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
-  
-  const [loanAmountInput, setLoanAmountInput] = useState<string>('2000');
-  const [loanTermWeeks, setLoanTermWeeks] = useState<number>(4);
+
+  const [loanAmountInput, setLoanAmountInput] = useState('2000');
+  const [loanTermWeeks, setLoanTermWeeks] = useState(4);
 
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [depositAmountInput, setDepositAmountInput] = useState<string>('1000');
-  const [phoneInput, setPhoneInput] = useState<string>('');
-  const [withdrawAmountInput, setWithdrawAmountInput] = useState<string>('1000');
-  
+  const [depositAmountInput, setDepositAmountInput] = useState('1000');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [withdrawAmountInput, setWithdrawAmountInput] = useState('1000');
+
   const [activeSmsInputId, setActiveSmsInputId] = useState<string | null>(null);
-  const [pastedSmsText, setPastedSmsText] = useState<string>('');
-  const [manualSmsText, setManualSmsText] = useState<string>('');
+  const [pastedSmsText, setPastedSmsText] = useState('');
+  const [manualSmsText, setManualSmsText] = useState('');
   const [showManualDeposit, setShowManualDeposit] = useState(false);
 
-  const [ledger, setLedger] = useState<LedgerItem[]>([
-    {
-      id: '1',
-      type: 'Deposit',
-      amount: 1000,
-      date: '2026-10-27',
-      status: 'COMPLETED',
-      code: 'QHK89234X',
-      phone: '0712345678',
-    },
-  ]);
+  const [ledger, setLedger] = useState<LedgerItem[]>([]);
 
-  const loadSharedData = () => {
+  const loanRef = useRef<ActiveLoan | null>(null);
+  useEffect(() => {
+    loanRef.current = activeLoan;
+  }, [activeLoan]);
+
+  const loadLocal = () => {
     const savedLedger = localStorage.getItem('tibapay_ledger');
     if (savedLedger) {
-      try { setLedger(JSON.parse(savedLedger)); } catch (e) {}
+      try { setLedger(JSON.parse(savedLedger)); } catch {}
     }
     const savedPool = localStorage.getItem('tibapay_pool');
-    if (savedPool) {
-      setMainPool(Number(savedPool));
-    }
+    if (savedPool) setMainPool(Number(savedPool) || 6000);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const savedSubs = localStorage.getItem('tibapay_active_subs');
     if (savedSubs) {
       try {
-        const parsedSubs: ActiveSubscription[] = JSON.parse(savedSubs);
-        const activeOnly = parsedSubs.filter((sub) => todayStr < sub.endDate);
-        setActiveSubscriptions(activeOnly);
-        localStorage.setItem('tibapay_active_subs', JSON.stringify(activeOnly));
-      } catch (e) {}
-    } else {
-      const defaultSub: ActiveSubscription = {
-        tierId: 3,
-        accumulatedBalance: 300,
-        startDate: '2026-10-28',
-        endDate: '2026-11-27',
-        isLocked: true,
-      };
-      setActiveSubscriptions([defaultSub]);
+        const parsed: ActiveSubscription[] = JSON.parse(savedSubs);
+        setActiveSubscriptions(parsed.filter((s) => todayStr < s.endDate));
+      } catch {}
     }
 
     const savedLoan = localStorage.getItem('tibapay_active_loan');
     if (savedLoan) {
       try {
-        const parsedLoan: ActiveLoan = JSON.parse(savedLoan);
-        if (parsedLoan.status !== 'CLOSED') {
-          setActiveLoan(parsedLoan);
-        } else {
-          setActiveLoan(null);
+        const parsed: ActiveLoan = JSON.parse(savedLoan);
+        if (parsed.status !== 'CLOSED' && parsed.status !== 'REJECTED') {
+          setActiveLoan(parsed);
         }
-      } catch (e) {}
+      } catch {}
     }
   };
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('tibapay_auth_user');
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        if (parsed.role === 'admin') {
-          window.location.href = '/admin';
-          return;
-        }
-        setUser(parsed);
-      } catch (e) {
-        localStorage.removeItem('tibapay_auth_user');
-      }
-    }
+  // POST to shared server queue (Supabase)
+  const submitToServerQueue = async (item: LedgerItem) => {
+    try {
+      await fetch('/api/treasurer/queue', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'submit', item }),
+      });
+    } catch {}
+  };
 
-    loadSharedData();
-
-    const handleStorageChange = () => loadSharedData();
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('tibapay_sync', handleStorageChange);
-
-    const interval = setInterval(loadSharedData, 2000);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('tibapay_sync', handleStorageChange);
-    };
-  }, []);
+  // Save locally AND mirror to server
+  const saveLedger = (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
+    setLedger(newLedger);
+    localStorage.setItem('tibapay_ledger', JSON.stringify(newLedger));
+    if (syncItem) submitToServerQueue(syncItem);
+    window.dispatchEvent(new Event('tibapay_sync'));
+  };
 
   const saveSubs = (subs: ActiveSubscription[]) => {
     setActiveSubscriptions(subs);
@@ -201,7 +172,8 @@ export default function DashboardPage() {
 
   const saveLoanState = (loan: ActiveLoan | null) => {
     setActiveLoan(loan);
-    if (loan && loan.status !== 'CLOSED') {
+    loanRef.current = loan;
+    if (loan && loan.status !== 'CLOSED' && loan.status !== 'REJECTED') {
       localStorage.setItem('tibapay_active_loan', JSON.stringify(loan));
     } else {
       localStorage.removeItem('tibapay_active_loan');
@@ -209,34 +181,115 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  const saveLedger = (newLedger: LedgerItem[]) => {
-    setLedger(newLedger);
-    localStorage.setItem('tibapay_ledger', JSON.stringify(newLedger));
-    window.dispatchEvent(new Event('tibapay_sync'));
-  };
+  // Poll /api/treasurer/queue every 3s for admin decisions across devices
+  const syncFromServer = useCallback(async (initialLoad = false) => {
+    try {
+      const res = await fetch('/api/treasurer/queue', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      });
+      const data = await res.json();
+      if (!data.success) return;
+
+      // Only trust server pool on first load to avoid clobbering local sweeps
+      if (initialLoad && typeof data.pool === 'number') {
+        setMainPool(data.pool);
+        localStorage.setItem('tibapay_pool', String(data.pool));
+      }
+
+      const serverQueue: LedgerItem[] = Array.isArray(data.queue) ? data.queue : [];
+      if (serverQueue.length === 0) return;
+
+      // Merge status/code into local items with matching id
+      setLedger((prev) => {
+        const byId = new Map(serverQueue.map((i) => [String(i.id), i]));
+        let changed = false;
+        const merged = prev.map((local) => {
+          const remote = byId.get(String(local.id));
+          if (!remote) return local;
+          if (
+            remote.status !== local.status ||
+            remote.code !== local.code ||
+            (remote.smsMessage || remote.sms_message) !== local.smsMessage
+          ) {
+            changed = true;
+            return {
+              ...local,
+              status: remote.status,
+              code: remote.code,
+              smsMessage: remote.smsMessage || remote.sms_message || local.smsMessage,
+            };
+          }
+          return local;
+        });
+        if (changed) {
+          localStorage.setItem('tibapay_ledger', JSON.stringify(merged));
+          return merged;
+        }
+        return prev;
+      });
+
+      // Sync active loan: admin approving a "Loan Request" item flips it to ACTIVE
+      const currentLoan = loanRef.current;
+      if (currentLoan && currentLoan.status === 'PENDING ADMIN APPROVAL') {
+        const loanItem = serverQueue.find((i) => String(i.code) === currentLoan.id);
+        if (loanItem?.status === 'COMPLETED') {
+          const updated: ActiveLoan = { ...currentLoan, status: 'ACTIVE' };
+          setActiveLoan(updated);
+          loanRef.current = updated;
+          localStorage.setItem('tibapay_active_loan', JSON.stringify(updated));
+        } else if (loanItem?.status === 'REJECTED') {
+          setActiveLoan(null);
+          loanRef.current = null;
+          localStorage.removeItem('tibapay_active_loan');
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('tibapay_auth_user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        if (parsed.role === 'admin') {
+          window.location.href = '/admin';
+          return;
+        }
+        setUser(parsed);
+      } catch {
+        localStorage.removeItem('tibapay_auth_user');
+      }
+    }
+
+    loadLocal();
+    syncFromServer(true);
+
+    const handleStorage = () => loadLocal();
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('tibapay_sync', handleStorage);
+
+    const interval = setInterval(() => syncFromServer(false), 3000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('tibapay_sync', handleStorage);
+    };
+  }, [syncFromServer]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-
     const cleanPhone = loginPhone.trim();
     const cleanPin = loginPin.trim();
 
-    if (cleanPhone.length < 10) {
-      setAuthError('Please enter a valid 10-digit M-Pesa phone number.');
-      return;
-    }
-
-    if (cleanPin.length < 4) {
-      setAuthError('Please enter your 4-digit security PIN.');
-      return;
-    }
+    if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit M-Pesa phone.');
+    if (cleanPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
 
     const isTreasurer = (cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin === '6200';
-
     if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin !== '6200') {
-      setAuthError('Incorrect PIN for Treasurer account.');
-      return;
+      return setAuthError('Incorrect PIN for Treasurer account.');
     }
 
     const loggedInUser: MemberUser = {
@@ -246,12 +299,10 @@ export default function DashboardPage() {
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
-
     if (isTreasurer) {
       window.location.href = '/admin';
       return;
     }
-
     setUser(loggedInUser);
     setPhoneInput(cleanPhone);
   };
@@ -264,46 +315,34 @@ export default function DashboardPage() {
   const handleSimulateAccrual = (tierId: number) => {
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
-
-    const updated = activeSubscriptions.map((sub) => {
-      if (sub.tierId === tierId) {
-        return { ...sub, accumulatedBalance: sub.accumulatedBalance + tier.dailyLimit };
-      }
-      return sub;
-    });
-
-    saveSubs(updated);
-    setMessage(`📈 Daily accrual added! +KES ${tier.dailyLimit} gross daily added to ${tier.name}.`);
+    saveSubs(
+      activeSubscriptions.map((s) =>
+        s.tierId === tierId ? { ...s, accumulatedBalance: s.accumulatedBalance + tier.dailyLimit } : s
+      )
+    );
+    setMessage(`Daily accrual added: +KES ${tier.dailyLimit} to ${tier.name}.`);
   };
 
   const handleSweepSub = (tierId: number) => {
     const sub = activeSubscriptions.find((s) => s.tierId === tierId);
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
-    if (!sub || !tier) return;
-
-    if (sub.accumulatedBalance <= 0) {
-      setMessage('⚠️ No accumulated balance to sweep.');
+    if (!sub || !tier || sub.accumulatedBalance <= 0) {
+      setMessage('No accumulated balance to sweep.');
       return;
     }
-
     const totalGroupCut = sub.accumulatedBalance * 0.1;
     const totalNetSweep = sub.accumulatedBalance * 0.9;
-
-    const newPool = mainPool + totalNetSweep;
-    updateMainPool(newPool);
+    updateMainPool(mainPool + totalNetSweep);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const isExpired = todayStr >= sub.endDate;
+    saveSubs(
+      isExpired
+        ? activeSubscriptions.filter((s) => s.tierId !== tierId)
+        : activeSubscriptions.map((s) => (s.tierId === tierId ? { ...s, accumulatedBalance: 0 } : s))
+    );
 
-    let updatedSubs;
-    if (isExpired) {
-      updatedSubs = activeSubscriptions.filter((s) => s.tierId !== tierId);
-    } else {
-      updatedSubs = activeSubscriptions.map((s) => (s.tierId === tierId ? { ...s, accumulatedBalance: 0 } : s));
-    }
-    saveSubs(updatedSubs);
-
-    const sweepItem: LedgerItem = {
+    const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Tier Sweep (${tier.name})`,
       amount: totalNetSweep,
@@ -312,39 +351,25 @@ export default function DashboardPage() {
       code: 'SWP-' + Math.floor(10000 + Math.random() * 90000),
       phone: user?.phone,
     };
-
-    saveLedger([sweepItem, ...ledger]);
-    setMessage(`✅ Successfully swept KES ${totalNetSweep.toLocaleString()} to Main Pool (10% group fee of KES ${totalGroupCut} deducted).${isExpired ? ' Package period expired and returned to available tiers.' : ''}`);
+    saveLedger([item, ...ledger]);
+    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Pool (10% group fee: KES ${totalGroupCut}).`);
   };
 
   const handleSubscribeTier = (tierId: number) => {
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
-
     if (mainPool < tier.entry) {
-      setMessage(`❌ Insufficient funds! You need KES ${tier.entry.toLocaleString()} in your Main Pool to join ${tier.name}. Current pool: KES ${mainPool.toLocaleString()}`);
+      setMessage(`Insufficient funds: need KES ${tier.entry.toLocaleString()}. Pool: KES ${mainPool.toLocaleString()}.`);
       return;
     }
-
-    const newPool = mainPool - tier.entry;
-    updateMainPool(newPool);
-
+    updateMainPool(mainPool - tier.entry);
     const startDate = new Date().toISOString().split('T')[0];
-    const endDateObj = new Date();
-    endDateObj.setDate(endDateObj.getDate() + tier.lockDays);
-    const endDate = endDateObj.toISOString().split('T')[0];
+    const end = new Date();
+    end.setDate(end.getDate() + tier.lockDays);
+    const endDate = end.toISOString().split('T')[0];
+    saveSubs([...activeSubscriptions, { tierId: tier.id, accumulatedBalance: 0, startDate, endDate, isLocked: true }]);
 
-    const newSub: ActiveSubscription = {
-      tierId: tier.id,
-      accumulatedBalance: 0,
-      startDate,
-      endDate,
-      isLocked: true,
-    };
-
-    saveSubs([...activeSubscriptions, newSub]);
-
-    const entryItem: LedgerItem = {
+    const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Package Entry (${tier.name})`,
       amount: tier.entry,
@@ -353,58 +378,85 @@ export default function DashboardPage() {
       code: 'ENT-' + Math.floor(10000 + Math.random() * 90000),
       phone: user?.phone,
     };
-
-    saveLedger([entryItem, ...ledger]);
-    setMessage(`✅ Successfully subscribed to ${tier.name}! Active until ${endDate}. KES ${tier.entry.toLocaleString()} deducted.`);
+    saveLedger([item, ...ledger]);
+    setMessage(`Subscribed to ${tier.name}. Active until ${endDate}.`);
   };
 
+  // STK push deposit -- actually calls the Tuma API now
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmountInput);
-    if (isNaN(amt) || amt <= 0) {
-      setMessage('⚠️ Please enter a valid deposit amount.');
-      return;
-    }
+    if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid deposit amount.');
 
-    const targetPhone = phoneInput.trim() || user?.phone || '0712345678';
-    if (targetPhone.length < 10) {
-      setMessage('⚠️ Please enter a valid M-Pesa phone number.');
-      return;
-    }
+    const targetPhone = phoneInput.trim() || user?.phone || '';
+    if (targetPhone.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
     setLoading(true);
-    setMessage(`📱 STK Push sent to ${targetPhone}. Enter your M-Pesa PIN...`);
+    setMessage(`Sending STK push to ${targetPhone}...`);
 
     const txnId = Date.now().toString();
     const tempCode = 'STK-' + Math.floor(1000 + Math.random() * 9000);
 
-    const newLedgerItem: LedgerItem = {
+    const newItem: LedgerItem = {
       id: txnId,
       type: 'Deposit (STK)',
       amount: amt,
       date: new Date().toISOString().split('T')[0],
-      status: 'PENDING ADMIN APPROVAL',
+      status: 'PENDING PIN',
       code: tempCode,
       phone: targetPhone,
     };
+    saveLedger([newItem, ...ledger]);
 
-    const newLedger = [newLedgerItem, ...ledger];
-    saveLedger(newLedger);
-    setLoading(false);
+    try {
+      const res = await fetch('/api/tuma/stkpush', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt, phone: targetPhone }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'STK push failed');
+      }
+
+      setMessage(`STK push sent to ${targetPhone}. Enter your M-Pesa PIN.`);
+
+      // After 20s, if still PENDING PIN, prompt for pasted SMS
+      setTimeout(() => {
+        setLedger((prev) => {
+          const updated = prev.map((i) =>
+            i.id === txnId && i.status === 'PENDING PIN' ? { ...i, status: 'TIMEOUT / PASTE SMS' } : i
+          );
+          localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+          return updated;
+        });
+        setMessage('STK push delayed. If M-Pesa deducted, paste your SMS below.');
+      }, 20000);
+    } catch (err: any) {
+      setMessage(`STK Push error: ${err?.message || 'unknown'}. Use manual SMS below.`);
+      setShowManualDeposit(true);
+      setLedger((prev) => {
+        const updated = prev.map((i) =>
+          i.id === txnId ? { ...i, status: 'TIMEOUT / PASTE SMS' } : i
+        );
+        localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+        return updated;
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDirectSmsSubmit = async () => {
     const amt = parseFloat(depositAmountInput);
-    if (!manualSmsText || manualSmsText.length < 10) {
-      setMessage('⚠️ Please paste a valid M-Pesa SMS confirmation.');
-      return;
-    }
+    if (!manualSmsText || manualSmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
 
     const codeMatch = manualSmsText.match(/\b([A-Z0-9]{10})\b/);
     const extractedCode = codeMatch ? codeMatch[1] : 'MPESA-' + Math.floor(1000 + Math.random() * 9000);
 
-    const txnId = Date.now().toString();
-    const manualItem: LedgerItem = {
-      id: txnId,
+    const item: LedgerItem = {
+      id: Date.now().toString(),
       type: 'Deposit (Manual)',
       amount: isNaN(amt) ? 1000 : amt,
       date: new Date().toISOString().split('T')[0],
@@ -413,105 +465,73 @@ export default function DashboardPage() {
       smsMessage: manualSmsText,
       phone: phoneInput || user?.phone,
     };
-
-    const newLedger = [manualItem, ...ledger];
-    saveLedger(newLedger);
-
+    saveLedger([item, ...ledger], item);
     setManualSmsText('');
     setShowManualDeposit(false);
-    setMessage(`✅ Confirmation SMS submitted! Sent to Treasurer for review.`);
+    setMessage('Confirmation submitted to Treasurer queue.');
   };
 
   const handleSubmitSmsForApproval = async (txnId: string) => {
-    if (!pastedSmsText || pastedSmsText.length < 10) {
-      setMessage('⚠️ Please paste a valid M-Pesa confirmation message.');
-      return;
-    }
+    if (!pastedSmsText || pastedSmsText.length < 10) return setMessage('Paste a valid M-Pesa confirmation.');
 
     const codeMatch = pastedSmsText.match(/\b([A-Z0-9]{10})\b/);
     const extractedCode = codeMatch ? codeMatch[1] : 'MPESA-' + Math.floor(1000 + Math.random() * 9000);
 
+    let updatedItem: LedgerItem | null = null;
     const updated = ledger.map((item) => {
       if (item.id === txnId) {
-        return {
-          ...item,
-          status: 'PENDING ADMIN APPROVAL',
-          code: extractedCode,
-          smsMessage: pastedSmsText,
-        };
+        updatedItem = { ...item, status: 'PENDING ADMIN APPROVAL', code: extractedCode, smsMessage: pastedSmsText };
+        return updatedItem;
       }
       return item;
     });
-
-    saveLedger(updated);
+    saveLedger(updated, updatedItem || undefined);
     setPastedSmsText('');
     setActiveSmsInputId(null);
-    setMessage(`✅ M-Pesa message submitted! Sent to Treasurer queue for review.`);
+    setMessage('Submitted to Treasurer queue.');
   };
 
   const handleWithdraw = async () => {
     const grossAmt = parseFloat(withdrawAmountInput);
-    if (isNaN(grossAmt) || grossAmt < 50) {
-      setMessage('⚠️ Minimum withdrawal amount is KES 50.');
-      return;
-    }
-
-    if (grossAmt > mainPool) {
-      setMessage(`⚠️ Insufficient funds! You only have KES ${mainPool.toLocaleString()} in your Main Pool.`);
-      return;
-    }
+    if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
+    if (grossAmt > mainPool) return setMessage(`Insufficient funds. Pool: KES ${mainPool.toLocaleString()}.`);
 
     const gwfFee = calculateGWF(grossAmt);
     const netPayout = grossAmt - gwfFee;
 
-    const txnId = Date.now().toString();
-    const reqCode = 'WDR-' + Math.floor(1000 + Math.random() * 9000);
-
-    const withdrawalItem: LedgerItem = {
-      id: txnId,
+    const item: LedgerItem = {
+      id: Date.now().toString(),
       type: `Withdrawal (Net: KES ${netPayout.toLocaleString()})`,
       amount: grossAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
-      code: reqCode,
+      code: 'WDR-' + Math.floor(1000 + Math.random() * 9000),
       phone: user?.phone,
     };
-
-    const updated: LedgerItem[] = [withdrawalItem, ...ledger];
-    saveLedger(updated);
-
-    setMessage(`🕒 Withdrawal of KES ${grossAmt.toLocaleString()} requested (GWF Fee: KES ${gwfFee}, Net M-Pesa: KES ${netPayout.toLocaleString()}). Submitted to Treasurer.`);
+    saveLedger([item, ...ledger], item);
+    setMessage(`Withdrawal of KES ${grossAmt.toLocaleString()} submitted (GWF: KES ${gwfFee}, Net: KES ${netPayout.toLocaleString()}).`);
   };
 
-  // Loan Calculation Engine
   const maxBorrowingLimit = Math.floor(mainPool * 0.4);
   const parsedLoanAmt = parseFloat(loanAmountInput) || 0;
   const loanFee = parsedLoanAmt * 0.05;
   const amountSentToMpesa = parsedLoanAmt - loanFee;
-  const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.10;
+  const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.1;
   const loanInterestAmount = parsedLoanAmt * loanInterestRate;
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
   const handleApplyLoan = () => {
-    if (activeLoan && activeLoan.status !== 'CLOSED') {
-      setMessage(`❌ Loan Denied: You must fully repay your active loan (${activeLoan.id}) before you can borrow again.`);
-      return;
+    if (activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') {
+      return setMessage(`Repay active loan (${activeLoan.id}) before borrowing again.`);
     }
-
-    if (parsedLoanAmt <= 0) {
-      setMessage('⚠️ Please enter a valid loan amount.');
-      return;
-    }
-
+    if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
     if (parsedLoanAmt > maxBorrowingLimit) {
-      setMessage(`⚠️ Requested amount exceeds your dynamic borrowing limit of KES ${maxBorrowingLimit.toLocaleString()} (40% of savings).`);
-      return;
+      return setMessage(`Exceeds limit of KES ${maxBorrowingLimit.toLocaleString()} (40% of savings).`);
     }
 
-    const dueDateObj = new Date();
-    dueDateObj.setDate(dueDateObj.getDate() + loanTermWeeks * 7);
-    const dueDateStr = dueDateObj.toISOString().split('T')[0];
-
+    const due = new Date();
+    due.setDate(due.getDate() + loanTermWeeks * 7);
+    const dueDateStr = due.toISOString().split('T')[0];
     const loanTxnId = 'LOAN-' + Math.floor(1000 + Math.random() * 9000);
 
     const newLoan: ActiveLoan = {
@@ -526,10 +546,9 @@ export default function DashboardPage() {
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
     };
-
     saveLoanState(newLoan);
 
-    const loanItem: LedgerItem = {
+    const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Loan Request (${loanTermWeeks}W)`,
       amount: parsedLoanAmt,
@@ -538,39 +557,29 @@ export default function DashboardPage() {
       code: loanTxnId,
       phone: user?.phone,
     };
-
-    saveLedger([loanItem, ...ledger]);
-    setMessage(`🕒 Loan request of KES ${parsedLoanAmt.toLocaleString()} submitted to Treasurer queue for review & disbursement (24 hr review).`);
+    saveLedger([item, ...ledger], item);
+    setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. Awaiting Treasurer (24 hr).`);
   };
 
   const handleRepayLoan = () => {
     if (!activeLoan) return;
-
     if (mainPool < activeLoan.totalRepay) {
-      setMessage(`⚠️ Insufficient funds in Main Pool to repay loan. You need KES ${activeLoan.totalRepay.toLocaleString()}. Please deposit first.`);
-      return;
+      return setMessage(`Insufficient funds. Need KES ${activeLoan.totalRepay.toLocaleString()}.`);
     }
-
-    const newPool = mainPool - activeLoan.totalRepay;
-    updateMainPool(newPool);
-
-    const repayItem: LedgerItem = {
+    updateMainPool(mainPool - activeLoan.totalRepay);
+    const item: LedgerItem = {
       id: Date.now().toString(),
-      type: `Loan Repayment`,
+      type: 'Loan Repayment',
       amount: activeLoan.totalRepay,
       date: new Date().toISOString().split('T')[0],
       status: 'COMPLETED',
       code: 'REP-' + Math.floor(1000 + Math.random() * 9000),
       phone: user?.phone,
     };
-
-    saveLedger([repayItem, ...ledger]);
-    
-    const closedLoan: ActiveLoan = { ...activeLoan, status: 'CLOSED' };
-    saveLoanState(closedLoan);
+    saveLedger([item, ...ledger]);
+    saveLoanState({ ...activeLoan, status: 'CLOSED' });
     setActiveLoan(null);
-
-    setMessage(`🎉 Loan fully repaid! KES ${activeLoan.totalRepay.toLocaleString()} deducted from Main Pool. You are now eligible to borrow again.`);
+    setMessage(`Repaid KES ${activeLoan.totalRepay.toLocaleString()}. You may borrow again.`);
   };
 
   const parsedWithdrawAmt = parseFloat(withdrawAmountInput) || 0;
@@ -588,7 +597,7 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-black tracking-tight text-white">
               Tiba<span className="text-emerald-400">Pay</span> Vault
             </h1>
-            <p className="text-xs text-slate-400">Secure Community Treasury & Savings Portal</p>
+            <p className="text-xs text-slate-400">Secure Community Treasury and Savings Portal</p>
           </div>
 
           {authError && (
@@ -609,7 +618,6 @@ export default function DashboardPage() {
                 required
               />
             </div>
-
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Security PIN (4 Digits)</label>
               <input
@@ -617,23 +625,18 @@ export default function DashboardPage() {
                 maxLength={4}
                 value={loginPin}
                 onChange={(e) => setLoginPin(e.target.value)}
-                placeholder="••••"
+                placeholder="****"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600 tracking-widest text-center text-lg"
                 required
               />
             </div>
-
             <button
               type="submit"
               className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer mt-2"
             >
-              🔒 Authenticate & Unlock Portal
+              Authenticate and Unlock Portal
             </button>
           </form>
-
-          <p className="text-[10px] text-center text-slate-500">
-            Protected by end-to-end Treasury encryption and M-Pesa token gate.
-          </p>
         </div>
       </div>
     );
@@ -641,7 +644,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24">
-      {/* Header */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
@@ -659,7 +661,6 @@ export default function DashboardPage() {
             <p className="text-[11px] text-slate-400 truncate max-w-[150px]">{user.name}</p>
           </div>
         </div>
-
         <button
           onClick={handleLogout}
           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
@@ -669,12 +670,11 @@ export default function DashboardPage() {
       </div>
 
       {message && (
-        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-semibold animate-fadeIn leading-relaxed">
+        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-semibold leading-relaxed">
           {message}
         </div>
       )}
 
-      {/* Tabs */}
       <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
         {(['overview', 'packages', 'withdraw', 'loans'] as const).map((tab) => (
           <button
@@ -691,9 +691,8 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* OVERVIEW TAB */}
       {activeTab === 'overview' && (
-        <div className="space-y-4 animate-fadeIn">
+        <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
               <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Main Pool</p>
@@ -728,11 +727,10 @@ export default function DashboardPage() {
                     type="text"
                     value={phoneInput}
                     onChange={(e) => setPhoneInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
                     placeholder="0712345678"
                   />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount (KES)</label>
                   <div className="flex items-center gap-2">
@@ -746,19 +744,18 @@ export default function DashboardPage() {
                     />
                   </div>
                 </div>
-
                 <button
                   onClick={handleDeposit}
                   disabled={loading}
                   className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs shadow-md hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 mt-2"
                 >
-                  {loading ? 'Awaiting M-Pesa confirmation...' : '📱 Trigger M-Pesa STK Push'}
+                  {loading ? 'Sending STK Push...' : 'Trigger M-Pesa STK Push'}
                 </button>
               </>
             ) : (
               <div className="space-y-2 pt-1">
                 <p className="text-xs text-slate-400">
-                  Paid manually? Paste your M-Pesa confirmation SMS directly below for Treasurer verification:
+                  If you paid manually, paste your M-Pesa confirmation SMS below for Treasurer verification:
                 </p>
                 <textarea
                   value={manualSmsText}
@@ -770,7 +767,7 @@ export default function DashboardPage() {
                   onClick={handleDirectSmsSubmit}
                   className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs shadow-md hover:bg-emerald-400 transition cursor-pointer"
                 >
-                  📋 Submit Confirmation to Treasurer Queue
+                  Submit Confirmation to Treasurer Queue
                 </button>
               </div>
             )}
@@ -778,22 +775,16 @@ export default function DashboardPage() {
 
           <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 space-y-3 shadow-md">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-slate-300">My Cash In / Out Activity</span>
+              <span className="font-bold text-slate-300">My Cash In and Out Activity</span>
               <span className="text-slate-500">Live Ledger ({ledger.length})</span>
             </div>
-
             <div className="space-y-2 text-xs max-h-72 overflow-y-auto pr-1">
               {ledger.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2"
-                >
+                <div key={item.id} className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-bold text-white">{item.type}</p>
-                      <p className="text-[10px] text-slate-500">
-                        {item.date} • {item.code}
-                      </p>
+                      <p className="text-[10px] text-slate-500">{item.date} - {item.code}</p>
                     </div>
                     <div className="text-right">
                       <p
@@ -803,7 +794,8 @@ export default function DashboardPage() {
                             : 'text-amber-400'
                         }`}
                       >
-                        {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') ? '+' : '-'}KES {item.amount.toLocaleString()}
+                        {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') ? '+' : '-'}
+                        KES {item.amount.toLocaleString()}
                       </p>
                       <p
                         className={`text-[10px] ${
@@ -826,7 +818,7 @@ export default function DashboardPage() {
                       onClick={() => setActiveSmsInputId(item.id)}
                       className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition cursor-pointer"
                     >
-                      📋 Paste M-Pesa SMS for Admin Approval
+                      Paste M-Pesa SMS for Admin Approval
                     </button>
                   )}
 
@@ -835,7 +827,7 @@ export default function DashboardPage() {
                       <textarea
                         value={pastedSmsText}
                         onChange={(e) => setPastedSmsText(e.target.value)}
-                        placeholder="Paste full M-Pesa text here (e.g. QHK89234X Confirmed. Ksh1,000 received...)"
+                        placeholder="Paste full M-Pesa text here"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-amber-500 h-16 resize-none"
                       />
                       <div className="flex gap-2">
@@ -861,17 +853,15 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* PACKAGES TAB */}
       {activeTab === 'packages' && (
-        <div className="space-y-4 animate-fadeIn">
+        <div className="space-y-4">
           <div className="space-y-3">
             <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider px-1">
               Active Subscriptions ({activeSubscriptions.length})
             </h3>
-
             {activeSubscriptions.length === 0 ? (
               <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
-                No active package subscriptions. Select a tier below to start saving.
+                No active package subscriptions.
               </div>
             ) : (
               activeSubscriptions.map((sub) => {
@@ -879,7 +869,6 @@ export default function DashboardPage() {
                 if (!tier) return null;
                 const todayStr = new Date().toISOString().split('T')[0];
                 const isExpired = todayStr >= sub.endDate;
-
                 return (
                   <div key={sub.tierId} className="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-3 shadow-lg">
                     <div className="flex justify-between items-center">
@@ -888,10 +877,9 @@ export default function DashboardPage() {
                         <h3 className="font-black text-sm text-white">Expires: {sub.endDate}</h3>
                       </div>
                       <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${isExpired ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
-                        {isExpired ? 'Period Over ⚠️' : 'Active ⚡'}
+                        {isExpired ? 'Period Over' : 'Active'}
                       </span>
                     </div>
-
                     <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-center">
                       <div>
                         <p className="text-[9px] text-slate-400 font-bold uppercase">Gross Daily Addition</p>
@@ -902,21 +890,19 @@ export default function DashboardPage() {
                         <p className="text-xs font-black text-white mt-0.5">KES {sub.accumulatedBalance.toLocaleString()}</p>
                       </div>
                     </div>
-
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSimulateAccrual(sub.tierId)}
                         className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
                       >
-                        + Simulate Daily Add (+{tier.dailyLimit})
+                        + Add Daily (+{tier.dailyLimit})
                       </button>
-
                       <button
                         onClick={() => handleSweepSub(sub.tierId)}
                         disabled={sub.accumulatedBalance <= 0}
                         className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-[10px] transition cursor-pointer disabled:opacity-50 shadow-md"
                       >
-                        ⚡ Sweep to Main Pool
+                        Sweep to Main Pool
                       </button>
                     </div>
                   </div>
@@ -927,8 +913,6 @@ export default function DashboardPage() {
 
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3">
             <h3 className="font-bold text-sm text-white">Subscribe to Additional Tiers</h3>
-            <p className="text-[11px] text-slate-400">Join multiple tiers. Accumulated funds pile up and can be swept to your Main Pool anytime.</p>
-
             <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
               {PACKAGE_TIERS.map((tier) => {
                 const isSubscribed = activeSubscriptions.some((s) => s.tierId === tier.id);
@@ -939,23 +923,20 @@ export default function DashboardPage() {
                     className={`p-3.5 rounded-2xl border transition flex justify-between items-center ${
                       isSubscribed
                         ? 'bg-slate-900/40 border-slate-800 opacity-60'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-300'
                     }`}
                   >
                     <div>
                       <p className="font-bold text-xs text-white">{tier.name}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> • Period: {tier.lockDays} Days
+                        Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
                       </p>
-                      <p className="text-[10px] font-bold text-emerald-400 mt-1">
-                        Gross Daily Addition: +KES {tier.dailyLimit}
-                      </p>
+                      <p className="text-[10px] font-bold text-emerald-400 mt-1">Gross Daily Addition: +KES {tier.dailyLimit}</p>
                     </div>
-
                     <div>
                       {isSubscribed ? (
                         <span className="px-2 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg">
-                          Subscribed ✓
+                          Subscribed
                         </span>
                       ) : (
                         <button
@@ -974,15 +955,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* WITHDRAW TAB */}
       {activeTab === 'withdraw' && (
-        <div className="space-y-3 animate-fadeIn">
+        <div className="space-y-3">
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
             <h3 className="font-bold text-sm text-white">Graduated Withdrawal (GWF v6)</h3>
             <p className="text-xs text-slate-400">
               Available Pool Balance: <strong className="text-emerald-400">KES {mainPool.toLocaleString()}</strong>
             </p>
-
             <div className="space-y-1.5 pt-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Withdrawal Amount (Min KSh 50)</label>
               <div className="flex items-center gap-2">
@@ -996,7 +975,6 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-
             <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-400">Gross Withdrawal:</span>
@@ -1011,7 +989,6 @@ export default function DashboardPage() {
                 <span className="text-sm font-black text-emerald-400">KES {currentNetPayout.toLocaleString()}</span>
               </div>
             </div>
-
             <button
               onClick={handleWithdraw}
               disabled={mainPool <= 0 || parsedWithdrawAmt < 50}
@@ -1023,9 +1000,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* LOANS TAB */}
       {activeTab === 'loans' && (
-        <div className="space-y-3 animate-fadeIn">
+        <div className="space-y-3">
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-4 shadow-lg">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-sm text-white">TibaPay Loan Engine</h3>
@@ -1045,7 +1021,6 @@ export default function DashboardPage() {
                     {activeLoan.status}
                   </span>
                 </div>
-
                 <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
                   <div>
                     <p className="text-[9px] text-slate-400">Principal Requested</p>
@@ -1056,26 +1031,24 @@ export default function DashboardPage() {
                     <p className="font-black text-amber-400">KES {activeLoan.totalRepay.toLocaleString()}</p>
                   </div>
                 </div>
-
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
-                    ⏳ Your loan request is awaiting Treasurer approval and M-Pesa disbursement (24 hr review).
+                    Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
                   </div>
                 ) : (
                   <button
                     onClick={handleRepayLoan}
                     className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md"
                   >
-                    ⚡ Repay Full Loan Now (KES {activeLoan.totalRepay.toLocaleString()})
+                    Repay Full Loan Now (KES {activeLoan.totalRepay.toLocaleString()})
                   </button>
                 )}
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-slate-400">
-                  You are eligible to borrow up to 40% of your Main Pool savings (<strong className="text-white">KES {mainPool.toLocaleString()}</strong>). All loans require Treasurer approval and 24-hour M-Pesa disbursement.
+                  You may borrow up to 40% of your Main Pool savings (<strong className="text-white">KES {mainPool.toLocaleString()}</strong>). All loans require Treasurer approval and 24-hour M-Pesa disbursement.
                 </p>
-
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
                   <div className="flex items-center gap-2">
@@ -1085,11 +1058,9 @@ export default function DashboardPage() {
                       value={loanAmountInput}
                       onChange={(e) => setLoanAmountInput(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                      placeholder="Enter amount"
                     />
                   </div>
                 </div>
-
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -1112,7 +1083,6 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 </div>
-
                 <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Requested Loan:</span>
@@ -1127,7 +1097,7 @@ export default function DashboardPage() {
                     <span className="font-bold text-emerald-400">KES {amountSentToMpesa.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Interest ({loanTermWeeks} week @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%': '10%'}):</span>
+                    <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
                     <span className="font-bold text-white">+KES {loanInterestAmount.toLocaleString()}</span>
                   </div>
                   <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
@@ -1135,7 +1105,6 @@ export default function DashboardPage() {
                     <span className="text-sm font-black text-amber-400">KES {totalLoanRepay.toLocaleString()}</span>
                   </div>
                 </div>
-
                 <button
                   onClick={handleApplyLoan}
                   disabled={parsedLoanAmt <= 0 || parsedLoanAmt > maxBorrowingLimit}
