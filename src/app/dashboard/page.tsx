@@ -55,14 +55,15 @@ interface ActiveLoan {
   phone?: string;
 }
 
+// 👇 UPDATED WITH REAL GEM NAMES AND EMOJIS
 const PACKAGE_TIERS: PackageTier[] = [
-  { id: 1, name: 'Tier 1 (Starter)', entry: 200, dailyLimit: 20, lockDays: 7, groupCut: 2, netSweep: 18 },
-  { id: 2, name: 'Tier 2 (Bronze)', entry: 500, dailyLimit: 50, lockDays: 14, groupCut: 5, netSweep: 45 },
-  { id: 3, name: 'Tier 3 (Silver)', entry: 1000, dailyLimit: 100, lockDays: 30, groupCut: 10, netSweep: 90 },
-  { id: 4, name: 'Tier 4 (Gold)', entry: 2500, dailyLimit: 250, lockDays: 30, groupCut: 25, netSweep: 225 },
-  { id: 5, name: 'Tier 5 (Platinum)', entry: 5000, dailyLimit: 500, lockDays: 30, groupCut: 50, netSweep: 450 },
-  { id: 6, name: 'Tier 6 (Diamond)', entry: 10000, dailyLimit: 1000, lockDays: 60, groupCut: 100, netSweep: 900 },
-  { id: 7, name: 'Tier 7 (VIP Vault)', entry: 20000, dailyLimit: 2000, lockDays: 90, groupCut: 200, netSweep: 1800 },
+  { id: 1, name: 'Pearl 💍', entry: 200, dailyLimit: 20, lockDays: 7, groupCut: 2, netSweep: 18 },
+  { id: 2, name: 'Amethyst 🔮', entry: 500, dailyLimit: 50, lockDays: 14, groupCut: 5, netSweep: 45 },
+  { id: 3, name: 'Emerald 💚', entry: 1000, dailyLimit: 100, lockDays: 30, groupCut: 10, netSweep: 90 },
+  { id: 4, name: 'Ruby ❤️', entry: 2500, dailyLimit: 250, lockDays: 30, groupCut: 25, netSweep: 225 },
+  { id: 5, name: 'Sapphire 💙', entry: 5000, dailyLimit: 500, lockDays: 30, groupCut: 50, netSweep: 450 },
+  { id: 6, name: 'Diamond 💎', entry: 10000, dailyLimit: 1000, lockDays: 60, groupCut: 100, netSweep: 900 },
+  { id: 7, name: 'Black Diamond 🖤', entry: 20000, dailyLimit: 2000, lockDays: 90, groupCut: 200, netSweep: 1800 },
 ];
 
 function calculateGWF(amount: number): number {
