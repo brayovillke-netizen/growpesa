@@ -1,10 +1,10 @@
 ﻿import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+// Ensure we always provide a valid fallback URL during build/SSR if env vars are missing
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseUrl = (rawUrl && rawUrl.startsWith('http')) ? rawUrl : 'https://placeholder.supabase.co';
 
-if (supabaseUrl === 'https://placeholder.supabase.co') {
-  console.warn('⚠️ NEXT_PUBLIC_SUPABASE_URL is missing or undefined in current runtime.');
-}
+const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseAnonKey = (rawKey && rawKey.length > 5) ? rawKey : 'placeholder-anon-key';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

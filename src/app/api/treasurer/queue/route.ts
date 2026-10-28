@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
 
+export const dynamic = 'force-dynamic'; // 👈 Prevents Next.js caching so all devices always get live data
+
 export async function GET() {
   try {
     // 1. Fetch live pool balance from Supabase
