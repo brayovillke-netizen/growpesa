@@ -32,6 +32,8 @@ interface PackageTier {
   netSweep: number;
   icon: string;
   sizeClass: string;
+  totalPayout: number;
+  roi: number;
 }
 
 interface ActiveSubscription {
@@ -57,14 +59,14 @@ interface ActiveLoan {
   phone?: string;
 }
 
-// 👇 UPDATED WITH SCALING GEM IMAGES
+// 👇 UPDATED WITH EXACT MAXIMUM ATTRACTION TIERS
 const PACKAGE_TIERS: PackageTier[] = [
-  { id: 1, name: 'Bronze', entry: 200, dailyLimit: 20, lockDays: 7, groupCut: 2, netSweep: 18, icon: '🥉', sizeClass: 'text-3xl' },
-  { id: 2, name: 'Silver', entry: 500, dailyLimit: 50, lockDays: 14, groupCut: 5, netSweep: 45, icon: '🥈', sizeClass: 'text-4xl' },
-  { id: 3, name: 'Gold', entry: 1000, dailyLimit: 100, lockDays: 30, groupCut: 10, netSweep: 90, icon: '🥇', sizeClass: 'text-5xl' },
-  { id: 4, name: 'Platinum', entry: 2500, dailyLimit: 250, lockDays: 30, groupCut: 25, netSweep: 225, icon: '💠', sizeClass: 'text-6xl' },
-  { id: 5, name: 'Sapphire', entry: 5000, dailyLimit: 500, lockDays: 30, groupCut: 50, netSweep: 450, icon: '💎', sizeClass: 'text-7xl' }, 
-  { id: 6, name: 'Diamond', entry: 10000, dailyLimit: 1000, lockDays: 60, groupCut: 100, netSweep: 900, icon: '💎', sizeClass: 'text-8xl' },
+  { id: 1, name: 'Tier 1', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
+  { id: 2, name: 'Tier 2', entry: 500, dailyLimit: 45, lockDays: 13, groupCut: 4.5, netSweep: 40.5, totalPayout: 585, roi: 85, icon: '🥈', sizeClass: 'text-4xl' },
+  { id: 3, name: 'Tier 3', entry: 1000, dailyLimit: 70, lockDays: 16, groupCut: 7, netSweep: 63, totalPayout: 1120, roi: 120, icon: '🥇', sizeClass: 'text-5xl' },
+  { id: 4, name: 'Tier 4', entry: 2500, dailyLimit: 150, lockDays: 18, groupCut: 15, netSweep: 135, totalPayout: 2700, roi: 200, icon: '💠', sizeClass: 'text-6xl' },
+  { id: 5, name: 'Tier 5', entry: 5000, dailyLimit: 200, lockDays: 28, groupCut: 20, netSweep: 180, totalPayout: 5600, roi: 600, icon: '💎', sizeClass: 'text-7xl' },
+  { id: 6, name: 'Tier 6', entry: 10000, dailyLimit: 700, lockDays: 15, groupCut: 70, netSweep: 630, totalPayout: 10500, roi: 500, icon: '👑', sizeClass: 'text-8xl' },
 ];
 
 function calculateGWF(amount: number): number {
@@ -1237,7 +1239,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-center">
                       <div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Gross Daily Addition</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">Daily Gross</p>
                         <p className="text-xs font-black text-emerald-400 mt-0.5">+KES {tier.dailyLimit} Daily</p>
                       </div>
                       <div>
@@ -1267,7 +1269,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3">
-            <h3 className="font-bold text-sm text-white">Subscribe to Additional Tiers</h3>
+            <h3 className="font-bold text-sm text-white">Maximum Attraction Tiers</h3>
             <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
               {PACKAGE_TIERS.map((tier) => {
                 const isSubscribed = activeSubscriptions.some((s) => s.tierId === tier.id);
@@ -1288,7 +1290,9 @@ export default function DashboardPage() {
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
                         </p>
-                        <p className="text-[10px] font-bold text-emerald-400 mt-1">Gross Daily Addition: +KES {tier.dailyLimit}</p>
+                        <p className="text-[10px] font-bold text-emerald-400 mt-1">
+                          Gross Daily: +KES {tier.dailyLimit} | Total ROI: +KES {tier.roi}
+                        </p>
                       </div>
                     </div>
                     <div>
