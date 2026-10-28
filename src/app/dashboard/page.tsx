@@ -138,7 +138,6 @@ export default function DashboardPage() {
     }
   };
 
-  // POST to shared server queue (Supabase)
   const submitToServerQueue = async (item: LedgerItem) => {
     try {
       await fetch('/api/treasurer/queue', {
@@ -150,7 +149,6 @@ export default function DashboardPage() {
     } catch {}
   };
 
-  // Save locally AND mirror to server
   const saveLedger = (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
     setLedger(newLedger);
     localStorage.setItem('tibapay_ledger', JSON.stringify(newLedger));
@@ -181,7 +179,6 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  // Poll /api/treasurer/queue every 3s for admin decisions across devices
   const syncFromServer = useCallback(async (initialLoad = false) => {
     try {
       const res = await fetch('/api/treasurer/queue', {
@@ -191,7 +188,6 @@ export default function DashboardPage() {
       const data = await res.json();
       if (!data.success) return;
 
-      // Only trust server pool on first load to avoid clobbering local sweeps
       if (initialLoad && typeof data.pool === 'number') {
         setMainPool(data.pool);
         localStorage.setItem('tibapay_pool', String(data.pool));
@@ -200,7 +196,6 @@ export default function DashboardPage() {
       const serverQueue: LedgerItem[] = Array.isArray(data.queue) ? data.queue : [];
       if (serverQueue.length === 0) return;
 
-      // Merge status/code into local items with matching id
       setLedger((prev) => {
         const byId = new Map(serverQueue.map((i) => [String(i.id), i]));
         let changed = false;
@@ -229,7 +224,6 @@ export default function DashboardPage() {
         return prev;
       });
 
-      // Sync active loan: admin approving a "Loan Request" item flips it to ACTIVE
       const currentLoan = loanRef.current;
       if (currentLoan && currentLoan.status === 'PENDING ADMIN APPROVAL') {
         const loanItem = serverQueue.find((i) => String(i.code) === currentLoan.id);
@@ -382,7 +376,7 @@ export default function DashboardPage() {
     setMessage(`Subscribed to ${tier.name}. Active until ${endDate}.`);
   };
 
-  // STK push deposit -- actually calls the Tuma API now
+  // STK push deposit -- sends PENDING PIN to server, then flips to timeout if no callback
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmountInput);
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid deposit amount.');
@@ -405,7 +399,8 @@ export default function DashboardPage() {
       code: tempCode,
       phone: targetPhone,
     };
-    saveLedger([newItem, ...ledger]);
+    // SYNC: admin sees PENDING PIN immediately
+    saveLedger([newItem, ...ledger], newItem);
 
     try {
       const res = await fetch('/api/tuma/stkpush', {
@@ -420,27 +415,44 @@ export default function DashboardPage() {
         throw new Error(data.error || 'STK push failed');
       }
 
-      setMessage(`STK push sent to ${targetPhone}. Enter your M-Pesa PIN.`);
+      setMessage(`STK push sent to ${targetPhone}. Enter your M-Pesa PIN. Admin will verify code ${tempCode}.`);
 
-      // After 20s, if still PENDING PIN, prompt for pasted SMS
       setTimeout(() => {
+        let timeoutItem: LedgerItem | null = null;
         setLedger((prev) => {
-          const updated = prev.map((i) =>
-            i.id === txnId && i.status === 'PENDING PIN' ? { ...i, status: 'TIMEOUT / PASTE SMS' } : i
-          );
+          const updated = prev.map((i) => {
+            if (i.id === txnId && i.status === 'PENDING PIN') {
+              timeoutItem = { ...i, status: 'TIMEOUT / PASTE SMS' };
+              return timeoutItem;
+            }
+            return i;
+          });
           localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+          // SYNC: admin sees timeout state
+          if (timeoutItem) submitToServerQueue(timeoutItem);
           return updated;
         });
-        setMessage('STK push delayed. If M-Pesa deducted, paste your SMS below.');
+        setMessage('STK push pending. If M-Pesa deducted, paste your SMS below so the Treasurer can verify.');
       }, 20000);
     } catch (err: any) {
-      setMessage(`STK Push error: ${err?.message || 'unknown'}. Use manual SMS below.`);
+      setMessage(`STK Push error: ${err?.message || 'unknown'}. Paste your M-Pesa SMS below if you paid manually.`);
       setShowManualDeposit(true);
+      let errItem: LedgerItem | null = null;
       setLedger((prev) => {
-        const updated = prev.map((i) =>
-          i.id === txnId ? { ...i, status: 'TIMEOUT / PASTE SMS' } : i
-        );
+        const updated = prev.map((i) => {
+          if (i.id === txnId) {
+            errItem = {
+              ...i,
+              status: 'TIMEOUT / PASTE SMS',
+              smsMessage: `STK API failed: ${err?.message || 'unknown'}`,
+            };
+            return errItem;
+          }
+          return i;
+        });
         localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+        // SYNC: admin sees error/timeout
+        if (errItem) submitToServerQueue(errItem);
         return updated;
       });
     } finally {
@@ -801,7 +813,7 @@ export default function DashboardPage() {
                         className={`text-[10px] ${
                           item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
                             ? 'text-emerald-500 font-bold'
-                            : item.status === 'PENDING ADMIN APPROVAL'
+                            : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
                             ? 'text-sky-400 font-semibold'
                             : item.status === 'REJECTED' || item.status === 'FAILED'
                             ? 'text-rose-400 font-bold'
@@ -813,7 +825,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {item.status.includes('TIMEOUT') && activeSmsInputId !== item.id && (
+                  {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
                     <button
                       onClick={() => setActiveSmsInputId(item.id)}
                       className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition cursor-pointer"
