@@ -134,7 +134,6 @@ export default function DashboardPage() {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
 
-  // Scoped Local Storage Helpers
   const loadLocal = (u: MemberUser) => {
     const savedLedger = localStorage.getItem(`tibapay_ledger_${u.phone}`);
     if (savedLedger) {
@@ -215,16 +214,17 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  const syncFromServer = useCallback(async (currentUser: MemberUser, initialLoad = false) => {
+  const syncFromServer = useCallback(async (currentUser: MemberUser) => {
     try {
+      // 1. Fetch Global Pool (updates on every poll so Admin approval reflects immediately)
       const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
-      if (poolData && initialLoad) {
+      if (poolData) {
         const pool = Math.round(Number(poolData.pool_balance));
         setMainPool(pool);
         localStorage.setItem('tibapay_pool', String(pool));
       }
 
-      // FILTER BY USER PHONE: Only fetch this member's transactions
+      // 2. Fetch ONLY this user's items
       const { data: queueData } = await supabase
         .from('ledger_items')
         .select('*')
@@ -232,31 +232,23 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false });
 
       const serverQueue = queueData || [];
+      
+      // 3. Completely overwrite the ledger with the server's truth (fixes stuck statuses)
+      const mappedQueue = serverQueue.map((row: any) => ({
+        id: String(row.id),
+        phone: row.phone,
+        type: String(row.type || ''),
+        amount: Math.round(Number(row.amount)) || 0,
+        date: String(row.date || ''),
+        status: String(row.status || '').replace(/_/g, ' '),
+        code: String(row.code || ''),
+        smsMessage: row.sms_message,
+      }));
 
-      setLedger((prev) => {
-        const byId = new Map(serverQueue.map((i: any) => [String(i.id), i]));
-        let changed = false;
-        const merged = prev.map((local) => {
-          const remote = byId.get(String(local.id));
-          if (!remote) return local;
-          
-          const remoteStatus = String(remote.status || '').replace(/_/g, ' ');
-          const remoteCode = String(remote.code || '');
-          const remoteSms = remote.sms_message;
+      setLedger(mappedQueue);
+      localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
-          if (remoteStatus !== local.status || remoteCode !== local.code || remoteSms !== local.smsMessage) {
-            changed = true;
-            return { ...local, status: remoteStatus, code: remoteCode, smsMessage: remoteSms };
-          }
-          return local;
-        });
-        if (changed) {
-          localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(merged));
-          return merged;
-        }
-        return prev;
-      });
-
+      // 4. Loan approval / repayment logic
       const currentLoan = loanRef.current;
       if (currentLoan) {
         if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
@@ -275,7 +267,7 @@ export default function DashboardPage() {
         
         if (currentLoan.status === 'ACTIVE') {
           const repaymentItem = serverQueue.find(
-            (i: any) => i.type.includes('Loan Repayment') && String(i.phone) === String(currentLoan.phone || currentUser.phone) && i.status === 'COMPLETED'
+            (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
           );
           if (repaymentItem) {
             const updated: ActiveLoan = { ...currentLoan, status: 'CLOSED' };
@@ -292,37 +284,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('tibapay_auth_user');
-    let currentUser: MemberUser | null = null;
+    if (!user) return;
 
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        if (parsed.role === 'admin') {
-          window.location.replace('/admin');
-          return;
-        }
-        currentUser = parsed;
-        setUser(parsed);
-        setPhoneInput(parsed.phone);
-      } catch {
-        localStorage.removeItem('tibapay_auth_user');
-      }
-    }
+    loadLocal(user);
+    syncFromServer(user);
 
-    if (currentUser) {
-      loadLocal(currentUser);
-      syncFromServer(currentUser, true);
-    }
-
-    const handleStorage = () => {
-      if (currentUser) loadLocal(currentUser);
-    };
+    const handleStorage = () => loadLocal(user);
     window.addEventListener('storage', handleStorage);
     window.addEventListener('tibapay_sync', handleStorage);
 
     const interval = setInterval(() => {
-      if (currentUser) syncFromServer(currentUser, false);
+      syncFromServer(user);
     }, 5000);
 
     return () => {
@@ -330,7 +302,7 @@ export default function DashboardPage() {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('tibapay_sync', handleStorage);
     };
-  }, [syncFromServer]);
+  }, [user, syncFromServer]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -362,6 +334,12 @@ export default function DashboardPage() {
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
+    
+    // Clear previous user's data so no data bleeding
+    setLedger([]);
+    setActiveSubscriptions([]);
+    setActiveLoan(null);
+    
     setUser(loggedInUser);
     setPhoneInput(loggedInUser.phone);
   };
@@ -414,6 +392,9 @@ export default function DashboardPage() {
 
   const handleLogout = () => {
     setUser(null);
+    setLedger([]);
+    setActiveSubscriptions([]);
+    setActiveLoan(null);
     localStorage.removeItem('tibapay_auth_user');
   };
 
@@ -507,7 +488,7 @@ export default function DashboardPage() {
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING PIN',
       code: tempCode,
-      phone: targetPhone,
+      phone: user?.phone, // Use registered phone for filtering
     };
     saveLedger([newItem, ...ledger], newItem);
 
@@ -582,7 +563,7 @@ export default function DashboardPage() {
       status: 'PENDING ADMIN APPROVAL',
       code: extractedCode,
       smsMessage: manualSmsText,
-      phone: phoneInput || user?.phone,
+      phone: user?.phone, // Use registered phone for filtering
     };
     saveLedger([item, ...ledger], item);
     setManualSmsText('');
@@ -699,7 +680,7 @@ export default function DashboardPage() {
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
       code: reqCode,
-      phone: repayPhoneInput,
+      phone: user?.phone, // Use registered phone for filtering
     };
     saveLedger([newItem, ...ledger], newItem);
 
