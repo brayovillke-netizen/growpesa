@@ -138,15 +138,22 @@ export default function DashboardPage() {
     }
   };
 
+  // SYNC: now surfaces server errors so failures are visible on the phone
   const submitToServerQueue = async (item: LedgerItem) => {
     try {
-      await fetch('/api/treasurer/queue', {
+      const res = await fetch('/api/treasurer/queue', {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'submit', item }),
       });
-    } catch {}
+      const data = await res.json();
+      if (!data.success) {
+        setMessage(`Sync error: ${data.error || 'unknown server error'}`);
+      }
+    } catch (e: any) {
+      setMessage(`Sync network error: ${e?.message || 'failed'}`);
+    }
   };
 
   const saveLedger = (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
@@ -376,7 +383,6 @@ export default function DashboardPage() {
     setMessage(`Subscribed to ${tier.name}. Active until ${endDate}.`);
   };
 
-  // STK push deposit -- sends PENDING PIN to server, then flips to timeout if no callback
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmountInput);
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid deposit amount.');
@@ -399,7 +405,6 @@ export default function DashboardPage() {
       code: tempCode,
       phone: targetPhone,
     };
-    // SYNC: admin sees PENDING PIN immediately
     saveLedger([newItem, ...ledger], newItem);
 
     try {
@@ -428,7 +433,6 @@ export default function DashboardPage() {
             return i;
           });
           localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
-          // SYNC: admin sees timeout state
           if (timeoutItem) submitToServerQueue(timeoutItem);
           return updated;
         });
@@ -451,7 +455,6 @@ export default function DashboardPage() {
           return i;
         });
         localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
-        // SYNC: admin sees error/timeout
         if (errItem) submitToServerQueue(errItem);
         return updated;
       });

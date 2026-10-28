@@ -5,11 +5,11 @@ function mapRow(row: any) {
   return {
     id: String(row.id),
     phone: row.phone ?? undefined,
-    type: row.type,
-    amount: Number(row.amount),
-    date: row.date,
-    status: row.status,
-    code: row.code,
+    type: String(row.type || ''),
+    amount: Number(row.amount) || 0,
+    date: String(row.date || ''),
+    status: String(row.status || '').replace(/_/g, ' '),
+    code: String(row.code || ''),
     smsMessage: row.sms_message ?? undefined,
     sms_message: row.sms_message ?? undefined,
   };
