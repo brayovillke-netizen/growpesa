@@ -51,6 +51,7 @@ interface ActiveLoan {
   totalRepay: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
+  phone?: string; // 👈 ADDED THIS TO FIX THE BUILD ERROR
 }
 
 const PACKAGE_TIERS: PackageTier[] = [
@@ -644,6 +645,7 @@ export default function DashboardPage() {
       totalRepay: totalLoanRepay,
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
+      phone: user?.phone, // 👈 ADDED THIS
     };
     saveLoanState(newLoan);
 
