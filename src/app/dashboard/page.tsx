@@ -49,6 +49,7 @@ interface ActiveLoan {
   interestRate: number;
   interestAmount: number;
   totalRepay: number;
+  amountPaid: number; // NEW: Tracks partial repayments
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
   phone?: string;
@@ -103,13 +104,18 @@ export default function DashboardPage() {
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
-  const [mainPool, setMainPool] = useState<number>(0); // Now represents Personal Savings
+  const [mainPool, setMainPool] = useState<number>(0);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
   
   const [loanAmountInput, setLoanAmountInput] = useState('2000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
+  
+  // Repayment States
   const [repayPhoneInput, setRepayPhoneInput] = useState('');
+  const [repayAmountInput, setRepayAmountInput] = useState('');
+  const [repayMode, setRepayMode] = useState<'stk' | 'sms'>('stk');
+  const [repaySmsText, setRepaySmsText] = useState('');
 
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -133,6 +139,14 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
+
+  // Update repayment amount when loan state changes
+  useEffect(() => {
+    if (activeLoan && activeLoan.status === 'ACTIVE') {
+      const remaining = Math.round(activeLoan.totalRepay - activeLoan.amountPaid);
+      setRepayAmountInput(remaining.toString());
+    }
+  }, [activeLoan]);
 
   const loadLocal = (u: MemberUser) => {
     const savedLedger = localStorage.getItem(`tibapay_ledger_${u.phone}`);
@@ -200,7 +214,6 @@ export default function DashboardPage() {
     const rounded = Math.round(newPoolAmount);
     setMainPool(rounded);
     localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded));
-    // Sync personal savings directly to DB (for internal package sweeps)
     await supabase.from('members').update({ savings_balance: rounded }).eq('phone', user.phone);
     window.dispatchEvent(new Event('tibapay_sync'));
   };
@@ -219,7 +232,6 @@ export default function DashboardPage() {
 
   const syncFromServer = useCallback(async (currentUser: MemberUser) => {
     try {
-      // 1. Fetch Member's Personal Savings
       const { data: memberData } = await supabase
         .from('members')
         .select('savings_balance')
@@ -232,7 +244,6 @@ export default function DashboardPage() {
         localStorage.setItem(`tibapay_savings_${currentUser.phone}`, String(savings));
       }
 
-      // 2. Fetch only this user's items
       const { data: queueData } = await supabase
         .from('ledger_items')
         .select('*')
@@ -241,7 +252,6 @@ export default function DashboardPage() {
 
       const serverQueue = queueData || [];
       
-      // 3. Overwrite local ledger with server state
       const mappedQueue = serverQueue.map((row: any) => ({
         id: String(row.id),
         phone: row.phone,
@@ -256,9 +266,9 @@ export default function DashboardPage() {
       setLedger(mappedQueue);
       localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
-      // 4. Loan logic
       const currentLoan = loanRef.current;
       if (currentLoan) {
+        // 1. Pending Approval check
         if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
           const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
           if (loanItem?.status === 'COMPLETED') {
@@ -273,16 +283,26 @@ export default function DashboardPage() {
           }
         }
         
-        if (currentLoan.status === 'ACTIVE') {
-          const repaymentItem = serverQueue.find(
+        // 2. Calculate Total Repaid
+        if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'CLOSED') {
+          const approvedRepayments = serverQueue.filter(
             (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
           );
-          if (repaymentItem) {
-            const updated: ActiveLoan = { ...currentLoan, status: 'CLOSED' };
+          const totalRepaid = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+          
+          if (currentLoan.amountPaid !== totalRepaid) {
+            const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
+            
+            if (totalRepaid >= currentLoan.totalRepay) {
+              updated.status = 'CLOSED';
+              setMessage('Your loan has been fully repaid!');
+            } else {
+              updated.status = 'ACTIVE';
+            }
+            
             setActiveLoan(updated);
             loanRef.current = updated;
             localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(updated));
-            setMessage('Your loan has been fully repaid!');
           }
         }
       }
@@ -429,7 +449,6 @@ export default function DashboardPage() {
     const totalGroupCut = sub.accumulatedBalance * 0.1;
     const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
     
-    // Adds to personal savings directly
     updateMainPool(mainPool + totalNetSweep);
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -460,7 +479,6 @@ export default function DashboardPage() {
       setMessage(`Insufficient funds: need KES ${tier.entry.toLocaleString()}. Savings: KES ${mainPool.toLocaleString()}.`);
       return;
     }
-    // Deducts from personal savings directly
     updateMainPool(mainPool - tier.entry);
     
     const startDate = new Date().toISOString().split('T')[0];
@@ -502,7 +520,7 @@ export default function DashboardPage() {
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING PIN',
       code: tempCode,
-      phone: user?.phone, // Use registered phone for filtering
+      phone: user?.phone,
     };
     saveLedger([newItem, ...ledger], newItem);
 
@@ -636,7 +654,7 @@ export default function DashboardPage() {
 
   const handleApplyLoan = () => {
     if (activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') {
-      return setMessage(`Repay active loan (${activeLoan.id}) before borrowing again.`);
+      return setMessage(`Repay active loan completely before borrowing again.`);
     }
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
     if (parsedLoanAmt > maxBorrowingLimit) {
@@ -657,6 +675,7 @@ export default function DashboardPage() {
       interestRate: loanInterestRate,
       interestAmount: loanInterestAmount,
       totalRepay: totalLoanRepay,
+      amountPaid: 0,
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
       phone: user?.phone,
@@ -679,10 +698,14 @@ export default function DashboardPage() {
   const handleRepaySTK = async () => {
     if (!activeLoan) return;
     if (!repayPhoneInput || repayPhoneInput.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
+    
+    const amt = Math.round(parseFloat(repayAmountInput));
+    const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
+    if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
+    if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
 
     setLoading(true);
-    const repayAmount = Math.round(activeLoan.totalRepay);
-    setMessage(`Sending STK push to ${repayPhoneInput} for KES ${repayAmount}...`);
+    setMessage(`Sending STK push to ${repayPhoneInput} for KES ${amt}...`);
 
     const txnId = Date.now().toString();
     const reqCode = 'REP-' + Math.floor(1000 + Math.random() * 9000);
@@ -690,7 +713,7 @@ export default function DashboardPage() {
     const newItem: LedgerItem = {
       id: txnId,
       type: 'Loan Repayment',
-      amount: repayAmount,
+      amount: amt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
       code: reqCode,
@@ -703,7 +726,7 @@ export default function DashboardPage() {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: repayAmount, phone: repayPhoneInput }),
+        body: JSON.stringify({ amount: amt, phone: repayPhoneInput }),
       });
       const data = await res.json();
 
@@ -735,6 +758,33 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRepaySMS = () => {
+    if (!activeLoan) return;
+    if (!repaySmsText || repaySmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
+    
+    const amt = Math.round(parseFloat(repayAmountInput));
+    const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
+    if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
+    if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
+
+    const codeMatch = repaySmsText.match(/\b([A-Z0-9]{10})\b/);
+    const extractedCode = codeMatch ? codeMatch[1] : 'MPESA-' + Math.floor(1000 + Math.random() * 9000);
+
+    const newItem: LedgerItem = {
+      id: Date.now().toString(),
+      type: 'Loan Repayment',
+      amount: amt,
+      date: new Date().toISOString().split('T')[0],
+      status: 'PENDING ADMIN APPROVAL',
+      code: extractedCode,
+      smsMessage: repaySmsText,
+      phone: user?.phone,
+    };
+    saveLedger([newItem, ...ledger], newItem);
+    setRepaySmsText('');
+    setMessage(`Repayment of KES ${amt} submitted to Treasurer queue.`);
   };
 
   const parsedWithdrawAmt = Math.round(parseFloat(withdrawAmountInput) || 0);
@@ -1328,6 +1378,7 @@ export default function DashboardPage() {
                     {activeLoan.status}
                   </span>
                 </div>
+                
                 <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
                   <div>
                     <p className="text-[9px] text-slate-400">Principal Requested</p>
@@ -1337,6 +1388,14 @@ export default function DashboardPage() {
                     <p className="text-[9px] text-slate-400">Total Due / Repay</p>
                     <p className="font-black text-amber-400">KES {activeLoan.totalRepay.toLocaleString()}</p>
                   </div>
+                  <div>
+                    <p className="text-[9px] text-slate-400">Amount Paid</p>
+                    <p className="font-bold text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-slate-400">Remaining Balance</p>
+                    <p className="font-black text-rose-400">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
+                  </div>
                 </div>
                 
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
@@ -1345,24 +1404,69 @@ export default function DashboardPage() {
                   </div>
                 ) : activeLoan.status === 'ACTIVE' ? (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
-                    <p className="text-xs font-bold text-amber-400">Repay your loan via M-Pesa STK Push:</p>
+                    <p className="text-xs font-bold text-amber-400">Make a Partial or Full Repayment:</p>
+                    
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
-                        type="text"
-                        value={repayPhoneInput}
-                        onChange={(e) => setRepayPhoneInput(e.target.value)}
+                        type="number"
+                        value={repayAmountInput}
+                        onChange={(e) => setRepayAmountInput(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                        placeholder="0712345678"
                       />
                     </div>
-                    <button
-                      onClick={handleRepaySTK}
-                      disabled={loading}
-                      className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md disabled:opacity-50"
-                    >
-                      {loading ? 'Sending STK Push...' : `Trigger STK Push to Repay (KES ${activeLoan.totalRepay.toLocaleString()})`}
-                    </button>
+
+                    <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                      <button
+                        onClick={() => setRepayMode('stk')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                      >
+                        Pay via STK Push
+                      </button>
+                      <button
+                        onClick={() => setRepayMode('sms')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                      >
+                        Paste SMS
+                      </button>
+                    </div>
+
+                    {repayMode === 'stk' ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
+                          <input
+                            type="text"
+                            value={repayPhoneInput}
+                            onChange={(e) => setRepayPhoneInput(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                            placeholder="0712345678"
+                          />
+                        </div>
+                        <button
+                          onClick={handleRepaySTK}
+                          disabled={loading}
+                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md disabled:opacity-50"
+                        >
+                          {loading ? 'Sending STK Push...' : 'Trigger STK Push'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <textarea
+                          value={repaySmsText}
+                          onChange={(e) => setRepaySmsText(e.target.value)}
+                          placeholder="Paste M-Pesa confirmation SMS here..."
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 h-20 resize-none"
+                        />
+                        <button
+                          onClick={handleRepaySMS}
+                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md"
+                        >
+                          Submit SMS to Treasurer
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 text-center font-medium">
