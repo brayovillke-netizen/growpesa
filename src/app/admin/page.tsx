@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase/client';
 
 interface LedgerItem {
   id: string;
@@ -33,17 +34,40 @@ export default function AdminPage() {
   const fetchQueue = useCallback(async () => {
     try {
       setSyncing(true);
-      const res = await fetch('/api/treasurer/queue', {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setMainPool(Number(data.pool) || 6000);
-        setQueue(Array.isArray(data.queue) ? data.queue : []);
-      }
-    } catch (e) {
-      // silent; keep previous data
+      
+      // 1. Get live pool directly from Supabase
+      const { data: poolData, error: poolError } = await supabase
+        .from('treasury_pool')
+        .select('pool_balance')
+        .eq('id', 1)
+        .single();
+        
+      if (poolError) throw poolError;
+      if (poolData) setMainPool(Number(poolData.pool_balance));
+
+      // 2. Get live queue directly from Supabase
+      const { data: queueData, error: queueError } = await supabase
+        .from('ledger_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (queueError) throw queueError;
+      
+      // 3. Map database snake_case to frontend camelCase
+      const mappedQueue = (queueData || []).map((row: any) => ({
+        id: String(row.id),
+        phone: row.phone,
+        type: String(row.type || ''),
+        amount: Number(row.amount) || 0,
+        date: String(row.date || ''),
+        status: String(row.status || '').replace(/_/g, ' '),
+        code: String(row.code || ''),
+        smsMessage: row.sms_message,
+      }));
+
+      setQueue(mappedQueue);
+    } catch (err: any) {
+      setMessage(`Sync error: ${err.message}`);
     } finally {
       setSyncing(false);
     }
@@ -59,7 +83,7 @@ export default function AdminPage() {
           return;
         }
         setAdminUser(parsed);
-      } catch (e) {
+      } catch {
         window.location.href = '/dashboard';
       }
     } else {
@@ -81,43 +105,45 @@ export default function AdminPage() {
         poolUpdate = Math.max(0, mainPool - Number(item.amount));
       }
 
-      const res = await fetch('/api/treasurer/queue', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve', item, poolUpdate }),
-      });
-      const data = await res.json();
+      // 1. Update item status in Supabase
+      const { error: itemError } = await supabase
+        .from('ledger_items')
+        .update({ status: 'COMPLETED' })
+        .eq('id', String(item.id));
 
-      if (data.success) {
-        setMainPool(Number(data.pool) || mainPool);
-        setQueue(Array.isArray(data.queue) ? data.queue : queue);
-        setMessage(`Approved ${item.code}`);
-      } else {
-        setMessage(`Approval failed: ${data.error || 'unknown error'}`);
+      if (itemError) throw itemError;
+
+      // 2. Update pool balance if needed
+      if (poolUpdate !== undefined) {
+        const { error: poolError } = await supabase
+          .from('treasury_pool')
+          .update({ pool_balance: poolUpdate, updated_at: new Date().toISOString() })
+          .eq('id', 1);
+        
+        if (poolError) throw poolError;
+        setMainPool(poolUpdate);
       }
+
+      await fetchQueue();
+      setMessage(`Approved ${item.code}`);
     } catch (e: any) {
-      setMessage(`Error: ${e.message || 'request failed'}`);
+      setMessage(`Approval error: ${e.message}`);
     }
   };
 
   const handleReject = async (item: LedgerItem) => {
     try {
-      const res = await fetch('/api/treasurer/queue', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reject', item }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setQueue(Array.isArray(data.queue) ? data.queue : queue);
-        setMessage(`Rejected ${item.code}`);
-      } else {
-        setMessage(`Reject failed: ${data.error || 'unknown error'}`);
-      }
+      const { error } = await supabase
+        .from('ledger_items')
+        .update({ status: 'REJECTED' })
+        .eq('id', String(item.id));
+
+      if (error) throw error;
+
+      await fetchQueue();
+      setMessage(`Rejected ${item.code}`);
     } catch (e: any) {
-      setMessage(`Error: ${e.message || 'request failed'}`);
+      setMessage(`Reject error: ${e.message}`);
     }
   };
 
@@ -172,19 +198,13 @@ export default function AdminPage() {
 
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-            Total Main Pool
-          </p>
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total Main Pool</p>
           <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
         </div>
         <div className="bg-amber-600 p-3 rounded-2xl text-slate-950 shadow-md">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-            Pending Queue
-          </p>
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Pending Queue</p>
           <p className="text-sm font-black mt-1">{pendingOnly.length} Requests</p>
-          <p className="text-[9px] opacity-70 mt-0.5">
-            {syncing ? 'syncing...' : 'live'}
-          </p>
+          <p className="text-[9px] opacity-70 mt-0.5">{syncing ? 'syncing...' : 'live'}</p>
         </div>
       </div>
 
@@ -220,58 +240,62 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="space-y-3 pt-1 max-h-[380px] overflow-y-auto pr-1">
+        <div className="space-y-3 pt-1 max-h-[420px] overflow-y-auto pr-1">
           {filteredQueue.length === 0 ? (
             <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500">
               No pending transactions for "{activeFilter}".
             </div>
           ) : (
-            filteredQueue.map((item) => (
-              <div
-                key={item.id}
-                className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs"
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-bold text-white">{item.type}</p>
-                    <p className="text-[10px] text-slate-400">
-                      {item.date} | Code:{' '}
-                      <strong className="text-amber-400">{item.code}</strong> | Phone:{' '}
-                      {item.phone || 'N/A'}
-                    </p>
+            filteredQueue.map((item) => {
+              const awaitingPin = item.status === 'PENDING PIN';
+              return (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-white">{item.type}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {item.date} | Code:{' '}
+                        <strong className="text-amber-400">{item.code}</strong> | Phone:{' '}
+                        {item.phone || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-emerald-400">
+                        KES {Number(item.amount).toLocaleString()}
+                      </p>
+                      <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        {item.status}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-black text-emerald-400">
-                      KES {Number(item.amount).toLocaleString()}
+
+                  {(item.smsMessage || item.sms_message) && (
+                    <p className="text-[10px] text-slate-300 bg-slate-900 p-2 rounded border border-slate-800 italic">
+                      "{item.smsMessage || item.sms_message}"
                     </p>
-                    <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                      {item.status}
-                    </span>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => handleApprove(item)}
+                      disabled={awaitingPin}
+                      className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer shadow disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {awaitingPin ? 'Awaiting PIN' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => handleReject(item)}
+                      className="px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                    >
+                      Reject
+                    </button>
                   </div>
                 </div>
-
-                {(item.smsMessage || item.sms_message) && (
-                  <p className="text-[10px] text-slate-300 bg-slate-900 p-2 rounded border border-slate-800 italic">
-                    "{item.smsMessage || item.sms_message}"
-                  </p>
-                )}
-
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={() => handleApprove(item)}
-                    className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer shadow"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleReject(item)}
-                    className="px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
