@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import InstallPrompt from '@/components/InstallPrompt';
+import { supabase } from '@/lib/supabase/client'; // Direct Supabase import
 
 interface LedgerItem {
   id: string;
@@ -87,7 +88,7 @@ export default function DashboardPage() {
   const [mainPool, setMainPool] = useState<number>(6000);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
-
+  
   const [loanAmountInput, setLoanAmountInput] = useState('2000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
 
@@ -97,7 +98,7 @@ export default function DashboardPage() {
   const [depositAmountInput, setDepositAmountInput] = useState('1000');
   const [phoneInput, setPhoneInput] = useState('');
   const [withdrawAmountInput, setWithdrawAmountInput] = useState('1000');
-
+  
   const [activeSmsInputId, setActiveSmsInputId] = useState<string | null>(null);
   const [pastedSmsText, setPastedSmsText] = useState('');
   const [manualSmsText, setManualSmsText] = useState('');
@@ -138,21 +139,22 @@ export default function DashboardPage() {
     }
   };
 
-  // SYNC: now surfaces server errors so failures are visible on the phone
+  // DIRECT SUPABASE SYNC FOR MEMBER
   const submitToServerQueue = async (item: LedgerItem) => {
     try {
-      const res = await fetch('/api/treasurer/queue', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'submit', item }),
+      const { error } = await supabase.from('ledger_items').upsert({
+        id: String(item.id),
+        phone: item.phone || '0700000000',
+        type: item.type,
+        amount: Number(item.amount),
+        date: item.date,
+        status: item.status,
+        code: item.code,
+        sms_message: item.smsMessage || item.sms_message || null,
       });
-      const data = await res.json();
-      if (!data.success) {
-        setMessage(`Sync error: ${data.error || 'unknown server error'}`);
-      }
+      if (error) throw error;
     } catch (e: any) {
-      setMessage(`Sync network error: ${e?.message || 'failed'}`);
+      setMessage(`Sync error: ${e.message}`);
     }
   };
 
@@ -186,41 +188,35 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
+  // DIRECT SUPABASE POLLING
   const syncFromServer = useCallback(async (initialLoad = false) => {
     try {
-      const res = await fetch('/api/treasurer/queue', {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-      });
-      const data = await res.json();
-      if (!data.success) return;
-
-      if (initialLoad && typeof data.pool === 'number') {
-        setMainPool(data.pool);
-        localStorage.setItem('tibapay_pool', String(data.pool));
+      // 1. Get pool directly
+      const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
+      if (poolData && initialLoad) {
+        setMainPool(Number(poolData.pool_balance));
+        localStorage.setItem('tibapay_pool', String(poolData.pool_balance));
       }
 
-      const serverQueue: LedgerItem[] = Array.isArray(data.queue) ? data.queue : [];
-      if (serverQueue.length === 0) return;
+      // 2. Get queue directly
+      const { data: queueData } = await supabase.from('ledger_items').select('*').order('created_at', { ascending: false });
+      const serverQueue = queueData || [];
 
       setLedger((prev) => {
-        const byId = new Map(serverQueue.map((i) => [String(i.id), i]));
+        const byId = new Map(serverQueue.map((i: any) => [String(i.id), i]));
         let changed = false;
         const merged = prev.map((local) => {
           const remote = byId.get(String(local.id));
           if (!remote) return local;
-          if (
-            remote.status !== local.status ||
-            remote.code !== local.code ||
-            (remote.smsMessage || remote.sms_message) !== local.smsMessage
-          ) {
+          
+          // Normalize snake_case to camelCase
+          const remoteStatus = String(remote.status || '').replace(/_/g, ' ');
+          const remoteCode = String(remote.code || '');
+          const remoteSms = remote.sms_message;
+
+          if (remoteStatus !== local.status || remoteCode !== local.code || remoteSms !== local.smsMessage) {
             changed = true;
-            return {
-              ...local,
-              status: remote.status,
-              code: remote.code,
-              smsMessage: remote.smsMessage || remote.sms_message || local.smsMessage,
-            };
+            return { ...local, status: remoteStatus, code: remoteCode, smsMessage: remoteSms };
           }
           return local;
         });
@@ -233,7 +229,7 @@ export default function DashboardPage() {
 
       const currentLoan = loanRef.current;
       if (currentLoan && currentLoan.status === 'PENDING ADMIN APPROVAL') {
-        const loanItem = serverQueue.find((i) => String(i.code) === currentLoan.id);
+        const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
         if (loanItem?.status === 'COMPLETED') {
           const updated: ActiveLoan = { ...currentLoan, status: 'ACTIVE' };
           setActiveLoan(updated);
@@ -245,7 +241,9 @@ export default function DashboardPage() {
           localStorage.removeItem('tibapay_active_loan');
         }
       }
-    } catch {}
+    } catch (err: any) {
+      setMessage(`Sync error: ${err.message}`);
+    }
   }, []);
 
   useEffect(() => {
