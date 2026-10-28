@@ -134,8 +134,9 @@ export default function DashboardPage() {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
 
-  const loadLocal = () => {
-    const savedLedger = localStorage.getItem('tibapay_ledger');
+  // Scoped Local Storage Helpers
+  const loadLocal = (u: MemberUser) => {
+    const savedLedger = localStorage.getItem(`tibapay_ledger_${u.phone}`);
     if (savedLedger) {
       try { setLedger(JSON.parse(savedLedger)); } catch {}
     }
@@ -143,7 +144,7 @@ export default function DashboardPage() {
     if (savedPool) setMainPool(Math.round(Number(savedPool)) || 6000);
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const savedSubs = localStorage.getItem('tibapay_active_subs');
+    const savedSubs = localStorage.getItem(`tibapay_subs_${u.phone}`);
     if (savedSubs) {
       try {
         const parsed: ActiveSubscription[] = JSON.parse(savedSubs);
@@ -151,7 +152,7 @@ export default function DashboardPage() {
       } catch {}
     }
 
-    const savedLoan = localStorage.getItem('tibapay_active_loan');
+    const savedLoan = localStorage.getItem(`tibapay_loan_${u.phone}`);
     if (savedLoan) {
       try {
         const parsed: ActiveLoan = JSON.parse(savedLoan);
@@ -176,20 +177,22 @@ export default function DashboardPage() {
       });
       if (error) throw error;
     } catch (e: any) {
-      console.error('Sync error (submit):', e.message); // HIDDEN FROM USER
+      console.error('Sync error (submit):', e.message);
     }
   };
 
   const saveLedger = (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
+    if (!user) return;
     setLedger(newLedger);
-    localStorage.setItem('tibapay_ledger', JSON.stringify(newLedger));
+    localStorage.setItem(`tibapay_ledger_${user.phone}`, JSON.stringify(newLedger));
     if (syncItem) submitToServerQueue(syncItem);
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
   const saveSubs = (subs: ActiveSubscription[]) => {
+    if (!user) return;
     setActiveSubscriptions(subs);
-    localStorage.setItem('tibapay_active_subs', JSON.stringify(subs));
+    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(subs));
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
@@ -201,17 +204,18 @@ export default function DashboardPage() {
   };
 
   const saveLoanState = (loan: ActiveLoan | null) => {
+    if (!user) return;
     setActiveLoan(loan);
     loanRef.current = loan;
     if (loan && loan.status !== 'CLOSED' && loan.status !== 'REJECTED') {
-      localStorage.setItem('tibapay_active_loan', JSON.stringify(loan));
+      localStorage.setItem(`tibapay_loan_${user.phone}`, JSON.stringify(loan));
     } else {
-      localStorage.removeItem('tibapay_active_loan');
+      localStorage.removeItem(`tibapay_loan_${user.phone}`);
     }
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  const syncFromServer = useCallback(async (initialLoad = false) => {
+  const syncFromServer = useCallback(async (currentUser: MemberUser, initialLoad = false) => {
     try {
       const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
       if (poolData && initialLoad) {
@@ -220,7 +224,13 @@ export default function DashboardPage() {
         localStorage.setItem('tibapay_pool', String(pool));
       }
 
-      const { data: queueData } = await supabase.from('ledger_items').select('*').order('created_at', { ascending: false });
+      // FILTER BY USER PHONE: Only fetch this member's transactions
+      const { data: queueData } = await supabase
+        .from('ledger_items')
+        .select('*')
+        .eq('phone', currentUser.phone) 
+        .order('created_at', { ascending: false });
+
       const serverQueue = queueData || [];
 
       setLedger((prev) => {
@@ -241,7 +251,7 @@ export default function DashboardPage() {
           return local;
         });
         if (changed) {
-          localStorage.setItem('tibapay_ledger', JSON.stringify(merged));
+          localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(merged));
           return merged;
         }
         return prev;
@@ -255,34 +265,36 @@ export default function DashboardPage() {
             const updated: ActiveLoan = { ...currentLoan, status: 'ACTIVE' };
             setActiveLoan(updated);
             loanRef.current = updated;
-            localStorage.setItem('tibapay_active_loan', JSON.stringify(updated));
+            localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(updated));
           } else if (loanItem?.status === 'REJECTED') {
             setActiveLoan(null);
             loanRef.current = null;
-            localStorage.removeItem('tibapay_active_loan');
+            localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
           }
         }
         
         if (currentLoan.status === 'ACTIVE') {
           const repaymentItem = serverQueue.find(
-            (i: any) => i.type.includes('Loan Repayment') && String(i.phone) === String(currentLoan.phone || user?.phone) && i.status === 'COMPLETED'
+            (i: any) => i.type.includes('Loan Repayment') && String(i.phone) === String(currentLoan.phone || currentUser.phone) && i.status === 'COMPLETED'
           );
           if (repaymentItem) {
             const updated: ActiveLoan = { ...currentLoan, status: 'CLOSED' };
             setActiveLoan(updated);
             loanRef.current = updated;
-            localStorage.setItem('tibapay_active_loan', JSON.stringify(updated));
+            localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(updated));
             setMessage('Your loan has been fully repaid!');
           }
         }
       }
     } catch (err: any) {
-      console.error('Sync error (poll):', err.message); // HIDDEN FROM USER
+      console.error('Sync error (poll):', err.message);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('tibapay_auth_user');
+    let currentUser: MemberUser | null = null;
+
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
@@ -290,6 +302,7 @@ export default function DashboardPage() {
           window.location.replace('/admin');
           return;
         }
+        currentUser = parsed;
         setUser(parsed);
         setPhoneInput(parsed.phone);
       } catch {
@@ -297,14 +310,20 @@ export default function DashboardPage() {
       }
     }
 
-    loadLocal();
-    syncFromServer(true);
+    if (currentUser) {
+      loadLocal(currentUser);
+      syncFromServer(currentUser, true);
+    }
 
-    const handleStorage = () => loadLocal();
+    const handleStorage = () => {
+      if (currentUser) loadLocal(currentUser);
+    };
     window.addEventListener('storage', handleStorage);
     window.addEventListener('tibapay_sync', handleStorage);
 
-    const interval = setInterval(() => syncFromServer(false), 5000); // 5s polling
+    const interval = setInterval(() => {
+      if (currentUser) syncFromServer(currentUser, false);
+    }, 5000);
 
     return () => {
       clearInterval(interval);
@@ -517,7 +536,7 @@ export default function DashboardPage() {
             }
             return i;
           });
-          localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+          if (user) localStorage.setItem(`tibapay_ledger_${user.phone}`, JSON.stringify(updated));
           if (timeoutItem) submitToServerQueue(timeoutItem);
           return updated;
         });
@@ -539,7 +558,7 @@ export default function DashboardPage() {
           }
           return i;
         });
-        localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+        if (user) localStorage.setItem(`tibapay_ledger_${user.phone}`, JSON.stringify(updated));
         if (errItem) submitToServerQueue(errItem);
         return updated;
       });
@@ -714,7 +733,7 @@ export default function DashboardPage() {
           }
           return i;
         });
-        localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+        if (user) localStorage.setItem(`tibapay_ledger_${user.phone}`, JSON.stringify(updated));
         if (errItem) submitToServerQueue(errItem);
         return updated;
       });
