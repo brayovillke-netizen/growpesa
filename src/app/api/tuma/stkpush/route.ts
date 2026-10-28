@@ -1,7 +1,5 @@
 ﻿import { NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
-
 function normalizePhone(raw: string): string | null {
   const digits = String(raw || '').replace(/[^\d]/g, '');
   if (!digits) return null;
@@ -32,13 +30,19 @@ export async function POST(request: Request) {
     const phoneRaw = body?.phone;
 
     if (!amount || amount < 1) {
-      return NextResponse.json({ success: false, error: 'Invalid amount' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'Invalid amount' },
+        { status: 400 }
+      );
     }
 
     const phone = normalizePhone(String(phoneRaw || ''));
     if (!phone) {
       return NextResponse.json(
-        { success: false, error: 'Invalid phone number. Use 07XXXXXXXX or 2547XXXXXXXX.' },
+        {
+          success: false,
+          error: 'Invalid phone number. Use 07XXXXXXXX or 2547XXXXXXXX.',
+        },
         { status: 400 }
       );
     }
@@ -72,7 +76,10 @@ export async function POST(request: Request) {
 
     if (!authResponse.ok || !token) {
       return NextResponse.json(
-        { success: false, error: authData?.message || 'Tuma authentication failed' },
+        {
+          success: false,
+          error: authData?.message || 'Tuma authentication failed',
+        },
         { status: 401 }
       );
     }
@@ -96,7 +103,10 @@ export async function POST(request: Request) {
 
     if (!stkResponse.ok || !stkData?.success) {
       return NextResponse.json(
-        { success: false, error: stkData?.message || 'Tuma STK push rejected' },
+        {
+          success: false,
+          error: stkData?.message || 'Tuma STK push rejected',
+        },
         { status: stkResponse.status || 502 }
       );
     }
