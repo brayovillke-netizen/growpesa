@@ -35,7 +35,6 @@ export default function AdminPage() {
     try {
       setSyncing(true);
       
-      // Fetch Global Pool
       const { data: poolData, error: poolError } = await supabase
         .from('treasury_pool')
         .select('pool_balance')
@@ -45,7 +44,6 @@ export default function AdminPage() {
       if (poolError) throw poolError;
       if (poolData) setMainPool(Math.round(Number(poolData.pool_balance)));
 
-      // Fetch ALL Ledger Items
       const { data: queueData, error: queueError } = await supabase
         .from('ledger_items')
         .select('*')
@@ -100,15 +98,25 @@ export default function AdminPage() {
       let poolUpdate: number | undefined = undefined;
       const amt = Math.round(Number(item.amount));
       
-      // 1. Fetch the Member's Current Savings
+      // 1. Fetch the Member's Current Data
       let currentSavings = 0;
+      let referredBy = null;
+      let referralPaid = false;
+      let totalDeposited = 0;
+
       if (item.phone) {
         const { data: memberData } = await supabase
           .from('members')
-          .select('savings_balance')
+          .select('savings_balance, referred_by, referral_paid, total_deposited')
           .eq('phone', item.phone)
           .single();
-        if (memberData) currentSavings = Number(memberData.savings_balance) || 0;
+        
+        if (memberData) {
+          currentSavings = Number(memberData.savings_balance) || 0;
+          referredBy = memberData.referred_by;
+          referralPaid = memberData.referral_paid;
+          totalDeposited = Number(memberData.total_deposited) || 0;
+        }
       }
 
       // 2. Calculate New Global Pool and Member Savings
@@ -117,13 +125,14 @@ export default function AdminPage() {
       if (item.type.includes('Deposit')) {
         poolUpdate = Math.round(mainPool + amt);
         newMemberSavings = currentSavings + amt;
+        totalDeposited += amt;
       } else if (item.type.includes('Withdrawal')) {
         poolUpdate = Math.max(0, Math.round(mainPool - amt));
         newMemberSavings = Math.max(0, currentSavings - amt);
       } else if (item.type.includes('Loan Request')) {
-        poolUpdate = Math.max(0, Math.round(mainPool - amt)); // Pool pays out loan
+        poolUpdate = Math.max(0, Math.round(mainPool - amt));
       } else if (item.type.includes('Loan Repayment')) {
-        poolUpdate = Math.round(mainPool + amt); // Pool gets money back
+        poolUpdate = Math.round(mainPool + amt);
       }
 
       // 3. Update Item Status
@@ -143,12 +152,52 @@ export default function AdminPage() {
         setMainPool(poolUpdate);
       }
 
-      // 5. Update Member's Savings (only for Deposit or Withdrawal)
+      // 5. Update Member's Savings & Deposits
       if (item.phone && (item.type.includes('Deposit') || item.type.includes('Withdrawal'))) {
         await supabase
           .from('members')
-          .update({ savings_balance: newMemberSavings })
+          .update({ savings_balance: newMemberSavings, total_deposited: totalDeposited })
           .eq('phone', item.phone);
+      }
+
+      // 6. Handle Referral Bonus (KES 5, Max 5 rewards)
+      if (item.type.includes('Deposit') && referredBy && !referralPaid && totalDeposited >= 100) {
+        // Mark referral as paid for this new user
+        await supabase.from('members').update({ referral_paid: true }).eq('phone', item.phone);
+
+        // Fetch Referrer's data
+        const { data: refData } = await supabase
+          .from('members')
+          .select('savings_balance, referrals_rewarded_count')
+          .eq('phone', referredBy)
+          .single();
+        
+        if (refData) {
+          const refCount = Number(refData.referrals_rewarded_count) || 0;
+          
+          // Check if referrer has been rewarded less than 5 times
+          if (refCount < 5) {
+            const refCurrentSavings = Number(refData.savings_balance) || 0;
+            const refNewBalance = refCurrentSavings + 5;
+
+            // Add KES 5 to Referrer
+            await supabase.from('members').update({ 
+              savings_balance: refNewBalance,
+              referrals_rewarded_count: refCount + 1
+            }).eq('phone', referredBy);
+
+            // Create a Ledger Item for the Referrer
+            await supabase.from('ledger_items').insert({
+              id: Date.now().toString(),
+              phone: referredBy,
+              type: 'Referral Bonus',
+              amount: 5,
+              date: new Date().toISOString().split('T')[0],
+              status: 'COMPLETED',
+              code: 'REF-' + Math.floor(1000 + Math.random() * 9000),
+            });
+          }
+        }
       }
 
       await fetchQueue();

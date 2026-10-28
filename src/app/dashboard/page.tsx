@@ -23,6 +23,7 @@ interface MemberUser {
   joined_at?: string;
   account_status?: string;
   loan_limit?: number;
+  referrals_rewarded_count?: number;
 }
 
 interface PackageTier {
@@ -97,6 +98,7 @@ export default function DashboardPage() {
   const [regPhone, setRegPhone] = useState('');
   const [regPin, setRegPin] = useState('');
   const [regConfirmPin, setRegConfirmPin] = useState('');
+  const [regReferral, setRegReferral] = useState('');
   const [regIsAdult, setRegIsAdult] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   
@@ -141,6 +143,16 @@ export default function DashboardPage() {
   useEffect(() => {
     loanRef.current = activeLoan;
   }, [activeLoan]);
+
+  // Check URL for referral code on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      setRegReferral(ref);
+      setAuthMode('signup');
+    }
+  }, []);
 
   useEffect(() => {
     if (user) setRepayPhoneInput(user.phone);
@@ -239,7 +251,7 @@ export default function DashboardPage() {
     try {
       const { data: memberData } = await supabase
         .from('members')
-        .select('savings_balance, account_status, loan_limit')
+        .select('savings_balance, account_status, loan_limit, referrals_rewarded_count')
         .eq('phone', currentUser.phone)
         .single();
         
@@ -251,7 +263,8 @@ export default function DashboardPage() {
         setUser(prev => prev ? { 
           ...prev, 
           account_status: memberData.account_status,
-          loan_limit: Number(memberData.loan_limit)
+          loan_limit: Number(memberData.loan_limit),
+          referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0
         } : null);
       }
 
@@ -279,7 +292,6 @@ export default function DashboardPage() {
 
       const currentLoan = loanRef.current;
       if (currentLoan) {
-        // Check for Overdue Status (Automated Review)
         if (currentLoan.status === 'ACTIVE') {
           const today = new Date().toISOString().split('T')[0];
           if (today > currentLoan.dueDate) {
@@ -317,7 +329,6 @@ export default function DashboardPage() {
               updated.status = 'CLOSED';
               setMessage('Your loan has been fully repaid!');
             } else {
-              // If they paid partially while overdue, keep them blocked until fully paid
               updated.status = currentLoan.status === 'OVERDUE' ? 'OVERDUE' : 'ACTIVE';
             }
             
@@ -383,6 +394,7 @@ export default function DashboardPage() {
       joined_at: data.created_at,
       account_status: data.account_status || 'active',
       loan_limit: Number(data.loan_limit) || 0,
+      referrals_rewarded_count: Number(data.referrals_rewarded_count) || 0,
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
@@ -400,6 +412,7 @@ export default function DashboardPage() {
     e.preventDefault();
     setAuthError(null);
     const cleanPhone = regPhone.trim();
+    const cleanReferral = regReferral.trim();
 
     if (!regName.trim()) return setAuthError('Enter your full name.');
     if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit phone.');
@@ -414,6 +427,16 @@ export default function DashboardPage() {
       return setAuthError('Phone number already registered. Please log in.');
     }
 
+    let referredBy = null;
+    if (cleanReferral) {
+      const { data: refData } = await supabase.from('members').select('phone').eq('phone', cleanReferral).single();
+      if (!refData) {
+        setLoading(false);
+        return setAuthError('Invalid referral code.');
+      }
+      referredBy = cleanReferral;
+    }
+
     const { error } = await supabase.from('members').insert({
       phone: cleanPhone,
       full_name: regName.trim(),
@@ -421,7 +444,9 @@ export default function DashboardPage() {
       role: 'member',
       savings_balance: 0,
       loan_limit: 0,
-      account_status: 'active'
+      account_status: 'active',
+      referred_by: referredBy,
+      referrals_rewarded_count: 0
     });
 
     setLoading(false);
@@ -680,18 +705,16 @@ export default function DashboardPage() {
   const hasConsistentSavings = depositCount >= 4;
   const isAccountActive = user?.account_status === 'active';
   
-  // Base Eligibility (4 weeks, KES 1,000, 4 deposits, Active Account)
   const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && hasConsistentSavings && isAccountActive;
   
-  // Limit Calculation Rules
-  // Max 40% of savings, but capped at 50,000 KES absolute max
-  const calculatedMaxLimit = Math.min(Math.floor(mainPool * 0.4), 50000);
+  // Determine if they qualify for 40% (Has successfully repaid a loan before)
+  const hasPastCompletedLoan = ledger.some(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED');
+  const limitPercentage = hasPastCompletedLoan ? 0.40 : 0.20;
   
-  // If they don't meet base eligibility, limit is 0. If they do, they get the calculated limit.
-  // We also use the DB loan_limit if it's already set and higher (to allow growth up to the max).
+  // Calculate Limit based on 20% or 40%
+  const calculatedMaxLimit = Math.min(Math.floor(mainPool * limitPercentage), 50000);
   const assignedLimit = meetsBaseEligibility ? Math.max(calculatedMaxLimit, user?.loan_limit || 0) : 0;
   
-  // Dynamic Borrowing Limit (Prevents new loans if they have an OVERDUE loan)
   const isBlockedByOverdue = activeLoan?.status === 'OVERDUE';
   const isEligibleForNewLoan = meetsBaseEligibility && !isBlockedByOverdue;
 
@@ -745,7 +768,6 @@ export default function DashboardPage() {
     };
     saveLoanState(newLoan);
 
-    // Audit Log
     await supabase.from('audit_logs').insert({
       phone: user?.phone,
       action: 'LOAN_REQUEST_SUBMITTED',
@@ -1001,6 +1023,18 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+              
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Referral Code (Optional)</label>
+                <input
+                  type="text"
+                  value={regReferral}
+                  onChange={(e) => setRegReferral(e.target.value)}
+                  placeholder="e.g. 0712345678"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
@@ -1030,6 +1064,9 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const referralLink = `https://tibapay.vercel.app?ref=${user.phone}`;
+  const shareMessage = `Join me on TibaPay! Use my code ${user.phone} to sign up and we both benefit when you save. ${referralLink}`;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24">
@@ -1198,6 +1235,49 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* REFERRAL CARD */}
+          <div className="rounded-2xl bg-gradient-to-r from-indigo-900/50 to-slate-900 border border-indigo-500/30 p-4 space-y-3 shadow-lg">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Refer & Earn</span>
+                <h3 className="font-black text-sm text-white">Get KES 5 per friend</h3>
+              </div>
+              <div className="text-2xl">🎁</div>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Invite a friend. When they save KES 100+, you get KES 5 instantly! (Max 5 rewards)
+            </p>
+            <div className="flex gap-2">
+              <a 
+                href={`https://wa.me/?text=${encodeURIComponent(shareMessage)}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex-1 py-2 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl text-[10px] text-center transition cursor-pointer"
+              >
+                WhatsApp
+              </a>
+              <a 
+                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex-1 py-2 bg-black hover:bg-slate-800 text-white border border-slate-700 font-bold rounded-xl text-[10px] text-center transition cursor-pointer"
+              >
+                X (Twitter)
+              </a>
+              <a 
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex-1 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold rounded-xl text-[10px] text-center transition cursor-pointer"
+              >
+                Facebook
+              </a>
+            </div>
+            <div className="text-[9px] text-center text-slate-500 mt-1 font-mono">
+              Code: {user.phone}
+            </div>
+          </div>
+
           <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 space-y-3 shadow-md">
             <div className="flex justify-between items-center text-xs">
               <span className="font-bold text-slate-300">My Cash In and Out Activity</span>
@@ -1214,12 +1294,12 @@ export default function DashboardPage() {
                     <div className="text-right">
                       <p
                         className={`font-bold ${
-                          item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement')
+                          item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
                             ? 'text-emerald-400'
                             : 'text-amber-400'
                         }`}
                       >
-                        {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') ? '+' : '-'}
+                        {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
                         KES {item.amount.toLocaleString()}
                       </p>
                       <p
@@ -1624,53 +1704,17 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 
-                {/* TRANSPARENT ELIGIBILITY PANEL */}
                 {!isEligibleForNewLoan ? (
-                  <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3">
-                    <p className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                      <span>🔒</span> Requirements to Unlock Borrowing:
+                  <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
+                    <p className="text-sm font-bold text-slate-300">Loan Locked</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      You are not yet eligible to borrow. Keep saving and building your account history to unlock this feature.
                     </p>
-                    
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className={daysActive >= 28 ? "text-emerald-500" : "text-slate-500"}>
-                        {daysActive >= 28 ? '✅' : '❌'}
-                      </span>
-                      <span className={daysActive >= 28 ? "text-slate-300" : "text-slate-400"}>
-                        Minimum 4 weeks (28 days) membership ({daysActive}/28 days)
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className={hasMinSavings ? "text-emerald-500" : "text-slate-500"}>
-                        {hasMinSavings ? '✅' : '❌'}
-                      </span>
-                      <span className={hasMinSavings ? "text-slate-300" : "text-slate-400"}>
-                        Minimum savings of KES 1,000 (Current: KES {mainPool.toLocaleString()})
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className={hasConsistentSavings ? "text-emerald-500" : "text-slate-500"}>
-                        {hasConsistentSavings ? '✅' : '❌'}
-                      </span>
-                      <span className={hasConsistentSavings ? "text-slate-300" : "text-slate-400"}>
-                        Consistent savings: 4 deposits ({depositCount}/4 completed)
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className={isAccountActive ? "text-emerald-500" : "text-rose-500"}>
-                        {isAccountActive ? '✅' : '❌'}
-                      </span>
-                      <span className={isAccountActive ? "text-slate-300" : "text-rose-400"}>
-                        Account in good standing
-                      </span>
-                    </div>
                   </div>
                 ) : (
                   <>
                     <p className="text-xs text-slate-400">
-                      You qualify to borrow up to <strong className="text-white">KES {assignedLimit.toLocaleString()}</strong>. All loans require Treasurer approval and 24-hour disbursement.
+                      You qualify to borrow up to <strong className="text-white">KES {assignedLimit.toLocaleString()}</strong> ({hasPastCompletedLoan ? '40%' : '20%'} of savings). All loans require Treasurer approval and 24-hour disbursement.
                     </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
