@@ -51,7 +51,7 @@ interface ActiveLoan {
   totalRepay: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
-  phone?: string; // 👈 ADDED THIS TO FIX THE BUILD ERROR
+  phone?: string;
 }
 
 const PACKAGE_TIERS: PackageTier[] = [
@@ -140,7 +140,7 @@ export default function DashboardPage() {
       try { setLedger(JSON.parse(savedLedger)); } catch {}
     }
     const savedPool = localStorage.getItem('tibapay_pool');
-    if (savedPool) setMainPool(Number(savedPool) || 6000);
+    if (savedPool) setMainPool(Math.round(Number(savedPool)) || 6000);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const savedSubs = localStorage.getItem('tibapay_active_subs');
@@ -168,7 +168,7 @@ export default function DashboardPage() {
         id: String(item.id),
         phone: item.phone || '0700000000',
         type: item.type,
-        amount: Number(item.amount),
+        amount: Math.round(Number(item.amount)),
         date: item.date,
         status: item.status,
         code: item.code,
@@ -176,7 +176,7 @@ export default function DashboardPage() {
       });
       if (error) throw error;
     } catch (e: any) {
-      setMessage(`Sync error: ${e.message}`);
+      console.error('Sync error (submit):', e.message); // HIDDEN FROM USER
     }
   };
 
@@ -194,8 +194,9 @@ export default function DashboardPage() {
   };
 
   const updateMainPool = (newPoolAmount: number) => {
-    setMainPool(newPoolAmount);
-    localStorage.setItem('tibapay_pool', String(newPoolAmount));
+    const rounded = Math.round(newPoolAmount);
+    setMainPool(rounded);
+    localStorage.setItem('tibapay_pool', String(rounded));
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
@@ -214,8 +215,9 @@ export default function DashboardPage() {
     try {
       const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
       if (poolData && initialLoad) {
-        setMainPool(Number(poolData.pool_balance));
-        localStorage.setItem('tibapay_pool', String(poolData.pool_balance));
+        const pool = Math.round(Number(poolData.pool_balance));
+        setMainPool(pool);
+        localStorage.setItem('tibapay_pool', String(pool));
       }
 
       const { data: queueData } = await supabase.from('ledger_items').select('*').order('created_at', { ascending: false });
@@ -247,7 +249,6 @@ export default function DashboardPage() {
 
       const currentLoan = loanRef.current;
       if (currentLoan) {
-        // 1. Check if initial Loan Request was approved
         if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
           const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
           if (loanItem?.status === 'COMPLETED') {
@@ -262,7 +263,6 @@ export default function DashboardPage() {
           }
         }
         
-        // 2. Check if Loan Repayment was approved
         if (currentLoan.status === 'ACTIVE') {
           const repaymentItem = serverQueue.find(
             (i: any) => i.type.includes('Loan Repayment') && String(i.phone) === String(currentLoan.phone || user?.phone) && i.status === 'COMPLETED'
@@ -277,7 +277,7 @@ export default function DashboardPage() {
         }
       }
     } catch (err: any) {
-      setMessage(`Sync error: ${err.message}`);
+      console.error('Sync error (poll):', err.message); // HIDDEN FROM USER
     }
   }, [user]);
 
@@ -304,7 +304,7 @@ export default function DashboardPage() {
     window.addEventListener('storage', handleStorage);
     window.addEventListener('tibapay_sync', handleStorage);
 
-    const interval = setInterval(() => syncFromServer(false), 3000);
+    const interval = setInterval(() => syncFromServer(false), 5000); // 5s polling
 
     return () => {
       clearInterval(interval);
@@ -417,7 +417,7 @@ export default function DashboardPage() {
       return;
     }
     const totalGroupCut = sub.accumulatedBalance * 0.1;
-    const totalNetSweep = sub.accumulatedBalance * 0.9;
+    const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
     updateMainPool(mainPool + totalNetSweep);
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -438,7 +438,7 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger]);
-    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Pool (10% group fee: KES ${totalGroupCut}).`);
+    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Pool (10% group fee: KES ${Math.round(totalGroupCut)}).`);
   };
 
   const handleSubscribeTier = (tierId: number) => {
@@ -469,7 +469,7 @@ export default function DashboardPage() {
   };
 
   const handleDeposit = async () => {
-    const amt = parseFloat(depositAmountInput);
+    const amt = Math.round(parseFloat(depositAmountInput));
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid deposit amount.');
 
     const targetPhone = phoneInput.trim() || user?.phone || '';
@@ -549,7 +549,7 @@ export default function DashboardPage() {
   };
 
   const handleDirectSmsSubmit = async () => {
-    const amt = parseFloat(depositAmountInput);
+    const amt = Math.round(parseFloat(depositAmountInput));
     if (!manualSmsText || manualSmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
 
     const codeMatch = manualSmsText.match(/\b([A-Z0-9]{10})\b/);
@@ -592,12 +592,12 @@ export default function DashboardPage() {
   };
 
   const handleWithdraw = async () => {
-    const grossAmt = parseFloat(withdrawAmountInput);
+    const grossAmt = Math.round(parseFloat(withdrawAmountInput));
     if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
     if (grossAmt > mainPool) return setMessage(`Insufficient funds. Pool: KES ${mainPool.toLocaleString()}.`);
 
     const gwfFee = calculateGWF(grossAmt);
-    const netPayout = grossAmt - gwfFee;
+    const netPayout = Math.round(grossAmt - gwfFee);
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -613,11 +613,11 @@ export default function DashboardPage() {
   };
 
   const maxBorrowingLimit = Math.floor(mainPool * 0.4);
-  const parsedLoanAmt = parseFloat(loanAmountInput) || 0;
-  const loanFee = parsedLoanAmt * 0.05;
+  const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
+  const loanFee = Math.round(parsedLoanAmt * 0.05);
   const amountSentToMpesa = parsedLoanAmt - loanFee;
   const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.1;
-  const loanInterestAmount = parsedLoanAmt * loanInterestRate;
+  const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
   const handleApplyLoan = () => {
@@ -645,7 +645,7 @@ export default function DashboardPage() {
       totalRepay: totalLoanRepay,
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
-      phone: user?.phone, // 👈 ADDED THIS
+      phone: user?.phone,
     };
     saveLoanState(newLoan);
 
@@ -667,7 +667,8 @@ export default function DashboardPage() {
     if (!repayPhoneInput || repayPhoneInput.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
     setLoading(true);
-    setMessage(`Sending STK push to ${repayPhoneInput}...`);
+    const repayAmount = Math.round(activeLoan.totalRepay);
+    setMessage(`Sending STK push to ${repayPhoneInput} for KES ${repayAmount}...`);
 
     const txnId = Date.now().toString();
     const reqCode = 'REP-' + Math.floor(1000 + Math.random() * 9000);
@@ -675,7 +676,7 @@ export default function DashboardPage() {
     const newItem: LedgerItem = {
       id: txnId,
       type: 'Loan Repayment',
-      amount: activeLoan.totalRepay,
+      amount: repayAmount,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
       code: reqCode,
@@ -688,7 +689,7 @@ export default function DashboardPage() {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: activeLoan.totalRepay, phone: repayPhoneInput }),
+        body: JSON.stringify({ amount: repayAmount, phone: repayPhoneInput }),
       });
       const data = await res.json();
 
@@ -722,7 +723,7 @@ export default function DashboardPage() {
     }
   };
 
-  const parsedWithdrawAmt = parseFloat(withdrawAmountInput) || 0;
+  const parsedWithdrawAmt = Math.round(parseFloat(withdrawAmountInput) || 0);
   const currentGWFFee = calculateGWF(parsedWithdrawAmt);
   const currentNetPayout = Math.max(0, parsedWithdrawAmt - currentGWFFee);
 

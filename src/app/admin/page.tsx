@@ -42,7 +42,7 @@ export default function AdminPage() {
         .single();
         
       if (poolError) throw poolError;
-      if (poolData) setMainPool(Number(poolData.pool_balance));
+      if (poolData) setMainPool(Math.round(Number(poolData.pool_balance)));
 
       const { data: queueData, error: queueError } = await supabase
         .from('ledger_items')
@@ -55,7 +55,7 @@ export default function AdminPage() {
         id: String(row.id),
         phone: row.phone,
         type: String(row.type || ''),
-        amount: Number(row.amount) || 0,
+        amount: Math.round(Number(row.amount)) || 0,
         date: String(row.date || ''),
         status: String(row.status || '').replace(/_/g, ' '),
         code: String(row.code || ''),
@@ -64,7 +64,8 @@ export default function AdminPage() {
 
       setQueue(mappedQueue);
     } catch (err: any) {
-      setMessage(`Sync error: ${err.message}`);
+      // Silently log sync errors so they don't clutter the screen
+      console.error('Sync error:', err.message);
     } finally {
       setSyncing(false);
     }
@@ -89,21 +90,19 @@ export default function AdminPage() {
     }
 
     fetchQueue();
-    const interval = setInterval(fetchQueue, 3000);
+    const interval = setInterval(fetchQueue, 5000); // 5 seconds to reduce rate limiting
     return () => clearInterval(interval);
   }, [fetchQueue]);
 
   const handleApprove = async (item: LedgerItem) => {
     try {
       let poolUpdate: number | undefined = undefined;
+      const amt = Math.round(Number(item.amount));
       
-      // Loan Repayments go INTO the pool. Deposits go INTO the pool.
       if (item.type.includes('Deposit') || item.type.includes('Loan Repayment')) {
-        poolUpdate = mainPool + Number(item.amount);
-      } 
-      // Withdrawals go OUT. Loan Requests (disbursements) go OUT.
-      else if (item.type.includes('Withdrawal') || item.type.includes('Loan Request')) {
-        poolUpdate = Math.max(0, mainPool - Number(item.amount));
+        poolUpdate = Math.round(mainPool + amt);
+      } else if (item.type.includes('Withdrawal') || item.type.includes('Loan Request')) {
+        poolUpdate = Math.max(0, Math.round(mainPool - amt));
       }
 
       const { error: itemError } = await supabase
@@ -283,7 +282,7 @@ export default function AdminPage() {
                       disabled={awaitingPin}
                       className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer shadow disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {awaitingPin ? 'Awaiting PIN' : 'Approve'}
+                      {awaitingPin ? 'Awaiting PIN' : `Approve (KES ${Number(item.amount).toLocaleString()})`}
                     </button>
                     <button
                       onClick={() => handleReject(item)}
