@@ -117,10 +117,10 @@ export default function DashboardPage() {
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
-  // Screen Lock States
+  // Screen Lock States (Fixed Date.now() prerender crash)
   const [isLocked, setIsLocked] = useState(false);
   const [lockPin, setLockPin] = useState('');
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(0); // Changed from Date.now() to 0
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
@@ -166,9 +166,12 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Inactivity Lock Timer
+  // Inactivity Lock Timer (Fixed)
   useEffect(() => {
     if (!user) return;
+
+    // Initialize activity time on mount/login (safe inside useEffect)
+    lastActivityRef.current = Date.now();
 
     const interval = setInterval(() => {
       if (!isLocked && Date.now() - lastActivityRef.current > 5 * 60 * 1000) {
@@ -1543,7 +1546,6 @@ export default function DashboardPage() {
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
                         </p>
-                        {/* TOTAL ROI HIDDEN */}
                         <p className="text-[10px] font-bold text-emerald-400 mt-1">
                           Gross Daily: +KES {tier.dailyLimit}
                         </p>
