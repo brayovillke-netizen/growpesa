@@ -71,26 +71,20 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    // TEMPORARY WIPE: Delete these 4 lines after deploying once
-    localStorage.removeItem('tibapay_auth_user');
-    localStorage.removeItem('tibapay_ledger');
-    localStorage.removeItem('tibapay_active_loan');
-    localStorage.removeItem('tibapay_active_subs');
-
     const savedUser = localStorage.getItem('tibapay_auth_user');
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
         if (parsed.role !== 'admin') {
-          window.location.href = '/dashboard';
+          window.location.replace('/dashboard');
           return;
         }
         setAdminUser(parsed);
       } catch {
-        window.location.href = '/dashboard';
+        window.location.replace('/dashboard');
       }
     } else {
-      window.location.href = '/dashboard';
+      window.location.replace('/dashboard');
       return;
     }
 
@@ -184,7 +178,7 @@ export default function AdminPage() {
         <button
           onClick={() => {
             localStorage.removeItem('tibapay_auth_user');
-            window.location.href = '/dashboard';
+            window.location.replace('/dashboard');
           }}
           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
         >

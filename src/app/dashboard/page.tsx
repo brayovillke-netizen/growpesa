@@ -264,7 +264,7 @@ export default function DashboardPage() {
       try {
         const parsed = JSON.parse(savedUser);
         if (parsed.role === 'admin') {
-          window.location.href = '/admin';
+          window.location.replace('/admin');
           return;
         }
         setUser(parsed);
@@ -294,15 +294,16 @@ export default function DashboardPage() {
     e.preventDefault();
     setAuthError(null);
     const cleanPhone = loginPhone.trim();
+    const cleanPin = loginPin.trim();
 
     if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit phone.');
-    if (loginPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
+    if (cleanPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
 
     // ADMIN BYPASS: Hardcoded check
-    if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && loginPin === '6200') {
+    if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin === '6200') {
       const adminUser: MemberUser = { phone: cleanPhone, name: 'Brian Kegode (Admin)', role: 'admin' };
       localStorage.setItem('tibapay_auth_user', JSON.stringify(adminUser));
-      window.location.href = '/admin';
+      window.location.replace('/admin');
       return;
     }
 
@@ -312,7 +313,7 @@ export default function DashboardPage() {
     setLoading(false);
 
     if (error || !data) return setAuthError('Member not found. Please sign up.');
-    if (data.pin !== loginPin) return setAuthError('Incorrect PIN.');
+    if (data.pin !== cleanPin) return setAuthError('Incorrect PIN.');
 
     const loggedInUser: MemberUser = {
       phone: data.phone,
@@ -901,7 +902,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Rest of the dashboard UI goes here, exactly as before... */}
       <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
         {(['overview', 'packages', 'withdraw', 'loans'] as const).map((tab) => (
           <button
