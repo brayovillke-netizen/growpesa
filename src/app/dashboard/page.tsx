@@ -80,10 +80,21 @@ function calculateGWF(amount: number): number {
 
 export default function DashboardPage() {
   const [user, setUser] = useState<MemberUser | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  
+  // Auth Form States
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPin, setLoginPin] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regPin, setRegPin] = useState('');
+  const [regConfirmPin, setRegConfirmPin] = useState('');
+  const [regIsAdult, setRegIsAdult] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showChangePin, setShowChangePin] = useState(false);
+  const [newPin, setNewPin] = useState('');
 
+  // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
   const [mainPool, setMainPool] = useState<number>(6000);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
@@ -242,12 +253,6 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // TEMPORARY WIPE: Delete these 4 lines after deploying once
-    localStorage.removeItem('tibapay_auth_user');
-    localStorage.removeItem('tibapay_ledger');
-    localStorage.removeItem('tibapay_active_loan');
-    localStorage.removeItem('tibapay_active_subs');
-
     const savedUser = localStorage.getItem('tibapay_auth_user');
     if (savedUser) {
       try {
@@ -257,6 +262,7 @@ export default function DashboardPage() {
           return;
         }
         setUser(parsed);
+        setPhoneInput(parsed.phone);
       } catch {
         localStorage.removeItem('tibapay_auth_user');
       }
@@ -278,33 +284,80 @@ export default function DashboardPage() {
     };
   }, [syncFromServer]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     const cleanPhone = loginPhone.trim();
-    const cleanPin = loginPin.trim();
 
-    if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit M-Pesa phone.');
-    if (cleanPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
+    if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit phone.');
+    if (loginPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
 
-    const isTreasurer = (cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin === '6200';
-    if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin !== '6200') {
-      return setAuthError('Incorrect PIN for Treasurer account.');
-    }
+    setLoading(true);
+    const { data, error } = await supabase.from('members').select('*').eq('phone', cleanPhone).single();
+    setLoading(false);
+
+    if (error || !data) return setAuthError('Member not found.');
+    if (data.pin !== loginPin) return setAuthError('Incorrect PIN.');
 
     const loggedInUser: MemberUser = {
-      phone: cleanPhone,
-      name: isTreasurer ? 'Treasurer (0700413388)' : `Member (${cleanPhone.slice(-4)})`,
-      role: isTreasurer ? 'admin' : 'member',
+      phone: data.phone,
+      name: data.full_name,
+      role: data.role,
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
-    if (isTreasurer) {
+    if (data.role === 'admin') {
       window.location.href = '/admin';
       return;
     }
     setUser(loggedInUser);
-    setPhoneInput(cleanPhone);
+    setPhoneInput(loggedInUser.phone);
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    const cleanPhone = regPhone.trim();
+
+    if (!regName.trim()) return setAuthError('Enter your full name.');
+    if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit phone.');
+    if (regPin.length !== 4) return setAuthError('PIN must be 4 digits.');
+    if (regPin !== regConfirmPin) return setAuthError('PINs do not match.');
+    if (!regIsAdult) return setAuthError('You must confirm you are above 18.');
+
+    setLoading(true);
+    const { data: existing } = await supabase.from('members').select('phone').eq('phone', cleanPhone).single();
+    if (existing) {
+      setLoading(false);
+      return setAuthError('Phone number already registered.');
+    }
+
+    const { error } = await supabase.from('members').insert({
+      phone: cleanPhone,
+      full_name: regName.trim(),
+      pin: regPin,
+      role: 'member'
+    });
+
+    setLoading(false);
+    if (error) return setAuthError(error.message);
+
+    setAuthMode('login');
+    setLoginPhone(cleanPhone);
+    setAuthError(null);
+    alert('Registration successful! Please log in.');
+  };
+
+  const handleChangePin = async () => {
+    if (!user) return;
+    if (newPin.length !== 4) return alert('PIN must be 4 digits.');
+    
+    const { error } = await supabase.from('members').update({ pin: newPin }).eq('phone', user.phone);
+    if (error) return alert('Failed to update PIN.');
+    
+    alert('PIN updated successfully!');
+    setShowChangePin(false);
+    setNewPin('');
   };
 
   const handleLogout = () => {
@@ -611,7 +664,9 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-black tracking-tight text-white">
               Tiba<span className="text-emerald-400">Pay</span> Vault
             </h1>
-            <p className="text-xs text-slate-400">Secure Community Treasury and Savings Portal</p>
+            <p className="text-xs text-slate-400">
+              {authMode === 'login' ? 'Welcome back. Please log in.' : 'Create your savings account.'}
+            </p>
           </div>
 
           {authError && (
@@ -620,37 +675,120 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
-              <input
-                type="text"
-                value={loginPhone}
-                onChange={(e) => setLoginPhone(e.target.value)}
-                placeholder="0712XXXXXX"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Security PIN (4 Digits)</label>
-              <input
-                type="password"
-                maxLength={4}
-                value={loginPin}
-                onChange={(e) => setLoginPin(e.target.value)}
-                placeholder="****"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600 tracking-widest text-center text-lg"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer mt-2"
-            >
-              Authenticate and Unlock Portal
-            </button>
-          </form>
+          {authMode === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
+                <input
+                  type="text"
+                  value={loginPhone}
+                  onChange={(e) => setLoginPhone(e.target.value)}
+                  placeholder="0712XXXXXX"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Security PIN (4 Digits)</label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={loginPin}
+                  onChange={(e) => setLoginPin(e.target.value)}
+                  placeholder="****"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer mt-2 disabled:opacity-50"
+              >
+                {loading ? 'Authenticating...' : 'Log In'}
+              </button>
+              
+              <div className="text-center pt-2">
+                <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
+                  Don't have an account? Sign Up
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSignUp} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Full Name</label>
+                <input
+                  type="text"
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder="John Doe"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
+                <input
+                  type="text"
+                  value={regPhone}
+                  onChange={(e) => setRegPhone(e.target.value)}
+                  placeholder="0712XXXXXX"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PIN (4 Digits)</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={regPin}
+                    onChange={(e) => setRegPin(e.target.value)}
+                    placeholder="****"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confirm PIN</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={regConfirmPin}
+                    onChange={(e) => setRegConfirmPin(e.target.value)}
+                    placeholder="****"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="adultCheck"
+                  checked={regIsAdult}
+                  onChange={(e) => setRegIsAdult(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500"
+                />
+                <label htmlFor="adultCheck" className="text-xs text-slate-300">I confirm I am 18 years or older</label>
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer mt-2 disabled:opacity-50"
+              >
+                {loading ? 'Creating Account...' : 'Sign Up'}
+              </button>
+              
+              <div className="text-center pt-2">
+                <button type="button" onClick={() => { setAuthMode('login'); setAuthError(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
+                  Already have an account? Log In
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -675,13 +813,40 @@ export default function DashboardPage() {
             <p className="text-[11px] text-slate-400 truncate max-w-[150px]">{user.name}</p>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
-        >
-          Sign Out
-        </button>
+        <div className="flex flex-col gap-1 items-end">
+          <button
+            onClick={handleLogout}
+            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
+          >
+            Sign Out
+          </button>
+          <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
+            Change PIN
+          </button>
+        </div>
       </div>
+
+      {showChangePin && (
+        <div className="p-4 bg-slate-900 border border-slate-700 rounded-xl space-y-3">
+          <h3 className="text-xs font-bold text-white">Change Your PIN</h3>
+          <input
+            type="password"
+            maxLength={4}
+            value={newPin}
+            onChange={(e) => setNewPin(e.target.value)}
+            placeholder="Enter new 4-digit PIN"
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
+          />
+          <div className="flex gap-2">
+            <button onClick={handleChangePin} className="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
+              Update PIN
+            </button>
+            <button onClick={() => setShowChangePin(false)} className="px-3 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {message && (
         <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-semibold leading-relaxed">
@@ -689,6 +854,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Rest of the dashboard UI goes here, exactly as before... */}
       <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
         {(['overview', 'packages', 'withdraw', 'loans'] as const).map((tab) => (
           <button
