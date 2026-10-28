@@ -63,13 +63,14 @@ interface ActiveLoan {
   phone?: string;
 }
 
+// 👇 MINERAL NAMES WITH ENLARGED ICONS
 const PACKAGE_TIERS: PackageTier[] = [
-  { id: 1, name: 'Tier 1', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
-  { id: 2, name: 'Tier 2', entry: 500, dailyLimit: 45, lockDays: 13, groupCut: 4.5, netSweep: 40.5, totalPayout: 585, roi: 85, icon: '🥈', sizeClass: 'text-4xl' },
-  { id: 3, name: 'Tier 3', entry: 1000, dailyLimit: 70, lockDays: 16, groupCut: 7, netSweep: 63, totalPayout: 1120, roi: 120, icon: '🥇', sizeClass: 'text-5xl' },
-  { id: 4, name: 'Tier 4', entry: 2500, dailyLimit: 150, lockDays: 18, groupCut: 15, netSweep: 135, totalPayout: 2700, roi: 200, icon: '💠', sizeClass: 'text-6xl' },
-  { id: 5, name: 'Tier 5', entry: 5000, dailyLimit: 200, lockDays: 28, groupCut: 20, netSweep: 180, totalPayout: 5600, roi: 600, icon: '💎', sizeClass: 'text-7xl' },
-  { id: 6, name: 'Tier 6', entry: 10000, dailyLimit: 700, lockDays: 15, groupCut: 70, netSweep: 630, totalPayout: 10500, roi: 500, icon: '👑', sizeClass: 'text-8xl' },
+  { id: 1, name: 'Bronze', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
+  { id: 2, name: 'Silver', entry: 500, dailyLimit: 45, lockDays: 13, groupCut: 4.5, netSweep: 40.5, totalPayout: 585, roi: 85, icon: '🥈', sizeClass: 'text-4xl' },
+  { id: 3, name: 'Gold', entry: 1000, dailyLimit: 70, lockDays: 16, groupCut: 7, netSweep: 63, totalPayout: 1120, roi: 120, icon: '🥇', sizeClass: 'text-5xl' },
+  { id: 4, name: 'Platinum', entry: 2500, dailyLimit: 150, lockDays: 18, groupCut: 15, netSweep: 135, totalPayout: 2700, roi: 200, icon: '💠', sizeClass: 'text-6xl' },
+  { id: 5, name: 'Diamond', entry: 5000, dailyLimit: 200, lockDays: 28, groupCut: 20, netSweep: 180, totalPayout: 5600, roi: 600, icon: '💎', sizeClass: 'text-7xl' },
+  { id: 6, name: 'Black Diamond', entry: 10000, dailyLimit: 700, lockDays: 15, groupCut: 70, netSweep: 630, totalPayout: 10500, roi: 500, icon: '👑', sizeClass: 'text-8xl' },
 ];
 
 function calculateGWF(amount: number): number {
@@ -707,11 +708,9 @@ export default function DashboardPage() {
   
   const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && hasConsistentSavings && isAccountActive;
   
-  // Determine if they qualify for 40% (Has successfully repaid a loan before)
   const hasPastCompletedLoan = ledger.some(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED');
   const limitPercentage = hasPastCompletedLoan ? 0.40 : 0.20;
   
-  // Calculate Limit based on 20% or 40%
   const calculatedMaxLimit = Math.min(Math.floor(mainPool * limitPercentage), 50000);
   const assignedLimit = meetsBaseEligibility ? Math.max(calculatedMaxLimit, user?.loan_limit || 0) : 0;
   
@@ -1065,8 +1064,26 @@ export default function DashboardPage() {
     );
   }
 
-  const referralLink = `https://tibapay.vercel.app?ref=${user.phone}`;
-  const shareMessage = `Join me on TibaPay! Use my code ${user.phone} to sign up and we both benefit when you save. ${referralLink}`;
+  // Native Share Logic
+  const handleShareReferral = async () => {
+    const referralLink = `https://tibapay.vercel.app?ref=${user.phone}`;
+    const shareData = {
+      title: 'Join TibaPay',
+      text: 'Join me on TibaPay! Use my code to sign up and start saving.',
+      url: referralLink,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log('Error sharing', err);
+      }
+    } else {
+      navigator.clipboard.writeText(referralLink);
+      setMessage('Referral link copied to clipboard!');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24">
@@ -1235,7 +1252,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* REFERRAL CARD */}
+          {/* REFERRAL CARD - SINGLE BUTTON & HIDDEN 100 THRESHOLD */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-900/50 to-slate-900 border border-indigo-500/30 p-4 space-y-3 shadow-lg">
             <div className="flex justify-between items-center">
               <div>
@@ -1245,36 +1262,18 @@ export default function DashboardPage() {
               <div className="text-2xl">🎁</div>
             </div>
             <p className="text-[11px] text-slate-400">
-              Invite a friend. When they save KES 100+, you get KES 5 instantly! (Max 5 rewards)
+              Invite a friend to start saving. You get KES 5 instantly when they sign up using your code! (Max 5 rewards)
             </p>
-            <div className="flex gap-2">
-              <a 
-                href={`https://wa.me/?text=${encodeURIComponent(shareMessage)}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex-1 py-2 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl text-[10px] text-center transition cursor-pointer"
-              >
-                WhatsApp
-              </a>
-              <a 
-                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex-1 py-2 bg-black hover:bg-slate-800 text-white border border-slate-700 font-bold rounded-xl text-[10px] text-center transition cursor-pointer"
-              >
-                X (Twitter)
-              </a>
-              <a 
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex-1 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold rounded-xl text-[10px] text-center transition cursor-pointer"
-              >
-                Facebook
-              </a>
-            </div>
+            
+            <button 
+              onClick={handleShareReferral}
+              className="w-full py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+            >
+              <span>Share Invite Link</span>
+            </button>
+            
             <div className="text-[9px] text-center text-slate-500 mt-1 font-mono">
-              Code: {user.phone}
+              Your Code: {user.phone}
             </div>
           </div>
 
