@@ -49,7 +49,7 @@ interface ActiveLoan {
   interestRate: number;
   interestAmount: number;
   totalRepay: number;
-  amountPaid: number; // NEW: Tracks partial repayments
+  amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
   phone?: string;
@@ -67,7 +67,7 @@ const PACKAGE_TIERS: PackageTier[] = [
 
 function calculateGWF(amount: number): number {
   if (amount < 50) return 0;
-  if (amount <= 100) return 10;
+  if (amount <= 100) return 3;
   if (amount <= 500) return 25;
   if (amount <= 1000) return 30;
   if (amount <= 1500) return 30;
@@ -268,7 +268,6 @@ export default function DashboardPage() {
 
       const currentLoan = loanRef.current;
       if (currentLoan) {
-        // 1. Pending Approval check
         if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
           const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
           if (loanItem?.status === 'COMPLETED') {
@@ -283,7 +282,6 @@ export default function DashboardPage() {
           }
         }
         
-        // 2. Calculate Total Repaid
         if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'CLOSED') {
           const approvedRepayments = serverQueue.filter(
             (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
