@@ -30,6 +30,8 @@ interface PackageTier {
   lockDays: number;
   groupCut: number;
   netSweep: number;
+  icon: string;
+  sizeClass: string;
 }
 
 interface ActiveSubscription {
@@ -55,15 +57,14 @@ interface ActiveLoan {
   phone?: string;
 }
 
-// 👇 UPDATED WITH REAL GEM NAMES AND EMOJIS
+// 👇 UPDATED WITH SCALING GEM IMAGES
 const PACKAGE_TIERS: PackageTier[] = [
-  { id: 1, name: 'Pearl 💍', entry: 200, dailyLimit: 20, lockDays: 7, groupCut: 2, netSweep: 18 },
-  { id: 2, name: 'Amethyst 🔮', entry: 500, dailyLimit: 50, lockDays: 14, groupCut: 5, netSweep: 45 },
-  { id: 3, name: 'Emerald 💚', entry: 1000, dailyLimit: 100, lockDays: 30, groupCut: 10, netSweep: 90 },
-  { id: 4, name: 'Ruby ❤️', entry: 2500, dailyLimit: 250, lockDays: 30, groupCut: 25, netSweep: 225 },
-  { id: 5, name: 'Sapphire 💙', entry: 5000, dailyLimit: 500, lockDays: 30, groupCut: 50, netSweep: 450 },
-  { id: 6, name: 'Diamond 💎', entry: 10000, dailyLimit: 1000, lockDays: 60, groupCut: 100, netSweep: 900 },
-  { id: 7, name: 'Black Diamond 🖤', entry: 20000, dailyLimit: 2000, lockDays: 90, groupCut: 200, netSweep: 1800 },
+  { id: 1, name: 'Bronze', entry: 200, dailyLimit: 20, lockDays: 7, groupCut: 2, netSweep: 18, icon: '🥉', sizeClass: 'text-3xl' },
+  { id: 2, name: 'Silver', entry: 500, dailyLimit: 50, lockDays: 14, groupCut: 5, netSweep: 45, icon: '🥈', sizeClass: 'text-4xl' },
+  { id: 3, name: 'Gold', entry: 1000, dailyLimit: 100, lockDays: 30, groupCut: 10, netSweep: 90, icon: '🥇', sizeClass: 'text-5xl' },
+  { id: 4, name: 'Platinum', entry: 2500, dailyLimit: 250, lockDays: 30, groupCut: 25, netSweep: 225, icon: '💠', sizeClass: 'text-6xl' },
+  { id: 5, name: 'Sapphire', entry: 5000, dailyLimit: 500, lockDays: 30, groupCut: 50, netSweep: 450, icon: '💎', sizeClass: 'text-7xl' }, 
+  { id: 6, name: 'Diamond', entry: 10000, dailyLimit: 1000, lockDays: 60, groupCut: 100, netSweep: 900, icon: '💎', sizeClass: 'text-8xl' },
 ];
 
 function calculateGWF(amount: number): number {
@@ -141,7 +142,6 @@ export default function DashboardPage() {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
 
-  // Update repayment amount when loan state changes
   useEffect(() => {
     if (activeLoan && activeLoan.status === 'ACTIVE') {
       const remaining = Math.round(activeLoan.totalRepay - activeLoan.amountPaid);
@@ -1224,9 +1224,12 @@ export default function DashboardPage() {
                 return (
                   <div key={sub.tierId} className="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-3 shadow-lg">
                     <div className="flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{tier.name}</span>
-                        <h3 className="font-black text-sm text-white">Expires: {sub.endDate}</h3>
+                      <div className="flex items-center gap-4">
+                        <div className={`${tier.sizeClass} drop-shadow-lg`}>{tier.icon}</div>
+                        <div>
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{tier.name}</span>
+                          <h3 className="font-black text-sm text-white">Expires: {sub.endDate}</h3>
+                        </div>
                       </div>
                       <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${isExpired ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
                         {isExpired ? 'Period Over' : 'Active'}
@@ -1278,12 +1281,15 @@ export default function DashboardPage() {
                         : 'bg-slate-950/60 border-slate-800 text-slate-300'
                     }`}
                   >
-                    <div>
-                      <p className="font-bold text-xs text-white">{tier.name}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
-                      </p>
-                      <p className="text-[10px] font-bold text-emerald-400 mt-1">Gross Daily Addition: +KES {tier.dailyLimit}</p>
+                    <div className="flex items-center gap-4">
+                      <div className={`${tier.sizeClass} drop-shadow-md`}>{tier.icon}</div>
+                      <div>
+                        <p className="font-bold text-xs text-white">{tier.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
+                        </p>
+                        <p className="text-[10px] font-bold text-emerald-400 mt-1">Gross Daily Addition: +KES {tier.dailyLimit}</p>
+                      </div>
                     </div>
                     <div>
                       {isSubscribed ? (
