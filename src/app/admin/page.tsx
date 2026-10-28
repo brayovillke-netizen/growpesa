@@ -35,7 +35,6 @@ export default function AdminPage() {
     try {
       setSyncing(true);
       
-      // 1. Get live pool directly from Supabase
       const { data: poolData, error: poolError } = await supabase
         .from('treasury_pool')
         .select('pool_balance')
@@ -45,7 +44,6 @@ export default function AdminPage() {
       if (poolError) throw poolError;
       if (poolData) setMainPool(Number(poolData.pool_balance));
 
-      // 2. Get live queue directly from Supabase
       const { data: queueData, error: queueError } = await supabase
         .from('ledger_items')
         .select('*')
@@ -53,7 +51,6 @@ export default function AdminPage() {
 
       if (queueError) throw queueError;
       
-      // 3. Map database snake_case to frontend camelCase
       const mappedQueue = (queueData || []).map((row: any) => ({
         id: String(row.id),
         phone: row.phone,
@@ -74,6 +71,12 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
+    // TEMPORARY WIPE: Delete these 4 lines after deploying once
+    localStorage.removeItem('tibapay_auth_user');
+    localStorage.removeItem('tibapay_ledger');
+    localStorage.removeItem('tibapay_active_loan');
+    localStorage.removeItem('tibapay_active_subs');
+
     const savedUser = localStorage.getItem('tibapay_auth_user');
     if (savedUser) {
       try {
@@ -101,14 +104,11 @@ export default function AdminPage() {
       let poolUpdate: number | undefined = undefined;
       
       if (item.type.includes('Deposit')) {
-        // Deposit adds to the pool
         poolUpdate = mainPool + Number(item.amount);
       } else if (item.type.includes('Withdrawal') || item.type.includes('Loan')) {
-        // Withdrawal and Loan Disbursement deduct from the pool
         poolUpdate = Math.max(0, mainPool - Number(item.amount));
       }
 
-      // 1. Update item status in Supabase
       const { error: itemError } = await supabase
         .from('ledger_items')
         .update({ status: 'COMPLETED' })
@@ -116,7 +116,6 @@ export default function AdminPage() {
 
       if (itemError) throw itemError;
 
-      // 2. Update pool balance if needed
       if (poolUpdate !== undefined) {
         const { error: poolError } = await supabase
           .from('treasury_pool')

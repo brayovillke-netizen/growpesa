@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import InstallPrompt from '@/components/InstallPrompt';
-import { supabase } from '@/lib/supabase/client'; // Direct Supabase import
+import { supabase } from '@/lib/supabase/client'; 
 
 interface LedgerItem {
   id: string;
@@ -139,7 +139,6 @@ export default function DashboardPage() {
     }
   };
 
-  // DIRECT SUPABASE SYNC FOR MEMBER
   const submitToServerQueue = async (item: LedgerItem) => {
     try {
       const { error } = await supabase.from('ledger_items').upsert({
@@ -188,17 +187,14 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  // DIRECT SUPABASE POLLING
   const syncFromServer = useCallback(async (initialLoad = false) => {
     try {
-      // 1. Get pool directly
       const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
       if (poolData && initialLoad) {
         setMainPool(Number(poolData.pool_balance));
         localStorage.setItem('tibapay_pool', String(poolData.pool_balance));
       }
 
-      // 2. Get queue directly
       const { data: queueData } = await supabase.from('ledger_items').select('*').order('created_at', { ascending: false });
       const serverQueue = queueData || [];
 
@@ -209,7 +205,6 @@ export default function DashboardPage() {
           const remote = byId.get(String(local.id));
           if (!remote) return local;
           
-          // Normalize snake_case to camelCase
           const remoteStatus = String(remote.status || '').replace(/_/g, ' ');
           const remoteCode = String(remote.code || '');
           const remoteSms = remote.sms_message;
@@ -247,6 +242,12 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    // TEMPORARY WIPE: Delete these 4 lines after deploying once
+    localStorage.removeItem('tibapay_auth_user');
+    localStorage.removeItem('tibapay_ledger');
+    localStorage.removeItem('tibapay_active_loan');
+    localStorage.removeItem('tibapay_active_subs');
+
     const savedUser = localStorage.getItem('tibapay_auth_user');
     if (savedUser) {
       try {
