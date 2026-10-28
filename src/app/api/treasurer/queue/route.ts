@@ -1,26 +1,26 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    // Fetch pool from Supabase
-    const { data: poolData } = await supabase
+    // 1. Fetch live pool balance from Supabase
+    const { data: poolData, error: poolError } = await supabase
       .from('treasury_pool')
       .select('pool_balance')
       .eq('id', 1)
       .single();
 
-    // Fetch live queue from Supabase
-    const { data: queueData, error } = await supabase
+    if (poolError) {
+      console.error('Pool fetch error:', poolError);
+    }
+
+    // 2. Fetch live ledger queue items from Supabase
+    const { data: queueData, error: queueError } = await supabase
       .from('ledger_items')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (queueError) throw queueError;
 
     return NextResponse.json({
       success: true,
@@ -38,10 +38,10 @@ export async function POST(request: Request) {
     const { action, item, poolUpdate } = body;
 
     if (action === 'submit' && item) {
-      // Upsert transaction into Supabase database so all devices see it instantly
+      // Insert or update transaction in Supabase
       const { error } = await supabase.from('ledger_items').upsert({
         id: item.id,
-        phone: item.phone || '0712345678',
+        phone: item.phone || '0700000000',
         type: item.type,
         amount: item.amount,
         date: item.date,
@@ -51,12 +51,14 @@ export async function POST(request: Request) {
       });
       if (error) throw error;
     } else if (action === 'approve' && item) {
+      // Mark item as completed
       const { error } = await supabase
         .from('ledger_items')
         .update({ status: 'COMPLETED' })
         .eq('id', item.id);
       if (error) throw error;
 
+      // Update pool balance if provided
       if (poolUpdate !== undefined) {
         await supabase
           .from('treasury_pool')
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
           .eq('id', 1);
       }
     } else if (action === 'reject' && item) {
+      // Mark item as rejected
       const { error } = await supabase
         .from('ledger_items')
         .update({ status: 'REJECTED' })
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
       if (error) throw error;
     }
 
-    // Return latest database state
+    // Return latest state from database
     const { data: poolData } = await supabase
       .from('treasury_pool')
       .select('pool_balance')
