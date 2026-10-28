@@ -91,7 +91,13 @@ export default function DashboardPage() {
   const [regConfirmPin, setRegConfirmPin] = useState('');
   const [regIsAdult, setRegIsAdult] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  
+  // PIN Visibility States
+  const [showLoginPin, setShowLoginPin] = useState(false);
+  const [showRegPin, setShowRegPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [showChangePin, setShowChangePin] = useState(false);
+  const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
   // App States
@@ -292,11 +298,20 @@ export default function DashboardPage() {
     if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit phone.');
     if (loginPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
 
+    // ADMIN BYPASS: Hardcoded check
+    if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && loginPin === '6200') {
+      const adminUser: MemberUser = { phone: cleanPhone, name: 'Brian Kegode (Admin)', role: 'admin' };
+      localStorage.setItem('tibapay_auth_user', JSON.stringify(adminUser));
+      window.location.href = '/admin';
+      return;
+    }
+
+    // MEMBER LOGIN: Check Database
     setLoading(true);
     const { data, error } = await supabase.from('members').select('*').eq('phone', cleanPhone).single();
     setLoading(false);
 
-    if (error || !data) return setAuthError('Member not found.');
+    if (error || !data) return setAuthError('Member not found. Please sign up.');
     if (data.pin !== loginPin) return setAuthError('Incorrect PIN.');
 
     const loggedInUser: MemberUser = {
@@ -306,10 +321,6 @@ export default function DashboardPage() {
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
-    if (data.role === 'admin') {
-      window.location.href = '/admin';
-      return;
-    }
     setUser(loggedInUser);
     setPhoneInput(loggedInUser.phone);
   };
@@ -329,7 +340,7 @@ export default function DashboardPage() {
     const { data: existing } = await supabase.from('members').select('phone').eq('phone', cleanPhone).single();
     if (existing) {
       setLoading(false);
-      return setAuthError('Phone number already registered.');
+      return setAuthError('Phone number already registered. Please log in.');
     }
 
     const { error } = await supabase.from('members').insert({
@@ -690,15 +701,24 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Security PIN (4 Digits)</label>
-                <input
-                  type="password"
-                  maxLength={4}
-                  value={loginPin}
-                  onChange={(e) => setLoginPin(e.target.value)}
-                  placeholder="****"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showLoginPin ? "text" : "password"}
+                    maxLength={4}
+                    value={loginPin}
+                    onChange={(e) => setLoginPin(e.target.value)}
+                    placeholder="****"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPin(!showLoginPin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showLoginPin ? '👁️' : '🙈'}
+                  </button>
+                </div>
               </div>
               <button
                 type="submit"
@@ -741,27 +761,45 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PIN (4 Digits)</label>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    value={regPin}
-                    onChange={(e) => setRegPin(e.target.value)}
-                    placeholder="****"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type={showRegPin ? "text" : "password"}
+                      maxLength={4}
+                      value={regPin}
+                      onChange={(e) => setRegPin(e.target.value)}
+                      placeholder="****"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPin(!showRegPin)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showRegPin ? '👁️' : '🙈'}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confirm PIN</label>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    value={regConfirmPin}
-                    onChange={(e) => setRegConfirmPin(e.target.value)}
-                    placeholder="****"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPin ? "text" : "password"}
+                      maxLength={4}
+                      value={regConfirmPin}
+                      onChange={(e) => setRegConfirmPin(e.target.value)}
+                      placeholder="****"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPin(!showConfirmPin)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showConfirmPin ? '👁️' : '🙈'}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -829,14 +867,23 @@ export default function DashboardPage() {
       {showChangePin && (
         <div className="p-4 bg-slate-900 border border-slate-700 rounded-xl space-y-3">
           <h3 className="text-xs font-bold text-white">Change Your PIN</h3>
-          <input
-            type="password"
-            maxLength={4}
-            value={newPin}
-            onChange={(e) => setNewPin(e.target.value)}
-            placeholder="Enter new 4-digit PIN"
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
-          />
+          <div className="relative">
+            <input
+              type={showNewPin ? "text" : "password"}
+              maxLength={4}
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value)}
+              placeholder="Enter new 4-digit PIN"
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPin(!showNewPin)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            >
+              {showNewPin ? '👁️' : '🙈'}
+            </button>
+          </div>
           <div className="flex gap-2">
             <button onClick={handleChangePin} className="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
               Update PIN
