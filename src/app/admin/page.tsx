@@ -99,9 +99,12 @@ export default function AdminPage() {
   const handleApprove = async (item: LedgerItem) => {
     try {
       let poolUpdate: number | undefined = undefined;
+      
       if (item.type.includes('Deposit')) {
+        // Deposit adds to the pool
         poolUpdate = mainPool + Number(item.amount);
-      } else if (item.type.includes('Withdrawal')) {
+      } else if (item.type.includes('Withdrawal') || item.type.includes('Loan')) {
+        // Withdrawal and Loan Disbursement deduct from the pool
         poolUpdate = Math.max(0, mainPool - Number(item.amount));
       }
 
