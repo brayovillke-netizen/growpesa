@@ -108,6 +108,7 @@ export default function DashboardPage() {
   
   const [loanAmountInput, setLoanAmountInput] = useState('2000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
+  const [repayPhoneInput, setRepayPhoneInput] = useState('');
 
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -127,6 +128,10 @@ export default function DashboardPage() {
   useEffect(() => {
     loanRef.current = activeLoan;
   }, [activeLoan]);
+
+  useEffect(() => {
+    if (user) setRepayPhoneInput(user.phone);
+  }, [user]);
 
   const loadLocal = () => {
     const savedLedger = localStorage.getItem('tibapay_ledger');
@@ -240,23 +245,40 @@ export default function DashboardPage() {
       });
 
       const currentLoan = loanRef.current;
-      if (currentLoan && currentLoan.status === 'PENDING ADMIN APPROVAL') {
-        const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
-        if (loanItem?.status === 'COMPLETED') {
-          const updated: ActiveLoan = { ...currentLoan, status: 'ACTIVE' };
-          setActiveLoan(updated);
-          loanRef.current = updated;
-          localStorage.setItem('tibapay_active_loan', JSON.stringify(updated));
-        } else if (loanItem?.status === 'REJECTED') {
-          setActiveLoan(null);
-          loanRef.current = null;
-          localStorage.removeItem('tibapay_active_loan');
+      if (currentLoan) {
+        // 1. Check if initial Loan Request was approved
+        if (currentLoan.status === 'PENDING ADMIN APPROVAL') {
+          const loanItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
+          if (loanItem?.status === 'COMPLETED') {
+            const updated: ActiveLoan = { ...currentLoan, status: 'ACTIVE' };
+            setActiveLoan(updated);
+            loanRef.current = updated;
+            localStorage.setItem('tibapay_active_loan', JSON.stringify(updated));
+          } else if (loanItem?.status === 'REJECTED') {
+            setActiveLoan(null);
+            loanRef.current = null;
+            localStorage.removeItem('tibapay_active_loan');
+          }
+        }
+        
+        // 2. Check if Loan Repayment was approved
+        if (currentLoan.status === 'ACTIVE') {
+          const repaymentItem = serverQueue.find(
+            (i: any) => i.type.includes('Loan Repayment') && String(i.phone) === String(currentLoan.phone || user?.phone) && i.status === 'COMPLETED'
+          );
+          if (repaymentItem) {
+            const updated: ActiveLoan = { ...currentLoan, status: 'CLOSED' };
+            setActiveLoan(updated);
+            loanRef.current = updated;
+            localStorage.setItem('tibapay_active_loan', JSON.stringify(updated));
+            setMessage('Your loan has been fully repaid!');
+          }
         }
       }
     } catch (err: any) {
       setMessage(`Sync error: ${err.message}`);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('tibapay_auth_user');
@@ -299,7 +321,6 @@ export default function DashboardPage() {
     if (cleanPhone.length < 10) return setAuthError('Enter a valid 10-digit phone.');
     if (cleanPin.length < 4) return setAuthError('Enter your 4-digit PIN.');
 
-    // ADMIN BYPASS: Hardcoded check
     if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin === '6200') {
       const adminUser: MemberUser = { phone: cleanPhone, name: 'Brian Kegode (Admin)', role: 'admin' };
       localStorage.setItem('tibapay_auth_user', JSON.stringify(adminUser));
@@ -307,7 +328,6 @@ export default function DashboardPage() {
       return;
     }
 
-    // MEMBER LOGIN: Check Database
     setLoading(true);
     const { data, error } = await supabase.from('members').select('*').eq('phone', cleanPhone).single();
     setLoading(false);
@@ -640,25 +660,64 @@ export default function DashboardPage() {
     setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. Awaiting Treasurer (24 hr).`);
   };
 
-  const handleRepayLoan = () => {
+  const handleRepaySTK = async () => {
     if (!activeLoan) return;
-    if (mainPool < activeLoan.totalRepay) {
-      return setMessage(`Insufficient funds. Need KES ${activeLoan.totalRepay.toLocaleString()}.`);
-    }
-    updateMainPool(mainPool - activeLoan.totalRepay);
-    const item: LedgerItem = {
-      id: Date.now().toString(),
+    if (!repayPhoneInput || repayPhoneInput.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
+
+    setLoading(true);
+    setMessage(`Sending STK push to ${repayPhoneInput}...`);
+
+    const txnId = Date.now().toString();
+    const reqCode = 'REP-' + Math.floor(1000 + Math.random() * 9000);
+
+    const newItem: LedgerItem = {
+      id: txnId,
       type: 'Loan Repayment',
       amount: activeLoan.totalRepay,
       date: new Date().toISOString().split('T')[0],
-      status: 'COMPLETED',
-      code: 'REP-' + Math.floor(1000 + Math.random() * 9000),
-      phone: user?.phone,
+      status: 'PENDING ADMIN APPROVAL',
+      code: reqCode,
+      phone: repayPhoneInput,
     };
-    saveLedger([item, ...ledger]);
-    saveLoanState({ ...activeLoan, status: 'CLOSED' });
-    setActiveLoan(null);
-    setMessage(`Repaid KES ${activeLoan.totalRepay.toLocaleString()}. You may borrow again.`);
+    saveLedger([newItem, ...ledger], newItem);
+
+    try {
+      const res = await fetch('/api/tuma/stkpush', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: activeLoan.totalRepay, phone: repayPhoneInput }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'STK push failed');
+      }
+
+      setMessage(`STK push sent. Enter your M-Pesa PIN. Admin will verify your payment.`);
+    } catch (err: any) {
+      setMessage(`STK Push error: ${err?.message || 'unknown'}.`);
+      
+      let errItem: LedgerItem | null = null;
+      setLedger((prev) => {
+        const updated = prev.map((i) => {
+          if (i.id === txnId) {
+            errItem = {
+              ...i,
+              status: 'TIMEOUT / PASTE SMS',
+              smsMessage: `STK API failed: ${err?.message || 'unknown'}`,
+            };
+            return errItem;
+          }
+          return i;
+        });
+        localStorage.setItem('tibapay_ledger', JSON.stringify(updated));
+        if (errItem) submitToServerQueue(errItem);
+        return updated;
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const parsedWithdrawAmt = parseFloat(withdrawAmountInput) || 0;
@@ -1244,7 +1303,11 @@ export default function DashboardPage() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Loan Reference</p>
                     <p className="font-black text-sm text-white">{activeLoan.id}</p>
                   </div>
-                  <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                  <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
+                    activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 
+                    activeLoan.status === 'CLOSED' ? 'bg-slate-500/20 text-slate-300 border border-slate-500/30' :
+                    'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  }`}>
                     {activeLoan.status}
                   </span>
                 </div>
@@ -1258,17 +1321,36 @@ export default function DashboardPage() {
                     <p className="font-black text-amber-400">KES {activeLoan.totalRepay.toLocaleString()}</p>
                   </div>
                 </div>
+                
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
                     Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
                   </div>
+                ) : activeLoan.status === 'ACTIVE' ? (
+                  <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
+                    <p className="text-xs font-bold text-amber-400">Repay your loan via M-Pesa STK Push:</p>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
+                      <input
+                        type="text"
+                        value={repayPhoneInput}
+                        onChange={(e) => setRepayPhoneInput(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                        placeholder="0712345678"
+                      />
+                    </div>
+                    <button
+                      onClick={handleRepaySTK}
+                      disabled={loading}
+                      className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md disabled:opacity-50"
+                    >
+                      {loading ? 'Sending STK Push...' : `Trigger STK Push to Repay (KES ${activeLoan.totalRepay.toLocaleString()})`}
+                    </button>
+                  </div>
                 ) : (
-                  <button
-                    onClick={handleRepayLoan}
-                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md"
-                  >
-                    Repay Full Loan Now (KES {activeLoan.totalRepay.toLocaleString()})
-                  </button>
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 text-center font-medium">
+                    Loan fully cleared! You may apply for a new one.
+                  </div>
                 )}
               </div>
             ) : (

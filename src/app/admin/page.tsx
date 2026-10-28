@@ -97,9 +97,12 @@ export default function AdminPage() {
     try {
       let poolUpdate: number | undefined = undefined;
       
-      if (item.type.includes('Deposit')) {
+      // Loan Repayments go INTO the pool. Deposits go INTO the pool.
+      if (item.type.includes('Deposit') || item.type.includes('Loan Repayment')) {
         poolUpdate = mainPool + Number(item.amount);
-      } else if (item.type.includes('Withdrawal') || item.type.includes('Loan')) {
+      } 
+      // Withdrawals go OUT. Loan Requests (disbursements) go OUT.
+      else if (item.type.includes('Withdrawal') || item.type.includes('Loan Request')) {
         poolUpdate = Math.max(0, mainPool - Number(item.amount));
       }
 
