@@ -117,10 +117,10 @@ export default function DashboardPage() {
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
-  // Screen Lock States (Fixed Date.now() prerender crash)
+  // Screen Lock States
   const [isLocked, setIsLocked] = useState(false);
   const [lockPin, setLockPin] = useState('');
-  const lastActivityRef = useRef(0); // Changed from Date.now() to 0
+  const lastActivityRef = useRef(0);
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
@@ -166,11 +166,10 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Inactivity Lock Timer (Fixed)
+  // Inactivity Lock Timer
   useEffect(() => {
     if (!user) return;
 
-    // Initialize activity time on mount/login (safe inside useEffect)
     lastActivityRef.current = Date.now();
 
     const interval = setInterval(() => {
@@ -290,6 +289,7 @@ export default function DashboardPage() {
 
   const syncFromServer = useCallback(async (currentUser: MemberUser) => {
     try {
+      // FETCH AND UPDATE SAVINGS ON EVERY POLL (Removed initialLoad check)
       const { data: memberData } = await supabase
         .from('members')
         .select('savings_balance, account_status, loan_limit, referrals_rewarded_count, referral_code')
@@ -1358,7 +1358,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* REFERRAL CARD - SINGLE BUTTON & HIDDEN MAX LIMIT */}
+          {/* REFERRAL CARD */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-900/50 to-slate-900 border border-indigo-500/30 p-4 space-y-3 shadow-lg">
             <div className="flex justify-between items-center">
               <div>

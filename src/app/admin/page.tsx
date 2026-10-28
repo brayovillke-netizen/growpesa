@@ -162,10 +162,8 @@ export default function AdminPage() {
 
       // 6. Handle Referral Bonus (KES 5, Max 5 rewards)
       if (item.type.includes('Deposit') && referredBy && !referralPaid && totalDeposited >= 100) {
-        // Mark referral as paid for this new user
         await supabase.from('members').update({ referral_paid: true }).eq('phone', item.phone);
 
-        // Fetch Referrer's data
         const { data: refData } = await supabase
           .from('members')
           .select('savings_balance, referrals_rewarded_count')
@@ -175,18 +173,15 @@ export default function AdminPage() {
         if (refData) {
           const refCount = Number(refData.referrals_rewarded_count) || 0;
           
-          // Check if referrer has been rewarded less than 5 times
           if (refCount < 5) {
             const refCurrentSavings = Number(refData.savings_balance) || 0;
             const refNewBalance = refCurrentSavings + 5;
 
-            // Add KES 5 to Referrer
             await supabase.from('members').update({ 
               savings_balance: refNewBalance,
               referrals_rewarded_count: refCount + 1
             }).eq('phone', referredBy);
 
-            // Create a Ledger Item for the Referrer
             await supabase.from('ledger_items').insert({
               id: Date.now().toString(),
               phone: referredBy,
@@ -348,9 +343,10 @@ export default function AdminPage() {
                     </div>
                   </div>
 
+                  {/* TRUNCATED SMS DISPLAY */}
                   {(item.smsMessage || item.sms_message) && (
-                    <p className="text-[10px] text-slate-300 bg-slate-900 p-2 rounded border border-slate-800 italic">
-                      "{item.smsMessage || item.sms_message}"
+                    <p className="text-[10px] text-slate-300 bg-slate-900 p-2 rounded border border-slate-800 italic uppercase font-mono">
+                      "{(item.smsMessage || item.sms_message || '').slice(0, 10).toUpperCase()}"
                     </p>
                   )}
 

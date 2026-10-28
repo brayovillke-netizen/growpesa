@@ -4,87 +4,63 @@ import { useState, useEffect } from 'react';
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(true); // Default hidden until verified
+  const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
-    // 1. Check if app is running in standalone PWA mode
-    const isStandalone = 
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true ||
-      document.referrer.includes('android-app://') ||
-      localStorage.getItem('tibapay_pwa_installed') === 'true';
-
-    if (isStandalone) {
-      setIsInstalled(true);
+    // Don't show if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
       return;
     }
 
-    setIsInstalled(false);
-
-    // 2. Capture Chrome install prompt
-    const handleBeforeInstallPrompt = (e: Event) => {
+    const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      setShowPrompt(true);
     };
 
-    // 3. Immediately hide when installation completes
-    const handleAppInstalled = () => {
-      localStorage.setItem('tibapay_pwa_installed', 'true');
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-    };
+    window.addEventListener('beforeinstallprompt', handler);
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
-
-  if (isInstalled || !deferredPrompt) {
-    return null;
-  }
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
-
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-
     if (outcome === 'accepted') {
-      localStorage.setItem('tibapay_pwa_installed', 'true');
-      setIsInstalled(true);
+      setShowPrompt(false);
     }
     setDeferredPrompt(null);
   };
 
+  if (!showPrompt) return null;
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-slate-900/95 border-t border-slate-800 backdrop-blur-md flex items-center justify-between shadow-2xl">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-bold text-slate-950 text-lg shadow-lg shadow-emerald-500/20">
-          TP
+    <div className="fixed bottom-20 left-4 right-4 z-40 max-w-md mx-auto">
+      <div className="bg-slate-900 border border-emerald-500/30 p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-sm">
+            TP
+          </div>
+          <div>
+            <p className="text-xs font-bold text-white">Install TibaPay</p>
+            <p className="text-[10px] text-slate-400">Add to home screen for quick access</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-bold text-white">Install TibaPay App</p>
-          <p className="text-xs text-slate-400">Access offline with instant push alerts</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowPrompt(false)}
+            className="px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-white"
+          >
+            Later
+          </button>
+          <button
+            onClick={handleInstallClick}
+            className="px-3 py-1.5 bg-emerald-500 text-slate-950 text-[10px] font-bold rounded-lg hover:bg-emerald-400 transition"
+          >
+            Install
+          </button>
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={handleInstallClick}
-          className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 cursor-pointer"
-        >
-          Install
-        </button>
-        <button
-          onClick={() => setIsInstalled(true)}
-          className="p-2 text-slate-400 hover:text-white"
-          title="Dismiss"
-        >
-          ✕
-        </button>
       </div>
     </div>
   );
