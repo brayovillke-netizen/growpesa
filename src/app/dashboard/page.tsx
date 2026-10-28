@@ -24,6 +24,7 @@ interface MemberUser {
   account_status?: string;
   loan_limit?: number;
   referrals_rewarded_count?: number;
+  referral_code?: string;
 }
 
 interface PackageTier {
@@ -63,7 +64,6 @@ interface ActiveLoan {
   phone?: string;
 }
 
-// 👇 MINERAL NAMES WITH ENLARGED ICONS
 const PACKAGE_TIERS: PackageTier[] = [
   { id: 1, name: 'Bronze', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
   { id: 2, name: 'Silver', entry: 500, dailyLimit: 45, lockDays: 13, groupCut: 4.5, netSweep: 40.5, totalPayout: 585, roi: 85, icon: '🥈', sizeClass: 'text-4xl' },
@@ -88,6 +88,12 @@ function calculateGWF(amount: number): number {
   return Math.max(Math.ceil(amount * 0.0025), 125);
 }
 
+function generateReferralCode(name: string) {
+  const namePart = name.trim().split(' ')[0].slice(-3).toUpperCase().padEnd(3, 'X');
+  const numPart = Math.floor(100 + Math.random() * 900);
+  return `${numPart}-${namePart}`;
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<MemberUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -110,6 +116,11 @@ export default function DashboardPage() {
   const [showChangePin, setShowChangePin] = useState(false);
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
+
+  // Screen Lock States
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockPin, setLockPin] = useState('');
+  const lastActivityRef = useRef(Date.now());
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
@@ -154,6 +165,32 @@ export default function DashboardPage() {
       setAuthMode('signup');
     }
   }, []);
+
+  // Inactivity Lock Timer
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      if (!isLocked && Date.now() - lastActivityRef.current > 5 * 60 * 1000) {
+        setIsLocked(true);
+      }
+    }, 10000);
+
+    const resetActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    window.addEventListener('mousemove', resetActivity);
+    window.addEventListener('touchstart', resetActivity);
+    window.addEventListener('keydown', resetActivity);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', resetActivity);
+      window.removeEventListener('touchstart', resetActivity);
+      window.removeEventListener('keydown', resetActivity);
+    };
+  }, [user, isLocked]);
 
   useEffect(() => {
     if (user) setRepayPhoneInput(user.phone);
@@ -252,7 +289,7 @@ export default function DashboardPage() {
     try {
       const { data: memberData } = await supabase
         .from('members')
-        .select('savings_balance, account_status, loan_limit, referrals_rewarded_count')
+        .select('savings_balance, account_status, loan_limit, referrals_rewarded_count, referral_code')
         .eq('phone', currentUser.phone)
         .single();
         
@@ -265,7 +302,8 @@ export default function DashboardPage() {
           ...prev, 
           account_status: memberData.account_status,
           loan_limit: Number(memberData.loan_limit),
-          referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0
+          referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
+          referral_code: memberData.referral_code || prev.referral_code
         } : null);
       }
 
@@ -388,6 +426,12 @@ export default function DashboardPage() {
     if (error || !data) return setAuthError('Member not found. Please sign up.');
     if (data.pin !== cleanPin) return setAuthError('Incorrect PIN.');
 
+    let refCode = data.referral_code;
+    if (!refCode) {
+      refCode = generateReferralCode(data.full_name);
+      await supabase.from('members').update({ referral_code: refCode }).eq('phone', data.phone);
+    }
+
     const loggedInUser: MemberUser = {
       phone: data.phone,
       name: data.full_name,
@@ -396,6 +440,7 @@ export default function DashboardPage() {
       account_status: data.account_status || 'active',
       loan_limit: Number(data.loan_limit) || 0,
       referrals_rewarded_count: Number(data.referrals_rewarded_count) || 0,
+      referral_code: refCode,
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
@@ -407,6 +452,7 @@ export default function DashboardPage() {
     
     setUser(loggedInUser);
     setPhoneInput(loggedInUser.phone);
+    lastActivityRef.current = Date.now();
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -430,13 +476,15 @@ export default function DashboardPage() {
 
     let referredBy = null;
     if (cleanReferral) {
-      const { data: refData } = await supabase.from('members').select('phone').eq('phone', cleanReferral).single();
+      const { data: refData } = await supabase.from('members').select('phone').eq('referral_code', cleanReferral).single();
       if (!refData) {
         setLoading(false);
         return setAuthError('Invalid referral code.');
       }
-      referredBy = cleanReferral;
+      referredBy = refData.phone;
     }
+
+    const newRefCode = generateReferralCode(regName);
 
     const { error } = await supabase.from('members').insert({
       phone: cleanPhone,
@@ -447,7 +495,8 @@ export default function DashboardPage() {
       loan_limit: 0,
       account_status: 'active',
       referred_by: referredBy,
-      referrals_rewarded_count: 0
+      referrals_rewarded_count: 0,
+      referral_code: newRefCode
     });
 
     setLoading(false);
@@ -469,6 +518,20 @@ export default function DashboardPage() {
     alert('PIN updated successfully!');
     setShowChangePin(false);
     setNewPin('');
+  };
+
+  const handleUnlock = async () => {
+    if (!user) return;
+    if (lockPin.length !== 4) return alert('PIN must be 4 digits.');
+    
+    const { data, error } = await supabase.from('members').select('pin').eq('phone', user.phone).single();
+    if (error || !data) return alert('Failed to verify PIN.');
+    
+    if (data.pin !== lockPin) return alert('Incorrect PIN.');
+    
+    setIsLocked(false);
+    setLockPin('');
+    lastActivityRef.current = Date.now();
   };
 
   const handleLogout = () => {
@@ -1029,7 +1092,7 @@ export default function DashboardPage() {
                   type="text"
                   value={regReferral}
                   onChange={(e) => setRegReferral(e.target.value)}
-                  placeholder="e.g. 0712345678"
+                  placeholder="e.g. 123-ABC"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1064,12 +1127,13 @@ export default function DashboardPage() {
     );
   }
 
-  // Native Share Logic
+  const referralLink = `https://tibapay.vercel.app?ref=${user.referral_code}`;
+  const shareMessage = `Join me on TibaPay and let's grow our wealth together! Use my code ${user.referral_code} to sign up and get started. ${referralLink}`;
+
   const handleShareReferral = async () => {
-    const referralLink = `https://tibapay.vercel.app?ref=${user.phone}`;
     const shareData = {
-      title: 'Join TibaPay',
-      text: 'Join me on TibaPay! Use my code to sign up and start saving.',
+      title: 'Join TibaPay Vault',
+      text: shareMessage,
       url: referralLink,
     };
 
@@ -1086,7 +1150,46 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24">
+    <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
+      
+      {/* SCREEN LOCK OVERLAY */}
+      {isLocked && (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col justify-center items-center p-6 space-y-6">
+          <div className="text-center space-y-2 mb-4">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 text-3xl shadow-lg border border-slate-700">
+              🔒
+            </div>
+            <h2 className="text-xl font-black text-white">Screen Locked</h2>
+            <p className="text-xs text-slate-400">Enter your PIN to unlock</p>
+          </div>
+          
+          <div className="w-full max-w-xs space-y-4">
+            <div className="relative">
+              <input
+                type="password"
+                maxLength={4}
+                value={lockPin}
+                onChange={(e) => setLockPin(e.target.value)}
+                placeholder="****"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-xl"
+              />
+            </div>
+            <button
+              onClick={handleUnlock}
+              className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
+            >
+              Unlock
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full py-2 bg-transparent text-rose-400 font-bold rounded-xl text-xs transition cursor-pointer"
+            >
+              Sign Out completely
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
@@ -1252,7 +1355,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* REFERRAL CARD - SINGLE BUTTON & HIDDEN 100 THRESHOLD */}
+          {/* REFERRAL CARD - SINGLE BUTTON & HIDDEN MAX LIMIT */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-900/50 to-slate-900 border border-indigo-500/30 p-4 space-y-3 shadow-lg">
             <div className="flex justify-between items-center">
               <div>
@@ -1262,7 +1365,7 @@ export default function DashboardPage() {
               <div className="text-2xl">🎁</div>
             </div>
             <p className="text-[11px] text-slate-400">
-              Invite a friend to start saving. You get KES 5 instantly when they sign up using your code! (Max 5 rewards)
+              Invite a friend to start saving. You get KES 5 instantly when they sign up using your code!
             </p>
             
             <button 
@@ -1273,7 +1376,7 @@ export default function DashboardPage() {
             </button>
             
             <div className="text-[9px] text-center text-slate-500 mt-1 font-mono">
-              Your Code: {user.phone}
+              Your Code: {user.referral_code || user.phone}
             </div>
           </div>
 
@@ -1440,8 +1543,9 @@ export default function DashboardPage() {
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
                         </p>
+                        {/* TOTAL ROI HIDDEN */}
                         <p className="text-[10px] font-bold text-emerald-400 mt-1">
-                          Gross Daily: +KES {tier.dailyLimit} | Total ROI: +KES {tier.roi}
+                          Gross Daily: +KES {tier.dailyLimit}
                         </p>
                       </div>
                     </div>
