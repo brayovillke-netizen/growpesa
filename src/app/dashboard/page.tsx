@@ -2105,15 +2105,12 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-4 pt-2">
                 {!isEligibleForNewLoan ? (
-                  <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
-                    <div className="text-3xl mb-2">🔒</div>
-                    <p className="text-sm font-bold text-slate-200">Loan Locked</p>
-                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                      {!hasMinDeposit 
-                        ? `Deposit KES 400 in total to unlock. (Current: KES ${(user?.total_deposited || 0).toLocaleString()})`
-                        : daysActive < 28
-                        ? `You must be an active member for 28 days. (Current: ${daysActive} days)`
-                        : "Account under review or active loan pending."}
+                  <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl text-center space-y-3 shadow-inner relative overflow-hidden">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-amber-500/5 blur-3xl rounded-full"></div>
+                    <div className="text-3xl mb-1 relative z-10">🚀</div>
+                    <p className="text-sm font-bold text-slate-200 relative z-10">Building Your Credit</p>
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium relative z-10">
+                      Keep saving and checking in. Your borrowing power unlocks automatically as your vault grows.
                     </p>
                   </div>
                 ) : (
