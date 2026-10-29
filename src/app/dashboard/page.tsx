@@ -70,6 +70,8 @@ interface ActiveLoan {
   phone?: string;
 }
 
+const ADMIN_PHONE = '0700413388'; // Admin's phone number for notifications
+
 const PACKAGE_TIERS: PackageTier[] = [
   { id: 1, name: 'Bronze', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
   { id: 2, name: 'Silver', entry: 500, dailyLimit: 45, lockDays: 13, groupCut: 4.5, netSweep: 40.5, totalPayout: 585, roi: 85, icon: '🥈', sizeClass: 'text-4xl' },
@@ -157,6 +159,18 @@ export default function DashboardPage() {
   useEffect(() => {
     loanRef.current = activeLoan;
   }, [activeLoan]);
+
+  const notifyAdmin = async (title: string, body: string) => {
+    try {
+      await fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: ADMIN_PHONE, title, body }),
+      });
+    } catch (err) {
+      console.error('Failed to notify admin:', err);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -904,6 +918,8 @@ export default function DashboardPage() {
     setManualSmsText('');
     setShowManualDeposit(false);
     setMessage('Confirmation submitted to Treasurer queue.');
+    
+    await notifyAdmin('New Deposit 📥', `Manual deposit from ${user?.phone} for KES ${item.amount}`);
   };
 
   const handleSubmitSmsForApproval = async (txnId: string) => {
@@ -924,6 +940,10 @@ export default function DashboardPage() {
     setPastedSmsText('');
     setActiveSmsInputId(null);
     setMessage('Submitted to Treasurer queue.');
+    
+    if (updatedItem) {
+      await notifyAdmin('New STK Deposit 📥', `STK deposit from ${user?.phone} for KES ${(updatedItem as LedgerItem).amount}`);
+    }
   };
 
   const handleWithdraw = async () => {
@@ -950,6 +970,8 @@ export default function DashboardPage() {
     await saveLedger([item, ...ledger], item);
     
     setMessage(`Withdrawal submitted! You will receive KES ${netPayout.toLocaleString()} on your M-Pesa within 24 hours.`);
+    
+    await notifyAdmin('New Withdrawal 💸', `Withdrawal request from ${user?.phone} for KES ${grossAmt}`);
   };
 
   const totalBorrowed = ledger
@@ -1062,6 +1084,8 @@ export default function DashboardPage() {
     
     setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. A total fee of KES ${totalFee.toLocaleString()} (5% + GWF) will be deducted. You will receive KES ${amountSentToMpesa.toLocaleString()} upon approval.`);
     setRepayAmountInput('');
+    
+    await notifyAdmin('New Loan Request 🏦', `Loan request from ${user?.phone} for KES ${parsedLoanAmt}`);
   };
 
   const handleRepaySTK = async () => {
@@ -1160,6 +1184,8 @@ export default function DashboardPage() {
     setRepaySmsText('');
     setRepayAmountInput('');
     setMessage(`Repayment of KES ${amt} submitted to Treasurer queue.`);
+    
+    await notifyAdmin('New Repayment 💰', `Loan repayment from ${user?.phone} for KES ${amt}`);
   };
 
   const parsedWithdrawAmt = Math.round(parseFloat(withdrawAmountInput) || 0);

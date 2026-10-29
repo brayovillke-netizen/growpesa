@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { PushNotificationManager } from '@/components/PushNotificationManager';
 
 interface LedgerItem {
   id: string;
@@ -68,18 +69,6 @@ export default function AdminPage() {
 
   // Collapsible Queue State
   const [isQueueExpanded, setIsQueueExpanded] = useState<boolean>(false);
-
-  const sendPushNotification = async (phone: string, title: string, body: string) => {
-    try {
-      await fetch('/api/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, title, body }),
-      });
-    } catch (err) {
-      console.error('Failed to trigger push', err);
-    }
-  };
 
   const fetchQueue = useCallback(async () => {
     try {
@@ -298,7 +287,7 @@ export default function AdminPage() {
         }
       }
 
-      // TRIGGER PUSH NOTIFICATION
+      // TRIGGER PUSH NOTIFICATION TO MEMBER
       if (item.phone) {
         let pushTitle = '';
         let pushBody = '';
@@ -319,7 +308,15 @@ export default function AdminPage() {
         }
 
         if (pushTitle) {
-          await sendPushNotification(item.phone, pushTitle, pushBody);
+          try {
+            await fetch('/api/push/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone: item.phone, title: pushTitle, body: pushBody }),
+            });
+          } catch (err) {
+            console.error('Failed to send push', err);
+          }
         }
       }
 
@@ -340,13 +337,21 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      // TRIGGER PUSH NOTIFICATION
+      // TRIGGER PUSH NOTIFICATION TO MEMBER
       if (item.phone) {
-        await sendPushNotification(
-          item.phone, 
-          'Request Rejected ❌', 
-          `Your ${item.type} request was not approved.`
-        );
+        try {
+          await fetch('/api/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              phone: item.phone, 
+              title: 'Request Rejected ❌', 
+              body: `Your ${item.type} request was not approved.` 
+            }),
+          });
+        } catch (err) {
+          console.error('Failed to send push', err);
+        }
       }
 
       await fetchQueue();
@@ -846,6 +851,8 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      <PushNotificationManager userPhone={adminUser.phone} />
     </div>
   );
 }
