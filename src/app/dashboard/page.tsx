@@ -1835,22 +1835,10 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Glowing Payout Preview */}
-            {parsedWithdrawAmt >= 50 && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-1 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
-                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">You Will Receive</p>
-                <p className="text-2xl font-black text-white drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]">
-                  {formatMoney(currentNetPayout)}
-                </p>
-                <p className="text-[9px] text-slate-400">Direct to M-Pesa</p>
-              </div>
-            )}
-
             <button
               onClick={handleWithdraw}
               disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || parsedWithdrawAmt > mainPool || hasUnpaidLoan}
-              className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2"
+              className="w-full py-3.5 mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2"
             >
               {hasUnpaidLoan ? (
                 <>🚫 Active Loan</>
