@@ -119,6 +119,9 @@ export default function DashboardPage() {
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
+  // Privacy Toggle
+  const [hideBalances, setHideBalances] = useState(false);
+
   // Inactivity Tracker
   const lastActivityRef = useRef(0);
 
@@ -1110,6 +1113,11 @@ export default function DashboardPage() {
 
   const packageEarnings = activeSubscriptions.reduce((sum, s) => sum + s.accumulatedBalance, 0);
 
+  // Helper for formatting money
+  const formatMoney = (amount: number) => {
+    return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center p-6 max-w-md mx-auto font-sans">
@@ -1339,12 +1347,21 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex flex-col gap-1 items-end">
-          <button
-            onClick={handleLogout}
-            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
-          >
-            Sign Out
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setHideBalances(!hideBalances)}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
+              title={hideBalances ? "Reveal Balances" : "Hide Balances"}
+            >
+              {hideBalances ? '🙈' : '👁️'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
+            >
+              Sign Out
+            </button>
+          </div>
           <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
             Change PIN
           </button>
@@ -1409,12 +1426,12 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
               <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Main Savings Pool</p>
-              <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
+              <p className="text-sm font-black mt-1">{formatMoney(mainPool)}</p>
               <p className="text-[9px] opacity-70 mt-0.5">Withdrawable</p>
             </div>
             <div className="bg-violet-600 p-3 rounded-2xl text-white shadow-md">
               <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Package Earnings</p>
-              <p className="text-sm font-black mt-1">KES {packageEarnings.toLocaleString()}</p>
+              <p className="text-sm font-black mt-1">{formatMoney(packageEarnings)}</p>
               <p className="text-[9px] opacity-70 mt-0.5">Sweep anytime</p>
             </div>
             <div className="bg-sky-600 p-3 rounded-2xl text-white shadow-md">
@@ -1561,7 +1578,7 @@ export default function DashboardPage() {
                         }`}
                       >
                         {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
-                        KES {item.amount.toLocaleString()}
+                        {formatMoney(item.amount)}
                       </p>
                       <p
                         className={`text-[10px] ${
@@ -1655,7 +1672,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-[9px] text-slate-400 font-bold uppercase">Package Earnings Pool</p>
-                        <p className="text-xs font-black text-white mt-0.5">KES {sub.accumulatedBalance.toLocaleString()}</p>
+                        <p className="text-xs font-black text-white mt-0.5">{formatMoney(sub.accumulatedBalance)}</p>
                       </div>
                     </div>
                     <div className="space-y-1.5">
@@ -1668,7 +1685,7 @@ export default function DashboardPage() {
                       </button>
                       {sub.accumulatedBalance > 0 && (
                         <p className="text-[9px] text-center text-slate-500 font-mono">
-                          90% → Main (KES {Math.round(sub.accumulatedBalance * 0.9).toLocaleString()})&nbsp;·&nbsp;10% → Treasury (KES {Math.round(sub.accumulatedBalance * 0.1).toLocaleString()})
+                          90% → Main ({formatMoney(Math.round(sub.accumulatedBalance * 0.9))})&nbsp;·&nbsp;10% → Treasury ({formatMoney(Math.round(sub.accumulatedBalance * 0.1))})
                         </p>
                       )}
                     </div>
@@ -1698,7 +1715,7 @@ export default function DashboardPage() {
                       <div>
                         <p className="font-bold text-xs text-white">{tier.name}</p>
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                          Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>KES {tier.entry.toLocaleString()}</strong> - Period: {tier.lockDays} Days
+                          Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>{formatMoney(tier.entry)}</strong> - Period: {tier.lockDays} Days
                         </p>
                         <p className="text-[10px] font-bold text-emerald-400 mt-1">
                           Gross Daily: +KES {tier.dailyLimit}
@@ -1732,7 +1749,7 @@ export default function DashboardPage() {
           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
             <h3 className="font-bold text-sm text-white">Graduated Withdrawal (GWF v6)</h3>
             <p className="text-xs text-slate-400">
-              Available Savings Balance: <strong className="text-emerald-400">KES {mainPool.toLocaleString()}</strong>
+              Available Savings Balance: <strong className="text-emerald-400">{formatMoney(mainPool)}</strong>
             </p>
             <div className="space-y-1.5 pt-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Withdrawal Amount (Min KSh 50)</label>
@@ -1750,15 +1767,15 @@ export default function DashboardPage() {
             <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-400">Gross Withdrawal:</span>
-                <span className="font-bold text-white">KES {parsedWithdrawAmt.toLocaleString()}</span>
+                <span className="font-bold text-white">{formatMoney(parsedWithdrawAmt)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-rose-400">GWF Fee Deduction:</span>
-                <span className="font-bold text-rose-400">-KES {currentGWFFee.toLocaleString()}</span>
+                <span className="font-bold text-rose-400">-{formatMoney(currentGWFFee)}</span>
               </div>
               <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
                 <span className="font-bold text-emerald-400">Net to M-Pesa:</span>
-                <span className="text-sm font-black text-emerald-400">KES {currentNetPayout.toLocaleString()}</span>
+                <span className="text-sm font-black text-emerald-400">{formatMoney(currentNetPayout)}</span>
               </div>
             </div>
             <button
@@ -1782,7 +1799,7 @@ export default function DashboardPage() {
                   ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                   : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}>
-                Max Limit: KES {isEligibleForNewLoan ? assignedLimit.toLocaleString() : 'Locked'}
+                Max Limit: {isEligibleForNewLoan ? formatMoney(assignedLimit) : 'Locked'}
               </span>
             </div>
 
@@ -1806,19 +1823,19 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
                   <div>
                     <p className="text-[9px] text-slate-400">Principal Requested</p>
-                    <p className="font-bold text-white">KES {activeLoan.requestedAmount.toLocaleString()}</p>
+                    <p className="font-bold text-white">{formatMoney(activeLoan.requestedAmount)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Total Due / Repay</p>
-                    <p className="font-black text-amber-400">KES {activeLoan.totalRepay.toLocaleString()}</p>
+                    <p className="font-black text-amber-400">{formatMoney(activeLoan.totalRepay)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Amount Paid</p>
-                    <p className="font-bold text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</p>
+                    <p className="font-bold text-emerald-400">{formatMoney(activeLoan.amountPaid)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Remaining Balance</p>
-                    <p className="font-black text-rose-400">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
+                    <p className="font-black text-rose-400">{formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}</p>
                   </div>
                 </div>
 
@@ -1973,7 +1990,7 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <p className="text-xs text-slate-400">
-                      You qualify to borrow up to <strong className="text-white">KES {assignedLimit.toLocaleString()}</strong> ({hasPastCompletedLoan ? '40%' : '20%'} of savings). All loans require Treasurer approval and 24-hour disbursement.
+                      You qualify to borrow up to <strong className="text-white">{formatMoney(assignedLimit)}</strong> ({hasPastCompletedLoan ? '40%' : '20%'} of savings). All loans require Treasurer approval and 24-hour disbursement.
                     </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
@@ -2012,27 +2029,27 @@ export default function DashboardPage() {
                     <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Requested Loan:</span>
-                        <span className="font-bold text-white">KES {parsedLoanAmt.toLocaleString()}</span>
+                        <span className="font-bold text-white">{formatMoney(parsedLoanAmt)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-rose-400">Loan Fee (5% upfront):</span>
-                        <span className="font-bold text-rose-400">-KES {loanFee.toLocaleString()}</span>
+                        <span className="font-bold text-rose-400">-{formatMoney(loanFee)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-rose-400">GWF Fee:</span>
-                        <span className="font-bold text-rose-400">-KES {loanGwfFee.toLocaleString()}</span>
+                        <span className="font-bold text-rose-400">-{formatMoney(loanGwfFee)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-emerald-400">Amount Sent to M-Pesa:</span>
-                        <span className="font-bold text-emerald-400">KES {amountSentToMpesa.toLocaleString()}</span>
+                        <span className="font-bold text-emerald-400">{formatMoney(amountSentToMpesa)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
-                        <span className="font-bold text-white">+KES {loanInterestAmount.toLocaleString()}</span>
+                        <span className="font-bold text-white">+{formatMoney(loanInterestAmount)}</span>
                       </div>
                       <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
                         <span className="font-bold text-amber-400">Total Amount to Repay:</span>
-                        <span className="text-sm font-black text-amber-400">KES {totalLoanRepay.toLocaleString()}</span>
+                        <span className="text-sm font-black text-amber-400">{formatMoney(totalLoanRepay)}</span>
                       </div>
                     </div>
                     <button

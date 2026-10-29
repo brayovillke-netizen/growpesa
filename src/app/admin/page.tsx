@@ -55,6 +55,9 @@ export default function AdminPage() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [message, setMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<boolean>(false);
+  
+  // Privacy Toggle
+  const [hideBalances, setHideBalances] = useState<boolean>(false);
 
   const fetchQueue = useCallback(async () => {
     try {
@@ -332,7 +335,6 @@ export default function AdminPage() {
   );
 
   // --- LOAN BOOK CALCULATIONS ---
-  // Calculate how much money is currently out in loans (Disbursed - Repaid)
   let totalDisbursed = 0;
   let totalRepaid = 0;
 
@@ -355,6 +357,32 @@ export default function AdminPage() {
 
   const recentCompleted = queue.filter(q => q.status === 'COMPLETED').slice(0, 25);
 
+  // Helper for formatting money
+  const formatMoney = (amount: number) => {
+    return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
+  };
+
+  // Calculates individual member debt
+  const getMemberDebt = (phone: string) => {
+    let disbursed = 0;
+    let repaid = 0;
+    
+    queue.forEach(item => {
+      if (item.phone === phone && item.status === 'COMPLETED') {
+        if (item.type.includes('Loan Request')) {
+          const amt = Math.round(Number(item.amount));
+          const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+          disbursed += (amt - fees);
+        }
+        if (item.type.includes('Loan Repayment')) {
+          repaid += Math.round(Number(item.amount));
+        }
+      }
+    });
+    
+    return Math.max(0, disbursed - repaid);
+  };
+
   if (!adminUser) return null;
 
   return (
@@ -376,15 +404,24 @@ export default function AdminPage() {
             <p className="text-[11px] text-slate-400">{adminUser.phone}</p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            localStorage.removeItem('tibapay_auth_user');
-            window.location.replace('/dashboard');
-          }}
-          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
-        >
-          Exit
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHideBalances(!hideBalances)}
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
+            title={hideBalances ? "Reveal Balances" : "Hide Balances"}
+          >
+            {hideBalances ? '🙈' : '👁️'}
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem('tibapay_auth_user');
+              window.location.replace('/dashboard');
+            }}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
+          >
+            Exit
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -397,27 +434,27 @@ export default function AdminPage() {
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Available Cash</p>
-          <p className="text-sm font-black mt-1">KES {availableCash.toLocaleString()}</p>
+          <p className="text-sm font-black mt-1">{formatMoney(availableCash)}</p>
           <p className="text-[9px] opacity-70 mt-0.5">For Withdrawals</p>
         </div>
         <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Loan Book</p>
-          <p className="text-sm font-black mt-1">KES {loanBookOutstanding.toLocaleString()}</p>
+          <p className="text-sm font-black mt-1">{formatMoney(loanBookOutstanding)}</p>
           <p className="text-[9px] opacity-70 mt-0.5">Outstanding Loans</p>
         </div>
         <div className="bg-violet-600 p-3 rounded-2xl text-white shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Member Savings</p>
-          <p className="text-sm font-black mt-1">KES {totalMemberSavings.toLocaleString()}</p>
+          <p className="text-sm font-black mt-1">{formatMoney(totalMemberSavings)}</p>
           <p className="text-[9px] opacity-70 mt-0.5">{members.length} members</p>
         </div>
         <div className="bg-slate-700 p-3 rounded-2xl text-white shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total System</p>
-          <p className="text-sm font-black mt-1">KES {totalSystem.toLocaleString()}</p>
+          <p className="text-sm font-black mt-1">{formatMoney(totalSystem)}</p>
           <p className="text-[9px] opacity-70 mt-0.5">Assets + Liabilities</p>
         </div>
         <div className="bg-amber-600 p-3 rounded-2xl text-slate-950 shadow-md col-span-2">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total Treasury Pool (Cash + Loans)</p>
-          <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
+          <p className="text-sm font-black mt-1">{formatMoney(mainPool)}</p>
           <p className="text-[9px] opacity-70 mt-0.5">{pendingOnly.length} pending requests waiting</p>
         </div>
       </div>
@@ -503,7 +540,7 @@ export default function AdminPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-black text-emerald-400">
-                          KES {Number(item.amount).toLocaleString()}
+                          {formatMoney(Number(item.amount))}
                         </p>
                         <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                           {item.status}
@@ -523,7 +560,7 @@ export default function AdminPage() {
                         disabled={awaitingPin}
                         className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer shadow disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {awaitingPin ? 'Awaiting PIN' : `Approve (KES ${Number(item.amount).toLocaleString()})`}
+                        {awaitingPin ? 'Awaiting PIN' : `Approve`}
                       </button>
                       <button
                         onClick={() => handleReject(item)}
@@ -558,33 +595,45 @@ export default function AdminPage() {
                 No members found.
               </div>
             ) : (
-              members.map((m) => (
-                <div
-                  key={m.phone}
-                  className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="min-w-0">
-                    <p className="font-bold text-white truncate">{m.full_name || 'Unnamed'}</p>
-                    <p className="text-[10px] text-slate-400">{m.phone}</p>
-                    {m.account_status && m.account_status !== 'active' && (
-                      <span className="text-[9px] font-bold text-rose-400 uppercase">
-                        {m.account_status}
-                      </span>
-                    )}
+              members.map((m) => {
+                const debt = getMemberDebt(m.phone);
+                return (
+                  <div
+                    key={m.phone}
+                    className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold text-white truncate">{m.full_name || 'Unnamed'}</p>
+                      <p className="text-[10px] text-slate-400">{m.phone}</p>
+                      
+                      {debt > 0 && (
+                        <div className="mt-1">
+                          <span className="text-[9px] font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                            Owes: {formatMoney(debt)}
+                          </span>
+                        </div>
+                      )}
+
+                      {m.account_status && m.account_status !== 'active' && (
+                        <span className="block text-[9px] font-bold text-rose-400 uppercase mt-0.5">
+                          {m.account_status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-black text-emerald-400">
+                        {formatMoney(Math.round(Number(m.savings_balance) || 0))}
+                      </p>
+                      <button
+                        onClick={() => downloadLedgerCSV(m.phone, m.full_name || m.phone)}
+                        className="mt-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-lg text-[9px] transition cursor-pointer border border-slate-700"
+                      >
+                        📥 Ledger CSV
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-black text-emerald-400">
-                      KES {Math.round(Number(m.savings_balance) || 0).toLocaleString()}
-                    </p>
-                    <button
-                      onClick={() => downloadLedgerCSV(m.phone, m.full_name || m.phone)}
-                      className="mt-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-lg text-[9px] transition cursor-pointer border border-slate-700"
-                    >
-                      📥 Ledger CSV
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -621,7 +670,7 @@ export default function AdminPage() {
                       </p>
                     </div>
                     <p className={`font-black shrink-0 ${isCredit ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {isCredit ? '+' : '−'} KES {Number(item.amount).toLocaleString()}
+                      {isCredit ? '+' : '−'} {formatMoney(Number(item.amount))}
                     </p>
                   </div>
                 );
