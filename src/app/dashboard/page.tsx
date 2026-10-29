@@ -1883,15 +1883,16 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* STAGE CARD - Simplified without Next Upgrade text */}
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current Tier</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-emerald-400 font-black text-base">Stage {currentStage}</span>
-                  <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">{stageName}</span>
-                </div>
+            {/* STAGE CARD - Centered with glowing effect */}
+            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-inner flex flex-col items-center justify-center space-y-2 relative overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full"></div>
+              
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest relative z-10">Your Membership Tier</p>
+              <div className="flex items-center gap-3 relative z-10">
+                <span className="text-emerald-400 font-black text-2xl drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">Stage {currentStage}</span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-xs px-3 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-500/30 shadow-sm">{stageName}</span>
               </div>
+              <p className="text-[10px] text-slate-500 font-medium relative z-10">Keep saving & repaying to unlock higher limits.</p>
             </div>
 
             {activeLoan ? (
