@@ -737,7 +737,7 @@ export default function DashboardPage() {
     // Instantly remove it locally
     const nextSubs = activeSubscriptions.filter(s => s.tierId !== tierId);
     setActiveSubscriptions(nextSubs);
-    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(nextSubs));
+    localStorage.setItem(`tibapay_subs_${user!.phone}`, JSON.stringify(nextSubs));
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -785,7 +785,7 @@ export default function DashboardPage() {
     // Instantly update the UI so the user sees it immediately
     const nextSubs = [...activeSubscriptions, newSub];
     setActiveSubscriptions(nextSubs);
-    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(nextSubs));
+    localStorage.setItem(`tibapay_subs_${user!.phone}`, JSON.stringify(nextSubs));
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -1355,8 +1355,8 @@ export default function DashboardPage() {
     );
   }
 
-  const referralLink = `https://tibapay.vercel.app?ref=${user.referral_code}`;
-  const shareMessage = `Join me on TibaPay and let's grow our wealth together! Use my code ${user.referral_code} to sign up and get started. ${referralLink}`;
+  const referralLink = `https://tibapay.vercel.app?ref=${user!.referral_code}`;
+  const shareMessage = `Join me on TibaPay and let's grow our wealth together! Use my code ${user!.referral_code} to sign up and get started. ${referralLink}`;
 
   const handleShareReferral = async () => {
     const shareData = {
