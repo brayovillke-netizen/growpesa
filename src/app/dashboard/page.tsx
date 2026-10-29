@@ -1847,7 +1847,6 @@ export default function DashboardPage() {
                   <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
                     activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
                     activeLoan.status === 'OVERDUE' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                    activeLoan.status === 'CLOSED' ? 'bg-slate-500/20 text-slate-300 border border-slate-500/30' :
                     'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   }`}>
                     {activeLoan.status}
