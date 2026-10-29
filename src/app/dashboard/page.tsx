@@ -124,7 +124,7 @@ export default function DashboardPage() {
   const [lockPin, setLockPin] = useState('');
   const lastActivityRef = useRef(0);
 
-  // Derived time states (moved out of render body)
+  // Derived time states (kept out of render body)
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
 
@@ -313,8 +313,6 @@ export default function DashboardPage() {
   };
 
   // ---------- AUTO DAILY ACCRUAL ----------
-  // Runs on mount, on sub changes, and once a minute (midnight rollover).
-  // Capped at tier.totalPayout so long-running sessions can't over-accrue.
   useEffect(() => {
     if (!user || activeSubscriptions.length === 0) return;
 
@@ -355,13 +353,55 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [user, activeSubscriptions]);
 
-  const updateMainPool = async (newPoolAmount: number) => {
-    if (!user) return;
+  // ---------- RPC-FIRST SAVINGS UPDATE ----------
+  const updateMainPool = async (newPoolAmount: number): Promise<boolean> => {
+    if (!user) return false;
     const rounded = Math.round(newPoolAmount);
+    const delta = rounded - mainPool;
+    if (delta === 0) return true;
+
+    // Optimistic UI
     setMainPool(rounded);
     localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded));
-    await supabase.from('members').update({ savings_balance: rounded }).eq('phone', user.phone);
+
+    try {
+      // Primary: RPC (bypasses RLS via SECURITY DEFINER)
+      const { data, error } = await supabase.rpc('increment_member_savings', {
+        p_phone: user.phone,
+        p_delta: delta,
+      });
+
+      if (error) {
+        console.warn('RPC failed, trying direct update:', error.message);
+        const { error: updErr } = await supabase
+          .from('members')
+          .update({ savings_balance: rounded })
+          .eq('phone', user.phone);
+
+        if (updErr) {
+          console.error('Both RPC and direct update failed:', updErr);
+          // Revert optimistic UI
+          setMainPool(rounded - delta);
+          localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded - delta));
+          setMessage(`Could not save balance: ${updErr.message}`);
+          return false;
+        }
+      } else if (typeof data === 'number') {
+        // Trust the DB's authoritative value
+        const dbBal = Math.round(data);
+        setMainPool(dbBal);
+        localStorage.setItem(`tibapay_savings_${user.phone}`, String(dbBal));
+      }
+    } catch (e: any) {
+      console.error('Exception updating savings:', e);
+      setMainPool(rounded - delta);
+      localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded - delta));
+      setMessage(`Error saving balance: ${e?.message || 'unknown'}`);
+      return false;
+    }
+
     window.dispatchEvent(new Event('tibapay_sync'));
+    return true;
   };
 
   const saveLoanState = (loan: ActiveLoan | null) => {
@@ -635,6 +675,7 @@ export default function DashboardPage() {
     localStorage.removeItem('tibapay_auth_user');
   };
 
+  // ---------- SWEEP: SAVINGS FIRST, THEN TREASURY ----------
   const handleSweepSub = async (tierId: number) => {
     const sub = activeSubscriptions.find((s) => s.tierId === tierId);
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
@@ -646,7 +687,14 @@ export default function DashboardPage() {
     const totalGroupCut = Math.round(sub.accumulatedBalance * 0.1);
     const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
 
-    // Credit the 10% group cut to the global treasury pool
+    // STEP 1 — Member savings FIRST. Abort if it fails.
+    const saved = await updateMainPool(mainPool + totalNetSweep);
+    if (!saved) {
+      setMessage('Sweep cancelled — could not credit Main Savings. Please try again.');
+      return;
+    }
+
+    // STEP 2 — Credit treasury (non-fatal; admin can reconcile)
     if (totalGroupCut > 0) {
       try {
         const { data: poolData } = await supabase
@@ -662,43 +710,49 @@ export default function DashboardPage() {
             .eq('id', 1);
         }
       } catch (e) {
-        console.error('Failed to credit treasury pool:', e);
+        console.error('Treasury credit failed (non-fatal):', e);
       }
     }
 
-    await updateMainPool(mainPool + totalNetSweep);
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const isExpired = todayStr >= sub.endDate;
+    // STEP 3 — Clear / remove sub
+    const todayStrLocal = new Date().toISOString().split('T')[0];
+    const isExpired = todayStrLocal >= sub.endDate;
     saveSubs(
       isExpired
         ? activeSubscriptions.filter((s) => s.tierId !== tierId)
         : activeSubscriptions.map((s) => (s.tierId === tierId ? { ...s, accumulatedBalance: 0 } : s))
     );
 
+    // STEP 4 — Ledger
     const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Tier Sweep (${tier.name})`,
       amount: totalNetSweep,
-      date: todayStr,
+      date: todayStrLocal,
       status: 'COMPLETED',
       code: 'SWP-' + Math.floor(10000 + Math.random() * 90000),
       phone: user?.phone,
     };
     saveLedger([item, ...ledger]);
     setMessage(
-      `Swept KES ${totalNetSweep.toLocaleString()} to Personal Savings (10% group fee: KES ${totalGroupCut.toLocaleString()} → Treasury Pool).`
+      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings (10% → Treasury: KES ${totalGroupCut.toLocaleString()}).`
     );
   };
 
-  const handleSubscribeTier = (tierId: number) => {
+  // ---------- SUBSCRIBE: AWAIT DEDUCTION ----------
+  const handleSubscribeTier = async (tierId: number) => {
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
     if (mainPool < tier.entry) {
       setMessage(`Insufficient funds: need KES ${tier.entry.toLocaleString()}. Savings: KES ${mainPool.toLocaleString()}.`);
       return;
     }
-    updateMainPool(mainPool - tier.entry);
+
+    const deducted = await updateMainPool(mainPool - tier.entry);
+    if (!deducted) {
+      setMessage('Subscription failed — could not deduct entry fee. Please try again.');
+      return;
+    }
 
     const startDate = new Date().toISOString().split('T')[0];
     const end = new Date();
@@ -1062,7 +1116,6 @@ export default function DashboardPage() {
   const currentGWFFee = calculateGWF(parsedWithdrawAmt);
   const currentNetPayout = Math.max(0, parsedWithdrawAmt - currentGWFFee);
 
-  // Sum across all tiers, used by Overview card
   const packageEarnings = activeSubscriptions.reduce((sum, s) => sum + s.accumulatedBalance, 0);
 
   if (!user) {
@@ -1503,6 +1556,30 @@ export default function DashboardPage() {
               Your Code: {user.referral_code || user.phone}
             </div>
           </div>
+
+          {/* FOLLOW ON X CARD */}
+          <a
+            href="https://twitter.com/intent/follow?screen_name=tibapay"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-600/50 p-4 shadow-lg hover:border-slate-400 transition cursor-pointer"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
+                  𝕏
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
+                  <h3 className="font-black text-sm text-white">@tibapay on X</h3>
+                  <p className="text-[10px] text-slate-500">News, updates & community</p>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
+                Follow →
+              </div>
+            </div>
+          </a>
 
           <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 space-y-3 shadow-md">
             <div className="flex justify-between items-center text-xs">
