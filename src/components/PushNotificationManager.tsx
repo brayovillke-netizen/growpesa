@@ -17,8 +17,13 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   const [isSupported, setIsSupported] = useState(false);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(true); // Default to true to prevent flash on load
 
   useEffect(() => {
+    // Check if user previously dismissed the prompt
+    const dismissed = localStorage.getItem('tibapay_push_dismissed');
+    if (!dismissed) setIsDismissed(false);
+
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       setIsSupported(true);
       navigator.serviceWorker.register('/sw.js').then((reg) => {
@@ -26,6 +31,11 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
       });
     }
   }, []);
+
+  const handleDismiss = () => {
+    setIsDismissed(true);
+    localStorage.setItem('tibapay_push_dismissed', 'true');
+  };
 
   const subscribeToPush = async () => {
     setLoading(true);
@@ -45,6 +55,7 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
       }, { onConflict: 'phone' });
 
       alert('Notifications enabled successfully!');
+      handleDismiss(); // Hide the banner after success
 
     } catch (error) {
       console.error('Failed to subscribe:', error);
@@ -54,30 +65,30 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
     }
   };
 
-  if (!isSupported) return null; // Don't show on unsupported browsers
+  // If not supported, already subscribed, or dismissed, don't show anything
+  if (!isSupported || subscription || isDismissed) return null;
 
   return (
-    <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
-      <h3 className="font-black text-base text-white flex items-center gap-2 mb-2">
-        <span className="text-emerald-400">🔔</span> Phone Alerts
-      </h3>
-      <p className="text-[11px] text-slate-400 font-medium mb-3">
-        Get notified instantly when deposits or loans are approved.
-      </p>
-
-      {subscription ? (
-        <div className="w-full py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold text-center">
-          ✅ Notifications Enabled
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900 border border-slate-700 p-4 rounded-2xl shadow-2xl flex flex-col gap-3">
+      <div className="flex justify-between items-start">
+        <div className="flex gap-3 items-center">
+          <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400 text-xl">🔔</div>
+          <div>
+            <h3 className="font-bold text-sm text-white">Enable Notifications</h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">Get instant alerts for deposits & loans.</p>
+          </div>
         </div>
-      ) : (
-        <button 
-          onClick={subscribeToPush}
-          disabled={loading}
-          className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:opacity-90 transition disabled:opacity-50"
-        >
-          {loading ? 'Enabling...' : 'Enable Push Notifications'}
+        <button onClick={handleDismiss} className="text-slate-500 hover:text-white font-bold text-lg leading-none">
+          ✕
         </button>
-      )}
+      </div>
+      <button 
+        onClick={subscribeToPush}
+        disabled={loading}
+        className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs shadow-lg hover:opacity-90 transition disabled:opacity-50"
+      >
+        {loading ? 'Enabling...' : 'Allow Notifications'}
+      </button>
     </div>
   );
 }

@@ -1604,9 +1604,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* NOTIFICATION SETTINGS */}
-          <PushNotificationManager userPhone={user.phone} />
-
           {/* FOLLOW ON X */}
           <a
             href="https://twitter.com/intent/follow?screen_name=tibapay"
@@ -2173,6 +2170,7 @@ export default function DashboardPage() {
       )}
 
       <InstallPrompt />
+      <PushNotificationManager userPhone={user.phone} />
     </div>
   );
 }
