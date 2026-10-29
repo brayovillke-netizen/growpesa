@@ -939,17 +939,19 @@ export default function DashboardPage() {
   // 2. Repayment Bonus (+5% per 3 loans, max +10%)
   const repaymentBonus = Math.min(Math.floor(completedLoans / 3) * 0.05, 0.10);
   
-  // 3. Base Limit (20%) + Bonuses (Capped at 50%)
-  const limitPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
-  const calculatedMaxLimit = Math.floor(mainPool * limitPercentage);
+  // 3. Base Limit (20%) + Bonuses (Capped at 50%) OR Minimum 2000
+  const calculatedPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
+  const calculatedMaxLimit = Math.max(2000, Math.floor(mainPool * calculatedPercentage));
 
   const isEligibleForNewLoan = meetsBaseEligibility;
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
   
-  // 5% flat processing fee
-  const loanFee = Math.round(parsedLoanAmt * 0.05);
-  const amountSentToMpesa = Math.max(0, parsedLoanAmt - loanFee);
+  // 5% flat processing fee + GWF
+  const baseLoanFee = Math.round(parsedLoanAmt * 0.05);
+  const loanGwfFee = calculateGWF(parsedLoanAmt);
+  const totalFee = baseLoanFee + loanGwfFee;
+  const amountSentToMpesa = Math.max(0, parsedLoanAmt - totalFee);
 
   // 3% for 1 week, 5% for 2 weeks, 10% for 4 weeks
   const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.10;
@@ -982,8 +984,8 @@ export default function DashboardPage() {
     const newLoan: ActiveLoan = {
       id: loanTxnId,
       requestedAmount: parsedLoanAmt,
-      fee: loanFee,
-      gwfFee: 0, // No longer used for loans
+      fee: totalFee,
+      gwfFee: loanGwfFee,
       amountSent: amountSentToMpesa,
       termWeeks: loanTermWeeks,
       interestRate: loanInterestRate,
@@ -2035,8 +2037,12 @@ export default function DashboardPage() {
                         <span className="font-bold text-white">{formatMoney(parsedLoanAmt)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-rose-400">Processing Fee (5% upfront):</span>
-                        <span className="font-bold text-rose-400">-{formatMoney(loanFee)}</span>
+                        <span className="text-rose-400">Processing Fee (5%):</span>
+                        <span className="font-bold text-rose-400">-{formatMoney(baseLoanFee)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-rose-400">GWF Fee:</span>
+                        <span className="font-bold text-rose-400">-{formatMoney(loanGwfFee)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-emerald-400">Amount Sent to M-Pesa:</span>

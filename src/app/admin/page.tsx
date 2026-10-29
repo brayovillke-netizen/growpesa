@@ -197,9 +197,10 @@ export default function AdminPage() {
         poolUpdate = Math.max(0, Math.round(mainPool - netPayout));
         newMemberSavings = Math.max(0, currentSavings - amt);
       } else if (item.type.includes('Loan Request')) {
-        // 5% flat fee goes to treasury. The rest leaves the pool.
+        // 5% flat fee + GWF goes to treasury. The rest leaves the pool.
         const loanFee = Math.round(amt * 0.05);
-        const netDisbursed = Math.max(0, amt - loanFee);
+        const gwfFee = calculateGWF(amt);
+        const netDisbursed = Math.max(0, amt - loanFee - gwfFee);
         
         if (mainPool - netDisbursed < mainPool * 0.15) {
           throw new Error(`Approval denied. This loan would drop the group's liquidity below the 15% floor.`);
@@ -362,7 +363,7 @@ export default function AdminPage() {
     if (item.status === 'COMPLETED') {
       if (item.type.includes('Loan Request')) {
         const amt = Math.round(Number(item.amount));
-        const fees = Math.round(amt * 0.05);
+        const fees = Math.round(amt * 0.05) + calculateGWF(amt);
         totalDisbursed += (amt - fees);
       }
       if (item.type.includes('Loan Repayment')) {
@@ -390,7 +391,7 @@ export default function AdminPage() {
       if (item.phone === phone && item.status === 'COMPLETED') {
         if (item.type.includes('Loan Request')) {
           const amt = Math.round(Number(item.amount));
-          const fees = Math.round(amt * 0.05);
+          const fees = Math.round(amt * 0.05) + calculateGWF(amt);
           disbursed += (amt - fees);
         }
         if (item.type.includes('Loan Repayment')) {
@@ -542,6 +543,11 @@ export default function AdminPage() {
             ) : (
               filteredQueue.map((item) => {
                 const awaitingPin = item.status === 'PENDING PIN';
+                const isLoan = item.type.includes('Loan Request');
+                const amt = Math.round(Number(item.amount));
+                const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+                const netToSend = Math.max(0, amt - fees);
+
                 return (
                   <div
                     key={item.id}
@@ -565,6 +571,14 @@ export default function AdminPage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Show exact amount to send for loans */}
+                    {isLoan && (
+                      <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg flex justify-between items-center">
+                        <span className="text-[10px] text-blue-300 font-bold uppercase">Send to M-Pesa:</span>
+                        <span className="font-black text-blue-400">{formatMoney(netToSend)}</span>
+                      </div>
+                    )}
 
                     {(item.smsMessage || item.sms_message) && (
                       <p className="text-[10px] text-slate-300 bg-slate-900 p-2 rounded border border-slate-800 italic uppercase font-mono">
