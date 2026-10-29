@@ -298,11 +298,14 @@ export default function DashboardPage() {
     }
   };
 
-  const saveLedger = (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
+  // Made async to ensure DB write completes before background sync overwrites UI
+  const saveLedger = async (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
     if (!user) return;
     setLedger(newLedger);
     localStorage.setItem(`tibapay_ledger_${user.phone}`, JSON.stringify(newLedger));
-    if (syncItem) submitToServerQueue(syncItem);
+    if (syncItem) {
+      await submitToServerQueue(syncItem);
+    }
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
@@ -447,7 +450,9 @@ export default function DashboardPage() {
         }
       });
 
+      // Only overwrite local state if the server returns valid data, or if the server has caught up
       setActiveSubscriptions(prev => {
+        if (rebuiltSubs.length === 0 && prev.length > 0) return prev; // Prevent flashing to 0 if DB hasn't updated yet
         if (JSON.stringify(prev) === JSON.stringify(rebuiltSubs)) return prev;
         return rebuiltSubs;
       });
@@ -748,7 +753,7 @@ export default function DashboardPage() {
       code: 'SWP-' + Math.floor(10000 + Math.random() * 90000),
       phone: user?.phone,
     };
-    saveLedger([item, ...ledger]);
+    await saveLedger([item, ...ledger], item);
     setMessage(
       `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings.`
     );
@@ -796,7 +801,9 @@ export default function DashboardPage() {
       code: 'ENT-' + Math.floor(10000 + Math.random() * 90000),
       phone: user?.phone,
     };
-    saveLedger([item, ...ledger]);
+    
+    // Await the save so the DB is updated before the next sync
+    await saveLedger([item, ...ledger], item);
     setMessage(`Subscribed to ${tier.name}. Active for ${tier.lockDays} days.`);
   };
 
@@ -822,7 +829,7 @@ export default function DashboardPage() {
       code: tempCode,
       phone: user?.phone,
     };
-    saveLedger([newItem, ...ledger], newItem);
+    await saveLedger([newItem, ...ledger], newItem);
 
     try {
       const res = await fetch('/api/tuma/stkpush', {
@@ -897,7 +904,7 @@ export default function DashboardPage() {
       smsMessage: manualSmsText,
       phone: user?.phone,
     };
-    saveLedger([item, ...ledger], item);
+    await saveLedger([item, ...ledger], item);
     setManualSmsText('');
     setShowManualDeposit(false);
     setMessage('Confirmation submitted to Treasurer queue.');
@@ -917,7 +924,7 @@ export default function DashboardPage() {
       }
       return item;
     });
-    saveLedger(updated, updatedItem || undefined);
+    await saveLedger(updated, updatedItem || undefined);
     setPastedSmsText('');
     setActiveSmsInputId(null);
     setMessage('Submitted to Treasurer queue.');
@@ -944,7 +951,7 @@ export default function DashboardPage() {
       code: 'WDR-' + Math.floor(1000 + Math.random() * 9000),
       phone: user?.phone,
     };
-    saveLedger([item, ...ledger], item);
+    await saveLedger([item, ...ledger], item);
     
     setMessage(`Withdrawal submitted! You will receive KES ${netPayout.toLocaleString()} on your M-Pesa within 24 hours.`);
   };
@@ -1055,7 +1062,7 @@ export default function DashboardPage() {
       code: loanTxnId,
       phone: user?.phone,
     };
-    saveLedger([item, ...ledger], item);
+    await saveLedger([item, ...ledger], item);
     
     setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. A total fee of KES ${totalFee.toLocaleString()} (5% + GWF) will be deducted. You will receive KES ${amountSentToMpesa.toLocaleString()} upon approval.`);
     setRepayAmountInput('');
@@ -1087,7 +1094,7 @@ export default function DashboardPage() {
       code: reqCode,
       phone: user?.phone,
     };
-    saveLedger([newItem, ...ledger], newItem);
+    await saveLedger([newItem, ...ledger], newItem);
 
     try {
       const res = await fetch('/api/tuma/stkpush', {
@@ -1129,7 +1136,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleRepaySMS = () => {
+  const handleRepaySMS = async () => {
     if (!activeLoan) return;
     if (!repaySmsText || repaySmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
 
@@ -1153,7 +1160,7 @@ export default function DashboardPage() {
       smsMessage: repaySmsText,
       phone: user?.phone,
     };
-    saveLedger([newItem, ...ledger], newItem);
+    await saveLedger([newItem, ...ledger], newItem);
     setRepaySmsText('');
     setRepayAmountInput('');
     setMessage(`Repayment of KES ${amt} submitted to Treasurer queue.`);
@@ -1600,6 +1607,30 @@ export default function DashboardPage() {
               <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
             </div>
           </div>
+
+          {/* FOLLOW ON X */}
+          <a
+            href="https://twitter.com/intent/follow?screen_name=tibapay"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
+                  𝕏
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
+                  <h3 className="font-black text-sm text-white">@tibapay on X</h3>
+                  <p className="text-[10px] text-slate-500">News, updates & community</p>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
+                Follow →
+              </div>
+            </div>
+          </a>
 
           {/* ACTIVITY LEDGER */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
