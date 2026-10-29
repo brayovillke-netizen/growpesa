@@ -299,7 +299,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Made async to ensure DB write completes before background sync overwrites UI
   const saveLedger = async (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
     if (!user) return;
     setLedger(newLedger);
@@ -451,9 +450,8 @@ export default function DashboardPage() {
         }
       });
 
-      // Only overwrite local state if the server returns valid data, or if the server has caught up
       setActiveSubscriptions(prev => {
-        if (rebuiltSubs.length === 0 && prev.length > 0) return prev; // Prevent flashing to 0 if DB hasn't updated yet
+        if (rebuiltSubs.length === 0 && prev.length > 0) return prev;
         if (JSON.stringify(prev) === JSON.stringify(rebuiltSubs)) return prev;
         return rebuiltSubs;
       });
@@ -740,7 +738,6 @@ export default function DashboardPage() {
 
     const todayStrLocal = new Date().toISOString().split('T')[0];
     
-    // Instantly remove it locally
     const nextSubs = activeSubscriptions.filter(s => s.tierId !== tierId);
     setActiveSubscriptions(nextSubs);
     localStorage.setItem(`tibapay_subs_${user!.phone}`, JSON.stringify(nextSubs));
@@ -788,7 +785,6 @@ export default function DashboardPage() {
       lastAccrualDate: startDate,
     };
 
-    // Instantly update the UI so the user sees it immediately
     const nextSubs = [...activeSubscriptions, newSub];
     setActiveSubscriptions(nextSubs);
     localStorage.setItem(`tibapay_subs_${user!.phone}`, JSON.stringify(nextSubs));
@@ -803,7 +799,6 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     
-    // Await the save so the DB is updated before the next sync
     await saveLedger([item, ...ledger], item);
     setMessage(`Subscribed to ${tier.name}. Active for ${tier.lockDays} days.`);
   };
@@ -1588,12 +1583,12 @@ export default function DashboardPage() {
             <div className="flex justify-between items-start mb-1">
               <div>
                 <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
-                <h3 className="font-black text-base text-white">Get KES 5 / Friend</h3>
+                <h3 className="font-black text-base text-white">Earn up to KES 50</h3>
               </div>
               <div className="text-2xl drop-shadow-md">🎁</div>
             </div>
             <p className="text-[11px] text-slate-400 mb-4 font-medium">
-              Invite friends. Earn instantly when they deposit.
+              Share your invite link. Get rewarded instantly when your friends make their first deposit.
             </p>
 
             <button
