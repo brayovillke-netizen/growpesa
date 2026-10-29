@@ -23,6 +23,7 @@ interface MemberUser {
   joined_at?: string;
   account_status?: string;
   loan_limit?: number;
+  total_deposited?: number; // NEW: Tracks lifetime deposits for eligibility
   referrals_rewarded_count?: number;
   referral_code?: string;
 }
@@ -273,7 +274,7 @@ export default function DashboardPage() {
       try {
         const parsed: ActiveLoan = JSON.parse(savedLoan);
         if (parsed.status !== 'CLOSED' && parsed.status !== 'REJECTED') {
-          // FIX: Prevent flash of fully repaid loans on load
+          // FIX: Prevent ghost loans from flashing on screen if they are fully paid
           if (parsed.amountPaid >= parsed.totalRepay) {
             localStorage.removeItem(`tibapay_loan_${u.phone}`);
           } else {
@@ -421,7 +422,8 @@ export default function DashboardPage() {
     try {
       const { data: memberData } = await supabase
         .from('members')
-        .select('savings_balance, account_status, loan_limit, referrals_rewarded_count, referral_code')
+        // Added total_deposited to fetch
+        .select('savings_balance, total_deposited, account_status, loan_limit, referrals_rewarded_count, referral_code')
         .eq('phone', currentUser.phone)
         .single();
 
@@ -433,7 +435,8 @@ export default function DashboardPage() {
         setUser(prev => prev ? {
           ...prev,
           account_status: memberData.account_status,
-          loan_limit: Number(memberData.loan_limit),
+          loan_limit: Number(memberData.loan_limit) || 0,
+          total_deposited: Number(memberData.total_deposited) || 0, // Store total deposited
           referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
           referral_code: memberData.referral_code || prev.referral_code
         } : null);
@@ -534,7 +537,7 @@ export default function DashboardPage() {
             setActiveLoan(null);
             loanRef.current = null;
             localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
-            // FIX: Prevent contradictory message
+            // FIX: Removed the contradictory "you can borrow again" if they don't meet the rules
             setMessage('Congratulations! Your loan is fully repaid.');
           } else if (currentLoan.amountPaid !== totalRepaid) {
             const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
@@ -606,6 +609,7 @@ export default function DashboardPage() {
       joined_at: data.created_at,
       account_status: data.account_status || 'active',
       loan_limit: Number(data.loan_limit) || 0,
+      total_deposited: Number(data.total_deposited) || 0,
       referrals_rewarded_count: Number(data.referrals_rewarded_count) || 0,
       referral_code: refCode,
     };
@@ -660,6 +664,7 @@ export default function DashboardPage() {
       role: 'member',
       savings_balance: 0,
       loan_limit: 0,
+      total_deposited: 0, // NEW
       account_status: 'active',
       referred_by: referredBy,
       referrals_rewarded_count: 0,
@@ -947,7 +952,7 @@ export default function DashboardPage() {
   };
 
   // ==========================================
-  // LOAN RISK MANAGEMENT & ELIGIBILITY CHECKS
+  // LOAN RISK MANAGEMENT & STAGE LOGIC
   // ==========================================
 
   const totalBorrowed = ledger
@@ -960,18 +965,39 @@ export default function DashboardPage() {
 
   const hasUnpaidLoan = totalBorrowed > totalRepaid;
 
-  const hasMinSavings = mainPool >= 400;
+  // NEW LOGIC: Check total_deposited instead of current savings_balance
+  const hasMinDeposit = (user?.total_deposited || 0) >= 400;
   const isAccountActive = user?.account_status === 'active';
 
-  const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && isAccountActive && !hasUnpaidLoan;
+  const meetsBaseEligibility = daysActive >= 28 && hasMinDeposit && isAccountActive && !hasUnpaidLoan;
 
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
 
-  const tenureBonus = Math.min(Math.floor(daysActive / 365) * 0.05, 0.15);
-  const repaymentBonus = Math.min(Math.floor(completedLoans / 3) * 0.05, 0.10);
+  // STAGE CALCULATION (For UI display only)
+  let currentStage = 1;
+  let stageName = 'Starter';
+  let nextStageRequirement = '';
 
-  const calculatedPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
-  const calculatedMaxLimit = Math.floor(mainPool * calculatedPercentage);
+  if (completedLoans >= 3 && daysActive >= 120) {
+    currentStage = 4;
+    stageName = 'Established';
+    nextStageRequirement = 'Max Stage Reached';
+  } else if (completedLoans >= 2 && daysActive >= 60) {
+    currentStage = 3;
+    stageName = 'Trusted';
+    nextStageRequirement = `Repay 1 loan & wait ${Math.max(0, 120 - daysActive)} days for Stage 4`;
+  } else if (completedLoans >= 1 && daysActive >= 28) {
+    currentStage = 2;
+    stageName = 'Advanced';
+    nextStageRequirement = `Repay 1 loan & wait ${Math.max(0, 60 - daysActive)} days for Stage 3`;
+  } else {
+    currentStage = 1;
+    stageName = 'Starter';
+    nextStageRequirement = `Repay 1 loan & wait ${Math.max(0, 28 - daysActive)} days for Stage 2`;
+  }
+
+  // STATIC LIMIT: Read directly from the database
+  const calculatedMaxLimit = user?.loan_limit || 0;
 
   const isEligibleForNewLoan = meetsBaseEligibility;
 
@@ -996,12 +1022,12 @@ export default function DashboardPage() {
     }
 
     if (!meetsBaseEligibility) {
-      return setMessage(`You must be an active member for 4 weeks and have KES 400 in savings to unlock a starter limit.`);
+      return setMessage(`You must be an active member for 4 weeks and have KES 400 total deposited to unlock a starter limit.`);
     }
 
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
     if (parsedLoanAmt > calculatedMaxLimit) {
-      return setMessage(`Exceeds your approved limit of KES ${calculatedMaxLimit.toLocaleString()}.`);
+      return setMessage(`Exceeds your locked limit of KES ${calculatedMaxLimit.toLocaleString()}.`);
     }
 
     const due = new Date();
@@ -1833,16 +1859,27 @@ export default function DashboardPage() {
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-sm text-white">TibaPay Loan Engine</h3>
               <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border ${
-                isEligibleForNewLoan
+                calculatedMaxLimit > 0
                   ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                   : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}>
-                Max Limit: {isEligibleForNewLoan 
-                  ? formatMoney(calculatedMaxLimit) 
-                  : 'Locked'}
+                Locked Limit: {calculatedMaxLimit > 0 ? formatMoney(calculatedMaxLimit) : 'None'}
               </span>
             </div>
 
+            {/* STAGE DISPLAY */}
+            <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-bold">Current Stage:</span>
+                <span className="text-emerald-400 font-black">Stage {currentStage} ({stageName})</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Next Upgrade:</span>
+                <span className="text-slate-300 font-medium text-right max-w-[60%]">{nextStageRequirement}</span>
+              </div>
+            </div>
+
+            {/* FIX APPLIED HERE: activeLoan renders this block reliably without flickering */}
             {activeLoan ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
@@ -2020,13 +2057,18 @@ export default function DashboardPage() {
                   <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
                     <p className="text-sm font-bold text-slate-300">Loan Locked</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      You must be an active member for 4 consecutive weeks and have accumulated KES 400 in savings to unlock a starter limit.
+                      {!hasMinDeposit 
+                        ? `You need to deposit at least KES 400 in total to unlock a starter limit. Currently deposited: KES ${(user?.total_deposited || 0).toLocaleString()}.`
+                        : daysActive < 28
+                        ? `You must be an active member for 28 days to unlock a starter limit. You have ${daysActive} days.`
+                        : "Your account is under review or you have an active loan."}
                     </p>
                   </div>
                 ) : (
                   <>
                     <p className="text-xs text-slate-400">
-                      You qualify to borrow up to <strong className="text-white">{formatMoney(calculatedMaxLimit)}</strong> based on your savings and membership tenure.
+                      Your limit is locked at <strong className="text-white">{formatMoney(calculatedMaxLimit)}</strong>. 
+                      Repay loans fully to upgrade your stage and unlock a higher limit.
                     </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
