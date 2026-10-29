@@ -133,7 +133,6 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [fetchQueue, fetchMembers]);
 
-  // Members polling (only when tab active)
   useEffect(() => {
     if (!adminUser) return;
     if (activeAdminTab !== 'members') return;
@@ -203,18 +202,13 @@ export default function AdminPage() {
       }
 
       if (item.phone && (item.type.includes('Deposit') || item.type.includes('Withdrawal'))) {
-        
-        // A. ALWAYS update the main savings balance first
         const { error: savingsError } = await supabase
           .from('members')
           .update({ savings_balance: newMemberSavings })
           .eq('phone', item.phone);
         
-        if (savingsError) {
-          throw new Error(`Failed to update savings balance: ${savingsError.message}`);
-        }
+        if (savingsError) throw new Error(`Failed to update savings balance: ${savingsError.message}`);
 
-        // B. Try to update total_deposited separately (so it doesn't block the balance)
         try {
           await supabase
             .from('members')
@@ -225,7 +219,6 @@ export default function AdminPage() {
         }
       }
 
-      // 6. Handle Referral Bonus (KES 5, Max 5 rewards)
       if (item.type.includes('Deposit') && referredBy && !referralPaid && totalDeposited >= 100) {
         await supabase.from('members').update({ referral_paid: true }).eq('phone', item.phone);
 
@@ -337,6 +330,27 @@ export default function AdminPage() {
     (sum, m) => sum + (Math.round(Number(m.savings_balance)) || 0),
     0
   );
+
+  // --- LOAN BOOK CALCULATIONS ---
+  // Calculate how much money is currently out in loans (Disbursed - Repaid)
+  let totalDisbursed = 0;
+  let totalRepaid = 0;
+
+  queue.forEach(item => {
+    if (item.status === 'COMPLETED') {
+      if (item.type.includes('Loan Request')) {
+        const amt = Math.round(Number(item.amount));
+        const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+        totalDisbursed += (amt - fees);
+      }
+      if (item.type.includes('Loan Repayment')) {
+        totalRepaid += Math.round(Number(item.amount));
+      }
+    }
+  });
+
+  const loanBookOutstanding = Math.max(0, totalDisbursed - totalRepaid);
+  const availableCash = Math.max(0, mainPool - loanBookOutstanding);
   const totalSystem = mainPool + totalMemberSavings;
 
   const recentCompleted = queue.filter(q => q.status === 'COMPLETED').slice(0, 25);
@@ -379,26 +393,32 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* 6-CARD POOL DASHBOARD */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Treasury Pool</p>
-          <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
-          <p className="text-[9px] opacity-70 mt-0.5">Liquid assets</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Available Cash</p>
+          <p className="text-sm font-black mt-1">KES {availableCash.toLocaleString()}</p>
+          <p className="text-[9px] opacity-70 mt-0.5">For Withdrawals</p>
+        </div>
+        <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-md">
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Loan Book</p>
+          <p className="text-sm font-black mt-1">KES {loanBookOutstanding.toLocaleString()}</p>
+          <p className="text-[9px] opacity-70 mt-0.5">Outstanding Loans</p>
         </div>
         <div className="bg-violet-600 p-3 rounded-2xl text-white shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Member Savings</p>
           <p className="text-sm font-black mt-1">KES {totalMemberSavings.toLocaleString()}</p>
           <p className="text-[9px] opacity-70 mt-0.5">{members.length} members</p>
         </div>
-        <div className="bg-amber-600 p-3 rounded-2xl text-slate-950 shadow-md">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Pending Queue</p>
-          <p className="text-sm font-black mt-1">{pendingOnly.length} Requests</p>
-          <p className="text-[9px] opacity-70 mt-0.5">{syncing ? 'syncing…' : 'live'}</p>
-        </div>
         <div className="bg-slate-700 p-3 rounded-2xl text-white shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total System</p>
           <p className="text-sm font-black mt-1">KES {totalSystem.toLocaleString()}</p>
-          <p className="text-[9px] opacity-70 mt-0.5">Pool + Member</p>
+          <p className="text-[9px] opacity-70 mt-0.5">Assets + Liabilities</p>
+        </div>
+        <div className="bg-amber-600 p-3 rounded-2xl text-slate-950 shadow-md col-span-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total Treasury Pool (Cash + Loans)</p>
+          <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
+          <p className="text-[9px] opacity-70 mt-0.5">{pendingOnly.length} pending requests waiting</p>
         </div>
       </div>
 
