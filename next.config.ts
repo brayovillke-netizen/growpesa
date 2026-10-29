@@ -1,15 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // ... keep any existing settings you have here (like cacheComponents: true)
-  
-  // ADD THESE TWO BLOCKS:
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Keep any other settings you had here, like cacheComponents: true
 };
 
 export default nextConfig;
