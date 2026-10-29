@@ -967,33 +967,19 @@ export default function DashboardPage() {
 
   let currentStage = 1;
   let stageName = 'Starter';
-  let nextStageRequirement = '';
 
   if (completedLoans >= 3 && daysActive >= 120) {
     currentStage = 4;
     stageName = 'Established';
-    nextStageRequirement = 'Max Stage Reached';
   } else if (completedLoans >= 2 && daysActive >= 60) {
     currentStage = 3;
     stageName = 'Trusted';
-    const daysLeft = Math.max(0, 120 - daysActive);
-    nextStageRequirement = daysLeft > 0 
-      ? `Repay 1 loan & wait ${daysLeft} days for Stage 4`
-      : `Repay 1 loan to upgrade to Stage 4`;
   } else if (completedLoans >= 1 && daysActive >= 28) {
     currentStage = 2;
     stageName = 'Advanced';
-    const daysLeft = Math.max(0, 60 - daysActive);
-    nextStageRequirement = daysLeft > 0
-      ? `Repay 1 loan & wait ${daysLeft} days for Stage 3`
-      : `Repay 1 loan to upgrade to Stage 3`;
   } else {
     currentStage = 1;
     stageName = 'Starter';
-    const daysLeft = Math.max(0, 28 - daysActive);
-    nextStageRequirement = daysLeft > 0
-      ? `Repay 1 loan & wait ${daysLeft} days for Stage 2`
-      : `Repay 1 loan to upgrade to Stage 2`;
   }
 
   const calculatedMaxLimit = user?.loan_limit || 0;
@@ -1897,18 +1883,14 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* STAGE CARD */}
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner flex justify-between items-center">
+            {/* STAGE CARD - Simplified without Next Upgrade text */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner flex items-center justify-between">
               <div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current Tier</p>
                 <div className="flex items-center gap-2">
                   <span className="text-emerald-400 font-black text-base">Stage {currentStage}</span>
                   <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">{stageName}</span>
                 </div>
-              </div>
-              <div className="text-right border-l border-slate-800 pl-4">
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Next Upgrade</p>
-                <p className="text-slate-200 font-bold text-xs max-w-[140px] leading-tight">{nextStageRequirement}</p>
               </div>
             </div>
 
