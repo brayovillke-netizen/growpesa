@@ -1855,194 +1855,207 @@ export default function DashboardPage() {
 
       {activeTab === 'loans' && (
         <div className="space-y-3">
-          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-4 shadow-lg">
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
+            
+            {/* HEADER */}
             <div className="flex justify-between items-center">
-              <h3 className="font-bold text-sm text-white">TibaPay Loan Engine</h3>
-              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border ${
+              <h3 className="font-black text-lg text-white flex items-center gap-2">
+                <span className="text-emerald-400">💸</span> Loan Engine
+              </h3>
+              <span className={`text-[11px] font-black px-3 py-1.5 rounded-lg border shadow-sm ${
                 calculatedMaxLimit > 0
-                  ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
-                  : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                  ? 'text-sky-300 bg-sky-500/10 border-sky-500/30'
+                  : 'text-rose-300 bg-rose-500/10 border-rose-500/30'
               }`}>
-                Locked Limit: {calculatedMaxLimit > 0 ? formatMoney(calculatedMaxLimit) : 'None'}
+                Limit: {calculatedMaxLimit > 0 ? `KES ${calculatedMaxLimit.toLocaleString()}` : 'Locked'}
               </span>
             </div>
 
-            <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-bold">Current Stage:</span>
-                <span className="text-emerald-400 font-black">Stage {currentStage} ({stageName})</span>
+            {/* STAGE CARD */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner flex justify-between items-center">
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current Tier</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-black text-base">Stage {currentStage}</span>
+                  <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">{stageName}</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Next Upgrade:</span>
-                <span className="text-slate-300 font-medium text-right max-w-[60%]">{nextStageRequirement}</span>
+              <div className="text-right border-l border-slate-800 pl-4">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Next Upgrade</p>
+                <p className="text-slate-200 font-bold text-xs max-w-[140px] leading-tight">{nextStageRequirement}</p>
               </div>
             </div>
 
             {activeLoan ? (
-              <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Loan Reference</p>
-                    <p className="font-black text-sm text-white">{activeLoan.id}</p>
+              <div className="space-y-4">
+                {/* ACTIVE LOAN SUMMARY */}
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Loan Ref</p>
+                      <p className="font-black text-sm text-white">{activeLoan.id}</p>
+                    </div>
+                    <span className={`px-3 py-1 text-[10px] font-black rounded-lg border ${
+                      (activeLoan.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
+                      (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                      'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    }`}>
+                      {activeLoan.status}
+                    </span>
                   </div>
-                  <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
-                    (activeLoan.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
-                    (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                    'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  }`}>
-                    {activeLoan.status}
-                  </span>
+
+                  {/* PROGRESS BAR */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                      <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
+                      <span>Total: <span className="text-white">KES {activeLoan.totalRepay.toLocaleString()}</span></span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, (activeLoan.amountPaid / activeLoan.totalRepay) * 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase font-bold">Requested</p>
+                      <p className="font-bold text-white text-sm mt-0.5">KES {activeLoan.requestedAmount.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase font-bold">Remaining</p>
+                      <p className="font-black text-rose-400 text-sm mt-0.5">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
-                  <div>
-                    <p className="text-[9px] text-slate-400">Principal Requested</p>
-                    <p className="font-bold text-white">{formatMoney(activeLoan.requestedAmount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-400">Total Due / Repay</p>
-                    <p className="font-black text-amber-400">{formatMoney(activeLoan.totalRepay)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-400">Amount Paid</p>
-                    <p className="font-bold text-emerald-400">{formatMoney(activeLoan.amountPaid)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-400">Remaining Balance</p>
-                    <p className="font-black text-rose-400">{formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}</p>
-                  </div>
-                </div>
-
+                {/* REPAYMENT INTERFACE */}
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
-                  <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
-                    Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
+                  <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-xs text-sky-300 text-center font-bold">
+                    Awaiting Treasurer Approval (24 hr).
                   </div>
                 ) : activeLoan.status === 'OVERDUE' ? (
-                  <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-rose-500/30">
-                    <p className="text-xs font-bold text-rose-400">Your limit increase is paused because your repayment is late. Clear the arrears to restore eligibility.</p>
+                  <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-rose-500/40 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
+                    <p className="text-xs font-bold text-rose-400">Limit increase paused. Clear arrears immediately.</p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
                         type="number"
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition"
                         placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
                       />
                     </div>
-                    <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
                       <button
                         onClick={() => setRepayMode('stk')}
-                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
                       >
                         Pay via STK Push
                       </button>
                       <button
                         onClick={() => setRepayMode('sms')}
-                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
                       >
                         Paste SMS
                       </button>
                     </div>
 
                     {repayMode === 'stk' ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
-                          <input
-                            type="text"
-                            value={repayPhoneInput}
-                            onChange={(e) => setRepayPhoneInput(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                            placeholder="0712345678"
-                          />
-                        </div>
+                      <div className="space-y-3 pt-1">
+                        <input
+                          type="text"
+                          value={repayPhoneInput}
+                          onChange={(e) => setRepayPhoneInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-rose-500"
+                          placeholder="M-Pesa Number (0712345678)"
+                        />
                         <button
                           onClick={handleRepaySTK}
                           disabled={loading}
-                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md disabled:opacity-50"
+                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20 disabled:opacity-50"
                         >
-                          {loading ? 'Sending STK Push...' : 'Trigger STK Push'}
+                          {loading ? 'Sending...' : 'Trigger STK Push'}
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-3 pt-1">
                         <textarea
                           value={repaySmsText}
                           onChange={(e) => setRepaySmsText(e.target.value)}
-                          placeholder="Paste M-Pesa confirmation SMS here..."
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 h-20 resize-none"
+                          placeholder="Paste M-Pesa SMS here..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500 h-20 resize-none"
                         />
                         <button
                           onClick={handleRepaySMS}
-                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md"
+                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20"
                         >
-                          Submit SMS to Treasurer
+                          Submit SMS
                         </button>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
-                    <p className="text-xs font-bold text-amber-400">Repay on time to qualify for a second, larger loan.</p>
+                  <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
                         type="number"
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
                         placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
                       />
                     </div>
-                    <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
                       <button
                         onClick={() => setRepayMode('stk')}
-                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
                       >
-                        Pay via STK Push
+                        STK Push
                       </button>
                       <button
                         onClick={() => setRepayMode('sms')}
-                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
                       >
                         Paste SMS
                       </button>
                     </div>
 
                     {repayMode === 'stk' ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
-                          <input
-                            type="text"
-                            value={repayPhoneInput}
-                            onChange={(e) => setRepayPhoneInput(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                            placeholder="0712345678"
-                          />
-                        </div>
+                      <div className="space-y-3 pt-1">
+                        <input
+                          type="text"
+                          value={repayPhoneInput}
+                          onChange={(e) => setRepayPhoneInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                          placeholder="M-Pesa Number (0712345678)"
+                        />
                         <button
                           onClick={handleRepaySTK}
                           disabled={loading}
-                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md disabled:opacity-50"
+                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
                         >
-                          {loading ? 'Sending STK Push...' : 'Trigger STK Push'}
+                          {loading ? 'Sending...' : 'Trigger STK Push'}
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-3 pt-1">
                         <textarea
                           value={repaySmsText}
                           onChange={(e) => setRepaySmsText(e.target.value)}
-                          placeholder="Paste M-Pesa confirmation SMS here..."
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 h-20 resize-none"
+                          placeholder="Paste M-Pesa SMS here..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-20 resize-none"
                         />
                         <button
                           onClick={handleRepaySMS}
-                          className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md"
+                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
                         >
-                          Submit SMS to Treasurer
+                          Submit SMS
                         </button>
                       </div>
                     )}
@@ -2050,36 +2063,35 @@ export default function DashboardPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4 pt-2">
                 {!isEligibleForNewLoan ? (
-                  <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
-                    <p className="text-sm font-bold text-slate-300">Loan Locked</p>
-                    <p className="text-xs text-slate-500 leading-relaxed">
+                  <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
+                    <div className="text-3xl mb-2">🔒</div>
+                    <p className="text-sm font-bold text-slate-200">Loan Locked</p>
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
                       {!hasMinDeposit 
-                        ? `You need to deposit at least KES 400 in total to unlock a starter limit. Currently deposited: KES ${(user?.total_deposited || 0).toLocaleString()}.`
+                        ? `Deposit KES 400 in total to unlock. (Current: KES ${(user?.total_deposited || 0).toLocaleString()})`
                         : daysActive < 28
-                        ? `You must be an active member for 28 days to unlock a starter limit. You have ${daysActive} days.`
-                        : "Your account is under review or you have an active loan."}
+                        ? `You must be an active member for 28 days. (Current: ${daysActive} days)`
+                        : "Account under review or active loan pending."}
                     </p>
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-slate-400">
-                      Your limit is locked at <strong className="text-white">{formatMoney(calculatedMaxLimit)}</strong>. 
-                      Repay loans fully to upgrade your stage and unlock a higher limit.
-                    </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-xl border border-slate-700">KES</span>
+                      <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
                         <input
                           type="number"
                           value={loanAmountInput}
                           onChange={(e) => setLoanAmountInput(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                          className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
+                          placeholder="0"
                         />
                       </div>
                     </div>
+                    
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
                       <div className="grid grid-cols-3 gap-2">
@@ -2091,23 +2103,29 @@ export default function DashboardPage() {
                           <button
                             key={term.weeks}
                             onClick={() => setLoanTermWeeks(term.weeks)}
-                            className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                            className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
                               loanTermWeeks === term.weeks
-                                ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
-                                : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                                : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-300'
                             }`}
                           >
-                            {term.weeks} Week{term.weeks > 1 ? 's' : ''} ({term.rate})
+                            {term.weeks}W <span className="opacity-70 text-[10px]">({term.rate})</span>
                           </button>
                         ))}
                       </div>
                     </div>
+
+                    <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex justify-between items-center mt-2">
+                      <span className="text-xs font-bold text-slate-400">Total Repay:</span>
+                      <span className="text-sm font-black text-emerald-400">KES {totalLoanRepay.toLocaleString()}</span>
+                    </div>
+
                     <button
                       onClick={handleApplyLoan}
                       disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
-                      className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-4"
+                      className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale"
                     >
-                      Submit Loan Request for Admin Review (24 Hr)
+                      Submit Request
                     </button>
                   </>
                 )}
