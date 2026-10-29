@@ -464,7 +464,44 @@ export default function DashboardPage() {
       localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
       const currentLoan = loanRef.current;
-      if (currentLoan) {
+      
+      // AUTO-REBUILD MISSING LOAN FROM LEDGER
+      if (!currentLoan) {
+        const totalBorrowed = serverQueue.filter((i: any) => i.type.includes('Loan Request') && i.status === 'COMPLETED').reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+        const totalRepaid = serverQueue.filter((i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+        
+        if (totalBorrowed > totalRepaid) {
+          const latestLoan = serverQueue.find((i: any) => i.type.includes('Loan Request') && i.status === 'COMPLETED');
+          if (latestLoan) {
+            const reqAmt = Number(latestLoan.amount);
+            const fee = Math.round(reqAmt * 0.05);
+            const gwf = calculateGWF(reqAmt);
+            const interest = Math.round(reqAmt * 0.10); // default 10%
+            const due = new Date(latestLoan.date);
+            due.setDate(due.getDate() + 28); // default 4 weeks
+
+            const rebuilt: ActiveLoan = {
+              id: latestLoan.code,
+              requestedAmount: reqAmt,
+              fee: fee + gwf,
+              gwfFee: gwf,
+              amountSent: reqAmt - fee - gwf,
+              termWeeks: 4,
+              interestRate: 0.10,
+              interestAmount: interest,
+              totalRepay: reqAmt + interest,
+              amountPaid: totalRepaid,
+              status: 'ACTIVE',
+              dueDate: due.toISOString().split('T')[0],
+              phone: currentUser.phone
+            };
+            setActiveLoan(rebuilt);
+            loanRef.current = rebuilt;
+            localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(rebuilt));
+          }
+        }
+      } else {
+        // Normal sync for existing loan
         if (currentLoan.status === 'ACTIVE') {
           const today = new Date().toISOString().split('T')[0];
           if (today > currentLoan.dueDate) {
@@ -939,9 +976,9 @@ export default function DashboardPage() {
   // 2. Repayment Bonus (+5% per 3 loans, max +10%)
   const repaymentBonus = Math.min(Math.floor(completedLoans / 3) * 0.05, 0.10);
   
-  // 3. Base Limit (20%) + Bonuses (Capped at 50%) OR Minimum 2000
+  // 3. Base Limit strictly 20% + Bonuses (Capped at 50%)
   const calculatedPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
-  const calculatedMaxLimit = Math.max(2000, Math.floor(mainPool * calculatedPercentage));
+  const calculatedMaxLimit = Math.floor(mainPool * calculatedPercentage);
 
   const isEligibleForNewLoan = meetsBaseEligibility;
 
@@ -1808,46 +1845,46 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED' ? (
+            {(activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') || hasUnpaidLoan ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Loan Reference</p>
-                    <p className="font-black text-sm text-white">{activeLoan.id}</p>
+                    <p className="font-black text-sm text-white">{activeLoan?.id || 'ACTIVE-LOAN'}</p>
                   </div>
                   <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
-                    activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
-                    activeLoan.status === 'OVERDUE' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                    (activeLoan?.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
+                    (activeLoan?.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                     'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   }`}>
-                    {activeLoan.status}
+                    {activeLoan?.status || 'ACTIVE'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
                   <div>
                     <p className="text-[9px] text-slate-400">Principal Requested</p>
-                    <p className="font-bold text-white">{formatMoney(activeLoan.requestedAmount)}</p>
+                    <p className="font-bold text-white">{formatMoney(activeLoan?.requestedAmount || totalBorrowed)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Total Due / Repay</p>
-                    <p className="font-black text-amber-400">{formatMoney(activeLoan.totalRepay)}</p>
+                    <p className="font-black text-amber-400">{formatMoney(activeLoan?.totalRepay || (totalBorrowed * 1.1))}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Amount Paid</p>
-                    <p className="font-bold text-emerald-400">{formatMoney(activeLoan.amountPaid)}</p>
+                    <p className="font-bold text-emerald-400">{formatMoney(activeLoan?.amountPaid || totalRepaid)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Remaining Balance</p>
-                    <p className="font-black text-rose-400">{formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}</p>
+                    <p className="font-black text-rose-400">{formatMoney((activeLoan?.totalRepay || (totalBorrowed * 1.1)) - (activeLoan?.amountPaid || totalRepaid))}</p>
                   </div>
                 </div>
 
-                {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
+                {activeLoan?.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
                     Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
                   </div>
-                ) : activeLoan.status === 'OVERDUE' ? (
+                ) : activeLoan?.status === 'OVERDUE' ? (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-rose-500/30">
                     <p className="text-xs font-bold text-rose-400">Your limit increase is paused because your repayment is late. Clear the arrears to restore eligibility.</p>
                     <div className="space-y-1.5">
@@ -1911,7 +1948,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                ) : activeLoan.status === 'ACTIVE' ? (
+                ) : (activeLoan?.status === 'ACTIVE' || !activeLoan) ? (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
                     <p className="text-xs font-bold text-amber-400">Repay on time to qualify for a second, larger loan.</p>
                     <div className="space-y-1.5">
@@ -1987,9 +2024,7 @@ export default function DashboardPage() {
                   <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
                     <p className="text-sm font-bold text-slate-300">Loan Locked</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      {hasUnpaidLoan 
-                        ? "You cannot borrow again until this loan is fully repaid and approved by admin."
-                        : "You must be an active member for 4 consecutive weeks and have accumulated KES 400 in savings to unlock a starter limit."}
+                      You must be an active member for 4 consecutive weeks and have accumulated KES 400 in savings to unlock a starter limit.
                     </p>
                   </div>
                 ) : (
