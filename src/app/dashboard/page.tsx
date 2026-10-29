@@ -65,7 +65,7 @@ interface ActiveLoan {
   amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
-  requestedDate?: string;
+  requestedDate?: string; 
   phone?: string;
 }
 
@@ -752,7 +752,7 @@ export default function DashboardPage() {
     };
     saveLedger([item, ...ledger]);
     setMessage(
-      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings.`
+      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings (10% → Treasury: KES ${totalGroupCut.toLocaleString()}).`
     );
   };
 
@@ -944,6 +944,7 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger], item);
+    
     setMessage(`Withdrawal submitted! You will receive KES ${netPayout.toLocaleString()} on your M-Pesa within 24 hours.`);
   };
 
@@ -1488,6 +1489,7 @@ export default function DashboardPage() {
       {activeTab === 'overview' && (
         <div className="space-y-4">
           
+          {/* BALANCE GRID */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
               <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Main Savings</p>
@@ -1512,6 +1514,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* DEPOSIT SECTION */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
             <div className="flex justify-between items-center">
               <h3 className="font-black text-base text-white flex items-center gap-2">
@@ -1560,7 +1563,7 @@ export default function DashboardPage() {
                   {loading ? (
                     <>Processing...</>
                   ) : (
-                    <>Send STK Push</>
+                    <>⚡ Push to Phone</>
                   )}
                 </button>
               </>
@@ -1585,6 +1588,7 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* REFER & EARN SECTION */}
           <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
             <div className="flex justify-between items-start mb-1">
               <div>
@@ -1601,7 +1605,7 @@ export default function DashboardPage() {
               onClick={handleShareReferral}
               className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Share Link</span>
+              <span>↗️ Share Invite</span>
             </button>
 
             <div className="mt-3 text-center">
@@ -1610,26 +1614,27 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* ACTIVITY LEDGER */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex justify-between items-center mb-2">
               <h3 className="font-bold text-sm text-white">Recent Activity</h3>
-              <span className="text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{ledger.length} Records</span>
+              <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{ledger.length} Records</span>
             </div>
             
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
               {ledger.length === 0 ? (
                 <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
               ) : (
                 ledger.map((item) => (
-                  <div key={item.id} className="p-3 rounded-2xl bg-slate-950/50 border border-slate-800/80 space-y-2">
+                  <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-xs text-white">{item.type}</p>
-                        <p className="text-[9px] text-slate-500 font-medium mt-0.5">{item.date} · {item.code}</p>
+                      <div className="max-w-[65%]">
+                        <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
+                        <p className="text-[8px] text-slate-500 font-medium">{item.date} · {item.code}</p>
                       </div>
                       <div className="text-right">
                         <p
-                          className={`font-black text-sm ${
+                          className={`font-black text-[12px] ${
                             item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
                               ? 'text-emerald-400'
                               : 'text-rose-400'
@@ -1639,7 +1644,7 @@ export default function DashboardPage() {
                           {formatMoney(item.amount)}
                         </p>
                         <p
-                          className={`text-[9px] font-bold mt-0.5 ${
+                          className={`text-[8px] font-bold ${
                             item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
                               ? 'text-emerald-500'
                               : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
@@ -1657,30 +1662,30 @@ export default function DashboardPage() {
                     {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
                       <button
                         onClick={() => setActiveSmsInputId(item.id)}
-                        className="w-full py-1.5 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                        className="w-full py-1 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold transition cursor-pointer"
                       >
                         Paste M-Pesa SMS
                       </button>
                     )}
 
                     {activeSmsInputId === item.id && (
-                      <div className="space-y-2 pt-2 border-t border-slate-800 mt-2">
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80 mt-2">
                         <textarea
                           value={pastedSmsText}
                           onChange={(e) => setPastedSmsText(e.target.value)}
                           placeholder="Paste full M-Pesa text here"
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-16 resize-none"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-14 resize-none"
                         />
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleSubmitSmsForApproval(item.id)}
-                            className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                            className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[9px] transition cursor-pointer"
                           >
                             Submit
                           </button>
                           <button
                             onClick={() => setActiveSmsInputId(null)}
-                            className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                            className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[9px] transition cursor-pointer"
                           >
                             Cancel
                           </button>
@@ -1830,6 +1835,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* Glowing Payout Preview */}
             {parsedWithdrawAmt >= 50 && (
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-1 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
@@ -1866,6 +1872,7 @@ export default function DashboardPage() {
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
             
+            {/* HEADER */}
             <div className="flex justify-between items-center">
               <h3 className="font-black text-lg text-white flex items-center gap-2">
                 <span className="text-emerald-400">💸</span> Loan Engine
@@ -1879,6 +1886,7 @@ export default function DashboardPage() {
               </span>
             </div>
 
+            {/* STAGE CARD */}
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner flex justify-between items-center">
               <div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current Tier</p>
@@ -1895,6 +1903,7 @@ export default function DashboardPage() {
 
             {activeLoan ? (
               <div className="space-y-4">
+                {/* ACTIVE LOAN SUMMARY */}
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                     <div>
@@ -1910,6 +1919,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
 
+                  {/* PROGRESS BAR */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[10px] font-bold text-slate-400">
                       <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
@@ -1935,6 +1945,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                {/* REPAYMENT INTERFACE */}
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-xs text-sky-300 text-center font-bold">
                     Awaiting Treasurer Approval (24 hr).
