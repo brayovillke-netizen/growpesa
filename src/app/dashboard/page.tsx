@@ -128,6 +128,9 @@ export default function DashboardPage() {
   // Derived time states
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
+  
+  // Safely calculated 3-week rule state
+  const [has3WeeksSaving, setHas3WeeksSaving] = useState(false);
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
@@ -213,6 +216,28 @@ export default function DashboardPage() {
     setDaysActive(Math.max(0, Math.floor((Date.now() - joinedMs) / 86400000)));
   }, [user]);
 
+  // Calculate 3-Week Consecutive Saving Rule safely inside useEffect
+  useEffect(() => {
+    const recentDeposits = ledger.filter(i => 
+      i.type.includes('Deposit') && 
+      i.status === 'COMPLETED' && 
+      i.amount >= 100
+    );
+    
+    const uniqueWeeks = new Set<number>();
+    const now = new Date().getTime();
+    
+    recentDeposits.forEach(d => {
+      const depTime = new Date(d.date).getTime();
+      const daysAgo = (now - depTime) / (1000 * 3600 * 24);
+      if (daysAgo <= 21) {
+        uniqueWeeks.add(Math.floor(daysAgo / 7));
+      }
+    });
+    
+    setHas3WeeksSaving(uniqueWeeks.size >= 3);
+  }, [ledger]);
+
   // Inactivity Auto-Logout Timer (5 Minutes)
   useEffect(() => {
     if (!user) return;
@@ -220,9 +245,7 @@ export default function DashboardPage() {
     lastActivityRef.current = Date.now();
 
     const interval = setInterval(() => {
-      // 5 minutes = 5 * 60 * 1000 = 300,000 ms
       if (Date.now() - lastActivityRef.current > 300000) {
-        // Log user out completely
         setUser(null);
         setLedger([]);
         setActiveSubscriptions([]);
@@ -232,7 +255,7 @@ export default function DashboardPage() {
         setMessage('You have been logged out due to 5 minutes of inactivity.');
         setAuthMode('login');
       }
-    }, 10000); // Check every 10 seconds
+    }, 10000);
 
     const resetActivity = () => {
       lastActivityRef.current = Date.now();
@@ -369,12 +392,10 @@ export default function DashboardPage() {
     const delta = rounded - mainPool;
     if (delta === 0) return true;
 
-    // Optimistic UI
     setMainPool(rounded);
     localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded));
 
     try {
-      // Primary: RPC (bypasses RLS via SECURITY DEFINER)
       const { data, error } = await supabase.rpc('increment_member_savings', {
         p_phone: user.phone,
         p_delta: delta,
@@ -389,14 +410,12 @@ export default function DashboardPage() {
 
         if (updErr) {
           console.error('Both RPC and direct update failed:', updErr);
-          // Revert optimistic UI
           setMainPool(rounded - delta);
           localStorage.setItem(`tibapay_savings_${user.phone}`, String(rounded - delta));
           setMessage(`Could not save balance: ${updErr.message}`);
           return false;
         }
       } else if (typeof data === 'number') {
-        // Trust the DB's authoritative value
         const dbBal = Math.round(data);
         setMainPool(dbBal);
         localStorage.setItem(`tibapay_savings_${user.phone}`, String(dbBal));
@@ -427,7 +446,6 @@ export default function DashboardPage() {
 
   const syncFromServer = useCallback(async (currentUser: MemberUser) => {
     try {
-      // FETCH AND UPDATE SAVINGS ON EVERY POLL
       const { data: memberData } = await supabase
         .from('members')
         .select('savings_balance, account_status, loan_limit, referrals_rewarded_count, referral_code')
@@ -670,7 +688,6 @@ export default function DashboardPage() {
     localStorage.removeItem('tibapay_auth_user');
   };
 
-  // ---------- SWEEP: SAVINGS FIRST, THEN TREASURY ----------
   const handleSweepSub = async (tierId: number) => {
     const sub = activeSubscriptions.find((s) => s.tierId === tierId);
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
@@ -682,14 +699,12 @@ export default function DashboardPage() {
     const totalGroupCut = Math.round(sub.accumulatedBalance * 0.1);
     const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
 
-    // STEP 1 — Member savings FIRST. Abort if it fails.
     const saved = await updateMainPool(mainPool + totalNetSweep);
     if (!saved) {
       setMessage('Sweep cancelled — could not credit Main Savings. Please try again.');
       return;
     }
 
-    // STEP 2 — Credit treasury (non-fatal; admin can reconcile)
     if (totalGroupCut > 0) {
       try {
         const { data: poolData } = await supabase
@@ -709,7 +724,6 @@ export default function DashboardPage() {
       }
     }
 
-    // STEP 3 — Clear / remove sub
     const todayStrLocal = new Date().toISOString().split('T')[0];
     const isExpired = todayStrLocal >= sub.endDate;
     saveSubs(
@@ -718,7 +732,6 @@ export default function DashboardPage() {
         : activeSubscriptions.map((s) => (s.tierId === tierId ? { ...s, accumulatedBalance: 0 } : s))
     );
 
-    // STEP 4 — Ledger
     const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Tier Sweep (${tier.name})`,
@@ -734,7 +747,6 @@ export default function DashboardPage() {
     );
   };
 
-  // ---------- SUBSCRIBE: AWAIT DEDUCTION ----------
   const handleSubscribeTier = async (tierId: number) => {
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
@@ -926,7 +938,6 @@ export default function DashboardPage() {
   // LOAN RISK MANAGEMENT & ELIGIBILITY CHECKS
   // ==========================================
 
-  // 1. Determine Active Loan via Ledger (Absolute Source of Truth)
   const totalBorrowed = ledger
     .filter(i => i.type.includes('Loan Request') && i.status === 'COMPLETED')
     .reduce((sum, i) => sum + i.amount, 0);
@@ -937,30 +948,9 @@ export default function DashboardPage() {
 
   const hasUnpaidLoan = totalBorrowed > totalRepaid;
 
-  // 2. Determine 3-Week Consecutive Saving Rule
-  const recentDeposits = ledger.filter(i => 
-    i.type.includes('Deposit') && 
-    i.status === 'COMPLETED' && 
-    i.amount >= 100
-  );
-  
-  const uniqueWeeks = new Set();
-  const now = new Date().getTime();
-  recentDeposits.forEach(d => {
-    const depTime = new Date(d.date).getTime();
-    const daysAgo = (now - depTime) / (1000 * 3600 * 24);
-    if (daysAgo <= 21) {
-      // Group by 7-day blocks (0 for this week, 1 for last week, 2 for 2 weeks ago)
-      uniqueWeeks.add(Math.floor(daysAgo / 7));
-    }
-  });
-  const has3WeeksSaving = uniqueWeeks.size >= 3;
-
-  // 3. Loan Stages & Limits
   const hasMinSavings = mainPool >= 100;
   const isAccountActive = user?.account_status === 'active';
   
-  // Calculate Stage
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
   let stageCeiling = 20000;
   let maxTermWeeks = 12;
@@ -978,7 +968,6 @@ export default function DashboardPage() {
 
   const isEligibleForNewLoan = has3WeeksSaving && hasMinSavings && isAccountActive && !hasUnpaidLoan;
 
-  // Loan Calculations
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
   const loanFee = Math.round(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
@@ -1147,7 +1136,6 @@ export default function DashboardPage() {
 
   const packageEarnings = activeSubscriptions.reduce((sum, s) => sum + s.accumulatedBalance, 0);
 
-  // Helper for formatting money
   const formatMoney = (amount: number) => {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
