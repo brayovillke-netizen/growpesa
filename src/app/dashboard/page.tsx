@@ -273,7 +273,12 @@ export default function DashboardPage() {
       try {
         const parsed: ActiveLoan = JSON.parse(savedLoan);
         if (parsed.status !== 'CLOSED' && parsed.status !== 'REJECTED') {
-          setActiveLoan(parsed);
+          // FIX: Prevent flash of fully repaid loans on load
+          if (parsed.amountPaid >= parsed.totalRepay) {
+            localStorage.removeItem(`tibapay_loan_${u.phone}`);
+          } else {
+            setActiveLoan(parsed);
+          }
         }
       } catch {}
     }
@@ -529,7 +534,8 @@ export default function DashboardPage() {
             setActiveLoan(null);
             loanRef.current = null;
             localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
-            setMessage('Congratulations! Your loan is fully repaid. You can now borrow again.');
+            // FIX: Prevent contradictory message
+            setMessage('Congratulations! Your loan is fully repaid.');
           } else if (currentLoan.amountPaid !== totalRepaid) {
             const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
             setActiveLoan(updated);
@@ -1837,7 +1843,6 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* FIX APPLIED HERE: Using activeLoan instead of hasUnpaidLoan to prevent unmounting/flickering */}
             {activeLoan ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
