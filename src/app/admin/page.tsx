@@ -48,7 +48,7 @@ function calculateGWF(amount: number): number {
 
 export default function AdminPage() {
   const [adminUser, setAdminUser] = useState<MemberUser | null>(null);
-  const [mainPool, setMainPool] = useState<number>(6000);
+  const [mainPool, setMainPool] = useState<number>(0);
   const [queue, setQueue] = useState<LedgerItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>('queue');
