@@ -944,7 +944,8 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger], item);
-    setMessage(`Withdrawal of KES ${grossAmt.toLocaleString()} submitted (GWF: KES ${gwfFee}, Net: KES ${netPayout.toLocaleString()}).`);
+    
+    setMessage(`Withdrawal submitted! You will receive KES ${netPayout.toLocaleString()} on your M-Pesa within 24 hours.`);
   };
 
   const totalBorrowed = ledger
@@ -1810,45 +1811,59 @@ export default function DashboardPage() {
 
       {activeTab === 'withdraw' && (
         <div className="space-y-3">
-          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
-            <h3 className="font-bold text-sm text-white">Graduated Withdrawal (GWF v6)</h3>
-            <p className="text-xs text-slate-400">
-              Available Savings Balance: <strong className="text-emerald-400">{formatMoney(mainPool)}</strong>
-            </p>
-            <div className="space-y-1.5 pt-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Withdrawal Amount (Min KSh 50)</label>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-xl border border-slate-700">KES</span>
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-5 shadow-2xl backdrop-blur-sm">
+            
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="font-black text-lg text-white flex items-center gap-2">
+                <span className="text-emerald-400">🏦</span> Withdraw
+              </h3>
+              <span className="text-[11px] font-black px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 shadow-sm">
+                Bal: {formatMoney(mainPool)}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Withdraw (Min KES 50)</label>
+              <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
                 <input
                   type="number"
                   value={withdrawAmountInput}
                   onChange={(e) => setWithdrawAmountInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                  placeholder="Enter amount"
+                  className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
+                  placeholder="0"
                 />
               </div>
             </div>
-            <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Gross Withdrawal:</span>
-                <span className="font-bold text-white">{formatMoney(parsedWithdrawAmt)}</span>
+
+            {parsedWithdrawAmt >= 50 && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-1 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">You Will Receive</p>
+                <p className="text-2xl font-black text-white drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]">
+                  {formatMoney(currentNetPayout)}
+                </p>
+                <p className="text-[9px] text-slate-400">Direct to M-Pesa</p>
               </div>
-              <div className="flex justify-between">
-                <span className="text-rose-400">GWF Fee Deduction:</span>
-                <span className="font-bold text-rose-400">-{formatMoney(currentGWFFee)}</span>
-              </div>
-              <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
-                <span className="font-bold text-emerald-400">Net to M-Pesa:</span>
-                <span className="text-sm font-black text-emerald-400">{formatMoney(currentNetPayout)}</span>
-              </div>
-            </div>
+            )}
+
             <button
               onClick={handleWithdraw}
-              disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || hasUnpaidLoan}
-              className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-2"
+              disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || parsedWithdrawAmt > mainPool || hasUnpaidLoan}
+              className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2"
             >
-              {hasUnpaidLoan ? 'Cannot Withdraw (Active Loan)' : 'Request M-Pesa Payout (24 Hr Review)'}
+              {hasUnpaidLoan ? (
+                <>🚫 Active Loan</>
+              ) : loading ? (
+                <>Processing...</>
+              ) : (
+                <>Request Payout</>
+              )}
             </button>
+            
+            <p className="text-center text-[9px] text-slate-500 font-medium">
+              Funds are typically disbursed within 24 hours.
+            </p>
           </div>
         </div>
       )}
@@ -1857,7 +1872,6 @@ export default function DashboardPage() {
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
             
-            {/* HEADER */}
             <div className="flex justify-between items-center">
               <h3 className="font-black text-lg text-white flex items-center gap-2">
                 <span className="text-emerald-400">💸</span> Loan Engine
@@ -1871,7 +1885,6 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* STAGE CARD */}
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner flex justify-between items-center">
               <div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current Tier</p>
@@ -1888,7 +1901,6 @@ export default function DashboardPage() {
 
             {activeLoan ? (
               <div className="space-y-4">
-                {/* ACTIVE LOAN SUMMARY */}
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                     <div>
@@ -1897,14 +1909,13 @@ export default function DashboardPage() {
                     </div>
                     <span className={`px-3 py-1 text-[10px] font-black rounded-lg border ${
                       (activeLoan.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
-                      (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                      (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
                       'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                     }`}>
                       {activeLoan.status}
                     </span>
                   </div>
 
-                  {/* PROGRESS BAR */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[10px] font-bold text-slate-400">
                       <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
@@ -1930,7 +1941,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* REPAYMENT INTERFACE */}
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-xs text-sky-300 text-center font-bold">
                     Awaiting Treasurer Approval (24 hr).
