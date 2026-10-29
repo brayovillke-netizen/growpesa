@@ -101,7 +101,6 @@ export default function DashboardPage() {
   const [user, setUser] = useState<MemberUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
-  // Auth Form States
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPin, setLoginPin] = useState('');
   const [regName, setRegName] = useState('');
@@ -112,7 +111,6 @@ export default function DashboardPage() {
   const [regIsAdult, setRegIsAdult] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // PIN Visibility States
   const [showLoginPin, setShowLoginPin] = useState(false);
   const [showRegPin, setShowRegPin] = useState(false);
   const [showConfirmPin, setShowConfirmPin] = useState(false);
@@ -120,17 +118,11 @@ export default function DashboardPage() {
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
-  // Privacy Toggle
   const [hideBalances, setHideBalances] = useState(false);
-
-  // Inactivity Tracker
   const lastActivityRef = useRef(0);
-
-  // Derived time states
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
 
-  // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
   const [mainPool, setMainPool] = useState<number>(0);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
@@ -139,7 +131,6 @@ export default function DashboardPage() {
   const [loanAmountInput, setLoanAmountInput] = useState('1000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
 
-  // Repayment States
   const [repayPhoneInput, setRepayPhoneInput] = useState('');
   const [repayAmountInput, setRepayAmountInput] = useState('');
   const [repayMode, setRepayMode] = useState<'stk' | 'sms'>('stk');
@@ -164,7 +155,6 @@ export default function DashboardPage() {
     loanRef.current = activeLoan;
   }, [activeLoan]);
 
-  // Check URL for referral code on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
@@ -174,7 +164,6 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Session restore on mount
   useEffect(() => {
     const saved = localStorage.getItem('tibapay_auth_user');
     if (!saved) return;
@@ -187,12 +176,9 @@ export default function DashboardPage() {
       setUser(parsed);
       setPhoneInput(parsed.phone);
       lastActivityRef.current = Date.now();
-    } catch {
-      /* ignore corrupt auth blob */
-    }
+    } catch {}
   }, []);
 
-  // todayStr refresh (rolls over at midnight)
   useEffect(() => {
     const update = () => setTodayStr(new Date().toISOString().split('T')[0]);
     update();
@@ -200,7 +186,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // daysActive derived from user.joined_at
   useEffect(() => {
     if (!user?.joined_at) {
       setDaysActive(0);
@@ -214,7 +199,6 @@ export default function DashboardPage() {
     setDaysActive(Math.max(0, Math.floor((Date.now() - joinedMs) / 86400000)));
   }, [user]);
 
-  // Inactivity Auto-Logout Timer (5 Minutes)
   useEffect(() => {
     if (!user) return;
 
@@ -274,11 +258,16 @@ export default function DashboardPage() {
       try {
         const parsed: ActiveLoan = JSON.parse(savedLoan);
         if (parsed.status !== 'CLOSED' && parsed.status !== 'REJECTED') {
-          // FIX: Prevent ghost loans from flashing on screen if they are fully paid
           if (parsed.amountPaid >= parsed.totalRepay) {
             localStorage.removeItem(`tibapay_loan_${u.phone}`);
           } else {
-            setActiveLoan(parsed);
+            // Only update state if the data is actually different to prevent unnecessary re-renders
+            setActiveLoan(prev => {
+              if (prev && prev.id === parsed.id && prev.amountPaid === parsed.amountPaid && prev.status === parsed.status) {
+                return prev;
+              }
+              return parsed;
+            });
           }
         }
       } catch {}
@@ -318,7 +307,6 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  // ---------- AUTO DAILY ACCRUAL ----------
   useEffect(() => {
     if (!user || activeSubscriptions.length === 0) return;
 
@@ -359,7 +347,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [user, activeSubscriptions]);
 
-  // ---------- RPC-FIRST SAVINGS UPDATE ----------
   const updateMainPool = async (newPoolAmount: number): Promise<boolean> => {
     if (!user) return false;
     const rounded = Math.round(newPoolAmount);
@@ -465,7 +452,6 @@ export default function DashboardPage() {
 
       const currentLoan = loanRef.current;
 
-      // AUTO-REBUILD MISSING LOAN FROM LEDGER
       if (!currentLoan) {
         const totalBorrowed = serverQueue.filter((i: any) => i.type.includes('Loan Request') && i.status === 'COMPLETED').reduce((sum: number, item: any) => sum + Number(item.amount), 0);
         const totalRepaid = serverQueue.filter((i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').reduce((sum: number, item: any) => sum + Number(item.amount), 0);
@@ -501,7 +487,6 @@ export default function DashboardPage() {
           }
         }
       } else {
-        // Normal sync for existing loan
         if (currentLoan.status === 'ACTIVE') {
           const today = new Date().toISOString().split('T')[0];
           if (today > currentLoan.dueDate) {
@@ -527,18 +512,22 @@ export default function DashboardPage() {
         }
 
         if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE') {
-          const approvedRepayments = serverQueue.filter(
-            (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
-          );
-          const totalRepaid = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+          // THE CRITICAL FIX: Only look at repayments made AFTER this specific loan was requested.
+          const loanRequestItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
+          const loanStartDate = loanRequestItem ? loanRequestItem.date : '1970-01-01';
 
-          if (totalRepaid >= currentLoan.totalRepay) {
+          const approvedRepayments = serverQueue.filter(
+            (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED' && i.date >= loanStartDate
+          );
+          const totalRepaidForThisLoan = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+
+          if (totalRepaidForThisLoan >= currentLoan.totalRepay) {
             setActiveLoan(null);
             loanRef.current = null;
             localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
             setMessage('Congratulations! Your loan is fully repaid.');
-          } else if (currentLoan.amountPaid !== totalRepaid) {
-            const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
+          } else if (currentLoan.amountPaid !== totalRepaidForThisLoan) {
+            const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaidForThisLoan };
             setActiveLoan(updated);
             loanRef.current = updated;
             localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(updated));
@@ -949,10 +938,6 @@ export default function DashboardPage() {
     setMessage(`Withdrawal of KES ${grossAmt.toLocaleString()} submitted (GWF: KES ${gwfFee}, Net: KES ${netPayout.toLocaleString()}).`);
   };
 
-  // ==========================================
-  // LOAN RISK MANAGEMENT & STAGE LOGIC
-  // ==========================================
-
   const totalBorrowed = ledger
     .filter(i => i.type.includes('Loan Request') && i.status === 'COMPLETED')
     .reduce((sum, i) => sum + i.amount, 0);
@@ -970,7 +955,6 @@ export default function DashboardPage() {
 
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
 
-  // STAGE CALCULATION & TEXT (Fixes "wait 0 days" bug)
   let currentStage = 1;
   let stageName = 'Starter';
   let nextStageRequirement = '';
@@ -1006,8 +990,7 @@ export default function DashboardPage() {
   const isEligibleForNewLoan = meetsBaseEligibility;
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
-  
-  // Used silently for calculations & notifications
+
   const baseLoanFee = Math.round(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
   const totalFee = baseLoanFee + loanGwfFee;
@@ -1076,7 +1059,6 @@ export default function DashboardPage() {
     };
     saveLedger([item, ...ledger], item);
     
-    // Fee breakdown moved to notification
     setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. A total fee of KES ${totalFee.toLocaleString()} (5% + GWF) will be deducted. You will receive KES ${amountSentToMpesa.toLocaleString()} upon approval.`);
     setRepayAmountInput('');
   };
@@ -1874,7 +1856,6 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* STAGE DISPLAY */}
             <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs space-y-1">
               <div className="flex justify-between items-center">
                 <span className="text-slate-400 font-bold">Current Stage:</span>
@@ -1931,6 +1912,7 @@ export default function DashboardPage() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
+                        key={`repay-input-overdue-${activeLoan.id}`}
                         type="number"
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
@@ -1996,6 +1978,7 @@ export default function DashboardPage() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
+                        key={`repay-input-active-${activeLoan.id}`}
                         type="number"
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
@@ -2110,8 +2093,6 @@ export default function DashboardPage() {
                         ))}
                       </div>
                     </div>
-                    {/* FEE BREAKDOWN HAS BEEN REMOVED FROM HERE */}
-                    
                     <button
                       onClick={handleApplyLoan}
                       disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
