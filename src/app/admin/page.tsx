@@ -69,6 +69,18 @@ export default function AdminPage() {
   // Collapsible Queue State
   const [isQueueExpanded, setIsQueueExpanded] = useState<boolean>(false);
 
+  const sendPushNotification = async (phone: string, title: string, body: string) => {
+    try {
+      await fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, title, body }),
+      });
+    } catch (err) {
+      console.error('Failed to trigger push', err);
+    }
+  };
+
   const fetchQueue = useCallback(async () => {
     try {
       setSyncing(true);
@@ -286,6 +298,31 @@ export default function AdminPage() {
         }
       }
 
+      // TRIGGER PUSH NOTIFICATION
+      if (item.phone) {
+        let pushTitle = '';
+        let pushBody = '';
+        
+        if (item.type.includes('Deposit')) {
+          pushTitle = 'Deposit Approved 🎉';
+          pushBody = `KES ${amt.toLocaleString()} has been added to your savings.`;
+        } else if (item.type.includes('Withdrawal')) {
+          const gwf = calculateGWF(amt);
+          const net = amt - gwf;
+          pushTitle = 'Withdrawal Sent 💸';
+          pushBody = `KES ${net.toLocaleString()} is on its way to your M-Pesa.`;
+        } else if (item.type.includes('Loan Request')) {
+          const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+          const net = amt - fees;
+          pushTitle = 'Loan Approved 🏦';
+          pushBody = `KES ${net.toLocaleString()} has been sent to your M-Pesa.`;
+        }
+
+        if (pushTitle) {
+          await sendPushNotification(item.phone, pushTitle, pushBody);
+        }
+      }
+
       await fetchQueue();
       if (activeAdminTab === 'members') await fetchMembers();
       setMessage(`Approved ${item.code}`);
@@ -302,6 +339,15 @@ export default function AdminPage() {
         .eq('id', String(item.id));
 
       if (error) throw error;
+
+      // TRIGGER PUSH NOTIFICATION
+      if (item.phone) {
+        await sendPushNotification(
+          item.phone, 
+          'Request Rejected ❌', 
+          `Your ${item.type} request was not approved.`
+        );
+      }
 
       await fetchQueue();
       setMessage(`Rejected ${item.code}`);
