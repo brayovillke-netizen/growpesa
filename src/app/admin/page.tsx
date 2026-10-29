@@ -66,6 +66,9 @@ export default function AdminPage() {
   // Privacy Toggle
   const [hideBalances, setHideBalances] = useState<boolean>(false);
 
+  // Collapsible Queue State
+  const [isQueueExpanded, setIsQueueExpanded] = useState<boolean>(false);
+
   const fetchQueue = useCallback(async () => {
     try {
       setSyncing(true);
@@ -502,8 +505,16 @@ export default function AdminPage() {
 
       {activeAdminTab === 'queue' && (
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
+          
+          {/* HEADER WITH EXPAND/COLLAPSE TOGGLE */}
           <div className="flex justify-between items-center">
-            <h3 className="font-bold text-sm text-white">Review Queue</h3>
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsQueueExpanded(!isQueueExpanded)}>
+              <h3 className="font-bold text-sm text-white">Review Queue {!isQueueExpanded && `(${pendingOnly.length})`}</h3>
+              <span className="text-xs text-amber-400">
+                {isQueueExpanded ? '▲' : '▼'}
+              </span>
+            </div>
+            
             <div className="flex gap-3">
               <button
                 onClick={downloadSystemCSV}
@@ -520,159 +531,170 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[10px] font-bold text-center">
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'deposits', label: 'Deposits' },
-              { key: 'withdrawals', label: 'Withdraw' },
-              { key: 'loans', label: 'Loans' },
-            ].map((tab) => (
+          {/* IF COLLAPSED: Show summary button */}
+          {!isQueueExpanded ? (
+            <div className="py-6 flex flex-col items-center justify-center space-y-3 bg-slate-950/50 rounded-xl border border-slate-800">
+              <span className="text-3xl">📋</span>
+              <p className="text-[11px] font-medium text-slate-400 text-center px-4">
+                You have <strong className="text-amber-400">{pendingOnly.length} pending requests</strong> waiting for review.
+              </p>
               <button
-                key={tab.key}
-                onClick={() => setActiveFilter(tab.key as FilterTab)}
-                className={`py-1.5 rounded-lg transition cursor-pointer ${
-                  activeFilter === tab.key
-                    ? 'bg-amber-500 text-slate-950 shadow'
-                    : 'text-slate-400 hover:text-white'
-                }`}
+                onClick={() => setIsQueueExpanded(true)}
+                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition mt-2"
               >
-                {tab.label}
+                Open Review Queue
               </button>
-            ))}
-          </div>
-
-          <div className="space-y-4 pt-2 max-h-[520px] overflow-y-auto pr-1">
-            {filteredQueue.length === 0 ? (
-              <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500">
-                No pending transactions for "{activeFilter}".
-              </div>
-            ) : (
-              filteredQueue.map((item) => {
-                const awaitingPin = item.status === 'PENDING PIN';
-                const isDeposit = item.type.includes('Deposit');
-                const isWithdrawal = item.type.includes('Withdrawal');
-                const isLoan = item.type.includes('Loan Request');
-                
-                const amt = Math.round(Number(item.amount));
-                
-                // Calculate specific amounts
-                const gwfFee = isWithdrawal ? calculateGWF(amt) : 0;
-                const netPayout = isWithdrawal ? amt - gwfFee : amt;
-                
-                const loanFees = Math.round(amt * 0.05) + calculateGWF(amt);
-                const netToSend = isLoan ? Math.max(0, amt - loanFees) : netPayout;
-
-                // Auto-extract M-Pesa code for deposits
-                const smsText = item.smsMessage || item.sms_message || '';
-                const detectedCode = isDeposit ? extractMpesaCode(smsText) : null;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`rounded-3xl bg-slate-950 border p-4 space-y-3 shadow-xl relative overflow-hidden ${
-                      isDeposit ? 'border-emerald-500/30' : 
-                      isWithdrawal ? 'border-amber-500/30' : 
-                      'border-blue-500/30'
+            </div>
+          ) : (
+            // IF EXPANDED: Show filters and items
+            <>
+              <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[10px] font-bold text-center mt-2">
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'deposits', label: 'Deposits' },
+                  { key: 'withdrawals', label: 'Withdraw' },
+                  { key: 'loans', label: 'Loans' },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveFilter(tab.key as FilterTab)}
+                    className={`py-1.5 rounded-lg transition cursor-pointer ${
+                      activeFilter === tab.key
+                        ? 'bg-amber-500 text-slate-950 shadow'
+                        : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    {/* HEADER BADGE */}
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                          isDeposit ? 'bg-emerald-500/20 text-emerald-300' : 
-                          isWithdrawal ? 'bg-amber-500/20 text-amber-300' : 
-                          'bg-blue-500/20 text-blue-300'
-                        }`}>
-                          {item.type}
-                        </span>
-                        <p className="text-[10px] text-slate-400 mt-1 font-medium">{item.date} • Ref: {item.code}</p>
-                      </div>
-                      
-                      {/* HUGE PHONE NUMBER */}
-                      <div className="text-right">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Phone Number</p>
-                        <p className="text-sm font-black font-mono text-white tracking-widest bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                          {item.phone || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
-                    {/* BODY - DIFFERENT FOR DEPOSITS VS WITHDRAWALS/LOANS */}
-                    {isDeposit ? (
-                      // ================= DEPOSIT UI =================
-                      <div className="space-y-2 mt-2">
-                        <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
-                          <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Pasted SMS</p>
-                          <p className="text-xs text-slate-300 font-mono leading-relaxed break-words">
-                            "{smsText || 'No message pasted'}"
-                          </p>
-                          {detectedCode && (
-                            <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center">
-                              <span className="text-[10px] text-emerald-400 font-bold">Auto-Extracted Code:</span>
-                              <span className="text-xs font-black text-white bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">
-                                {detectedCode}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex justify-between items-center bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
-                          <span className="text-[10px] text-emerald-400 font-bold uppercase">Amount to Credit</span>
-                          <span className="text-xl font-black text-emerald-400">{formatMoney(amt)}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      // ================= WITHDRAWAL / LOAN UI =================
-                      <div className="space-y-2 mt-2">
-                        <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+              <div className="space-y-4 pt-2 max-h-[520px] overflow-y-auto pr-1">
+                {filteredQueue.length === 0 ? (
+                  <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500">
+                    No pending transactions for "{activeFilter}".
+                  </div>
+                ) : (
+                  filteredQueue.map((item) => {
+                    const awaitingPin = item.status === 'PENDING PIN';
+                    const isDeposit = item.type.includes('Deposit');
+                    const isWithdrawal = item.type.includes('Withdrawal');
+                    const isLoan = item.type.includes('Loan Request');
+                    
+                    const amt = Math.round(Number(item.amount));
+                    
+                    const gwfFee = isWithdrawal ? calculateGWF(amt) : 0;
+                    const netPayout = isWithdrawal ? amt - gwfFee : amt;
+                    
+                    const loanFees = Math.round(amt * 0.05) + calculateGWF(amt);
+                    const netToSend = isLoan ? Math.max(0, amt - loanFees) : netPayout;
+
+                    const smsText = item.smsMessage || item.sms_message || '';
+                    const detectedCode = isDeposit ? extractMpesaCode(smsText) : null;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`rounded-3xl bg-slate-950 border p-4 space-y-3 shadow-xl relative overflow-hidden ${
+                          isDeposit ? 'border-emerald-500/30' : 
+                          isWithdrawal ? 'border-amber-500/30' : 
+                          'border-blue-500/30'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
                           <div>
-                            <p className="text-[9px] text-slate-500 font-bold uppercase">Requested Amount</p>
-                            <p className="text-sm font-bold text-slate-400 line-through">{formatMoney(amt)}</p>
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                              isDeposit ? 'bg-emerald-500/20 text-emerald-300' : 
+                              isWithdrawal ? 'bg-amber-500/20 text-amber-300' : 
+                              'bg-blue-500/20 text-blue-300'
+                            }`}>
+                              {item.type}
+                            </span>
+                            <p className="text-[10px] text-slate-400 mt-1 font-medium">{item.date} • Ref: {item.code}</p>
                           </div>
+                          
                           <div className="text-right">
-                            <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">Amount to Send</p>
-                            <p className="text-2xl font-black text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">
-                              {formatMoney(netToSend)}
+                            <p className="text-[9px] text-slate-500 uppercase font-bold">Phone Number</p>
+                            <p className="text-sm font-black font-mono text-white tracking-widest bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                              {item.phone || 'N/A'}
                             </p>
                           </div>
                         </div>
-                        {isWithdrawal && (
-                          <div className="text-[9px] text-slate-500 text-center bg-slate-900 py-1 rounded-lg">
-                            Deduct <strong className="text-white">{formatMoney(amt)}</strong> from Member Savings. (GWF Fee: {formatMoney(gwfFee)})
-                          </div>
-                        )}
-                        {isLoan && (
-                          <div className="text-[9px] text-slate-500 text-center bg-slate-900 py-1 rounded-lg">
-                            Send to M-Pesa. (Fees deducted: {formatMoney(loanFees)})
-                          </div>
-                        )}
-                      </div>
-                    )}
 
-                    {/* ACTIONS */}
-                    <div className="grid grid-cols-2 gap-2 pt-2">
-                      <button
-                        onClick={() => handleApprove(item)}
-                        disabled={awaitingPin}
-                        className={`py-2.5 font-black rounded-xl text-xs transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed ${
-                          isDeposit ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' :
-                          isWithdrawal ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' :
-                          'bg-blue-500 hover:bg-blue-400 text-white'
-                        }`}
-                      >
-                        {awaitingPin ? 'Awaiting PIN' : 'Approve'}
-                      </button>
-                      <button
-                        onClick={() => handleReject(item)}
-                        className="py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 font-bold rounded-xl text-xs transition disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                        {isDeposit ? (
+                          <div className="space-y-2 mt-2">
+                            <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                              <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Pasted SMS</p>
+                              <p className="text-xs text-slate-300 font-mono leading-relaxed break-words">
+                                "{smsText || 'No message pasted'}"
+                              </p>
+                              {detectedCode && (
+                                <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center">
+                                  <span className="text-[10px] text-emerald-400 font-bold">Auto-Extracted Code:</span>
+                                  <span className="text-xs font-black text-white bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">
+                                    {detectedCode}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+                              <span className="text-[10px] text-emerald-400 font-bold uppercase">Amount to Credit</span>
+                              <span className="text-xl font-black text-emerald-400">{formatMoney(amt)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 mt-2">
+                            <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+                              <div>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase">Requested Amount</p>
+                                <p className="text-sm font-bold text-slate-400 line-through">{formatMoney(amt)}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">Amount to Send</p>
+                                <p className="text-2xl font-black text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">
+                                  {formatMoney(netToSend)}
+                                </p>
+                              </div>
+                            </div>
+                            {isWithdrawal && (
+                              <div className="text-[9px] text-slate-500 text-center bg-slate-900 py-1 rounded-lg">
+                                Deduct <strong className="text-white">{formatMoney(amt)}</strong> from Member Savings. (GWF Fee: {formatMoney(gwfFee)})
+                              </div>
+                            )}
+                            {isLoan && (
+                              <div className="text-[9px] text-slate-500 text-center bg-slate-900 py-1 rounded-lg">
+                                Send to M-Pesa. (Fees deducted: {formatMoney(loanFees)})
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <button
+                            onClick={() => handleApprove(item)}
+                            disabled={awaitingPin}
+                            className={`py-2.5 font-black rounded-xl text-xs transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed ${
+                              isDeposit ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' :
+                              isWithdrawal ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' :
+                              'bg-blue-500 hover:bg-blue-400 text-white'
+                            }`}
+                          >
+                            {awaitingPin ? 'Awaiting PIN' : 'Approve'}
+                          </button>
+                          <button
+                            onClick={() => handleReject(item)}
+                            className="py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 font-bold rounded-xl text-xs transition disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
