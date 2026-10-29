@@ -1821,7 +1821,9 @@ export default function DashboardPage() {
                   ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                   : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}>
-                Max Limit: {isEligibleForNewLoan ? formatMoney(calculatedMaxLimit) : 'Locked'}
+                Max Limit: {isEligibleForNewLoan 
+                  ? (completedLoans === 0 ? 'up to KES 20,000' : formatMoney(calculatedMaxLimit)) 
+                  : 'Locked'}
               </span>
             </div>
 
@@ -2013,7 +2015,7 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <p className="text-xs text-slate-400">
-                      Good news! You have unlocked a starter loan limit of up to <strong className="text-white">{formatMoney(calculatedMaxLimit)}</strong>. Apply in the app; admin approval required.
+                      Good news! You have unlocked a starter loan of up to <strong className="text-white">KES 20,000</strong> after 3 weeks of regular saving. Apply in the app; admin approval required.
                     </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
@@ -2026,6 +2028,10 @@ export default function DashboardPage() {
                           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
                         />
                       </div>
+                      {/* Subtle text showing the real math */}
+                      <p className="text-[9px] text-slate-500 text-right mt-1">
+                        Based on your savings, your current auto-approved limit is {formatMoney(calculatedMaxLimit)}.
+                      </p>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
