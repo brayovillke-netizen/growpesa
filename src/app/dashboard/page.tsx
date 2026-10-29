@@ -252,7 +252,7 @@ export default function DashboardPage() {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
 
-  // Fix: Ensure input clears properly when loan is fully paid
+  // FIX: Ensure input clears properly when loan is fully paid
   useEffect(() => {
     if (activeLoan && (activeLoan.status === 'ACTIVE' || activeLoan.status === 'OVERDUE')) {
       const remaining = Math.round(activeLoan.totalRepay - activeLoan.amountPaid);
@@ -1852,7 +1852,7 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {(activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') || hasUnpaidLoan ? (
+            {(activeLoan?.status === 'PENDING ADMIN APPROVAL') || hasUnpaidLoan ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
                   <div>
@@ -1955,7 +1955,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                ) : (activeLoan?.status === 'ACTIVE' || !activeLoan) ? (
+                ) : (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
                     <p className="text-xs font-bold text-amber-400">Repay on time to qualify for a second, larger loan.</p>
                     <div className="space-y-1.5">
@@ -2018,10 +2018,6 @@ export default function DashboardPage() {
                         </button>
                       </div>
                     )}
-                  </div>
-                ) : (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 text-center font-medium">
-                    Congratulations! You repaid on time. You now qualify for review for a second, larger loan. Keep saving to grow your limit.
                   </div>
                 )}
               </div>
