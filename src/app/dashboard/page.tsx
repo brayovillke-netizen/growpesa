@@ -247,6 +247,14 @@ export default function DashboardPage() {
     const savedSavings = localStorage.getItem(`tibapay_savings_${u.phone}`);
     if (savedSavings) setMainPool(Math.round(Number(savedSavings)) || 0);
 
+    const savedSubs = localStorage.getItem(`tibapay_subs_${u.phone}`);
+    if (savedSubs) {
+      try {
+        const parsed: ActiveSubscription[] = JSON.parse(savedSubs);
+        setActiveSubscriptions(parsed);
+      } catch {}
+    }
+
     const savedLoan = localStorage.getItem(`tibapay_loan_${u.phone}`);
     if (savedLoan) {
       try {
@@ -403,7 +411,7 @@ export default function DashboardPage() {
       localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
       // ==========================================
-      // NEW: REBUILD ACTIVE PACKAGES FROM LEDGER
+      // REBUILD ACTIVE PACKAGES FROM LEDGER
       // ==========================================
       const rebuiltSubs: ActiveSubscription[] = [];
       const today = new Date().toISOString().split('T')[0];
@@ -726,7 +734,11 @@ export default function DashboardPage() {
 
     const todayStrLocal = new Date().toISOString().split('T')[0];
     
-    // Save the sweep to the ledger. The sync will automatically remove it from active packages.
+    // Instantly remove it locally
+    const nextSubs = activeSubscriptions.filter(s => s.tierId !== tierId);
+    setActiveSubscriptions(nextSubs);
+    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(nextSubs));
+
     const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Tier Sweep (${tier.name})`,
@@ -757,8 +769,24 @@ export default function DashboardPage() {
     }
 
     const startDate = new Date().toISOString().split('T')[0];
+    const end = new Date();
+    end.setDate(end.getDate() + tier.lockDays);
+    const endDate = end.toISOString().split('T')[0];
     
-    // Save the package entry to the ledger. The sync will automatically recognize it as active.
+    const newSub: ActiveSubscription = {
+      tierId: tier.id,
+      accumulatedBalance: 0,
+      startDate,
+      endDate,
+      isLocked: true,
+      lastAccrualDate: startDate,
+    };
+
+    // Instantly update the UI so the user sees it immediately
+    const nextSubs = [...activeSubscriptions, newSub];
+    setActiveSubscriptions(nextSubs);
+    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(nextSubs));
+
     const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Package Entry (${tier.name})`,
