@@ -65,7 +65,7 @@ interface ActiveLoan {
   amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
-  requestedDate?: string; 
+  requestedDate?: string;
   phone?: string;
 }
 
@@ -752,7 +752,7 @@ export default function DashboardPage() {
     };
     saveLedger([item, ...ledger]);
     setMessage(
-      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings (10% → Treasury: KES ${totalGroupCut.toLocaleString()}).`
+      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings.`
     );
   };
 
@@ -944,7 +944,6 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger], item);
-    
     setMessage(`Withdrawal submitted! You will receive KES ${netPayout.toLocaleString()} on your M-Pesa within 24 hours.`);
   };
 
@@ -1488,214 +1487,209 @@ export default function DashboardPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Main Savings Pool</p>
-              <p className="text-sm font-black mt-1">{formatMoney(mainPool)}</p>
-              <p className="text-[9px] opacity-70 mt-0.5">Withdrawable</p>
+          
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Main Savings</p>
+              <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
             </div>
-            <div className="bg-violet-600 p-3 rounded-2xl text-white shadow-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Package Earnings</p>
-              <p className="text-sm font-black mt-1">{formatMoney(packageEarnings)}</p>
-              <p className="text-[9px] opacity-70 mt-0.5">Sweep anytime</p>
+            
+            <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
+              <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
             </div>
-            <div className="bg-sky-600 p-3 rounded-2xl text-white shadow-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Active Subs</p>
-              <p className="text-sm font-black mt-1">{activeSubscriptions.length} Tiers</p>
+            
+            <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
+              <p className="text-xl font-black mt-1">
+                {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
+              </p>
             </div>
-            <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Loan Status</p>
-              <p className="text-sm font-black mt-1">{hasUnpaidLoan ? 'Active Loan' : 'No Loan'}</p>
+            
+            <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
+              <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
             </div>
           </div>
 
-          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
             <div className="flex justify-between items-center">
-              <h3 className="font-bold text-sm text-white">Weekly Contribution (Deposit)</h3>
+              <h3 className="font-black text-base text-white flex items-center gap-2">
+                <span className="text-emerald-400">💵</span> Deposit Funds
+              </h3>
               <button
                 onClick={() => setShowManualDeposit(!showManualDeposit)}
-                className="text-[10px] text-emerald-400 font-bold underline cursor-pointer"
+                className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition cursor-pointer"
               >
-                {showManualDeposit ? 'Use STK Push' : 'Paste SMS Directly'}
+                {showManualDeposit ? 'Use STK Push' : 'Paste SMS'}
               </button>
             </div>
 
             {!showManualDeposit ? (
               <>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
-                  <input
-                    type="text"
-                    value={phoneInput}
-                    onChange={(e) => setPhoneInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                    placeholder="0712345678"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount (KES)</label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-xl border border-slate-700">KES</span>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Phone Number</label>
                     <input
-                      type="number"
-                      value={depositAmountInput}
-                      onChange={(e) => setDepositAmountInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                      placeholder="Enter amount"
+                      type="text"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+                      placeholder="0712345678"
                     />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Amount</label>
+                    <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                      <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700/50">KES</span>
+                      <input
+                        type="number"
+                        value={depositAmountInput}
+                        onChange={(e) => setDepositAmountInput(e.target.value)}
+                        className="w-full bg-transparent px-4 py-1.5 text-lg text-white font-black focus:outline-none"
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
                 </div>
                 <button
                   onClick={handleDeposit}
                   disabled={loading}
-                  className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs shadow-md hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 mt-2"
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 hover:opacity-90 transition cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2"
                 >
-                  {loading ? 'Sending STK Push...' : 'Trigger M-Pesa STK Push'}
+                  {loading ? (
+                    <>Processing...</>
+                  ) : (
+                    <>Send STK Push</>
+                  )}
                 </button>
               </>
             ) : (
-              <div className="space-y-2 pt-1">
-                <p className="text-xs text-slate-400">
-                  If you paid manually, paste your M-Pesa confirmation SMS below for Treasurer verification:
+              <div className="space-y-3">
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Paste the M-Pesa SMS to submit for Treasurer approval:
                 </p>
                 <textarea
                   value={manualSmsText}
                   onChange={(e) => setManualSmsText(e.target.value)}
-                  placeholder="Paste full M-Pesa SMS here (e.g. QHK89234X Confirmed. Ksh1,000 sent to...)"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 h-20 resize-none"
+                  placeholder="Paste full SMS here..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-24 resize-none transition"
                 />
                 <button
                   onClick={handleDirectSmsSubmit}
-                  className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs shadow-md hover:bg-emerald-400 transition cursor-pointer"
+                  className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
                 >
-                  Submit Confirmation to Treasurer Queue
+                  Submit Confirmation
                 </button>
               </div>
             )}
           </div>
 
-          <div className="rounded-2xl bg-gradient-to-r from-indigo-900/50 to-slate-900 border border-indigo-500/30 p-4 space-y-3 shadow-lg">
-            <div className="flex justify-between items-center">
+          <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
+            <div className="flex justify-between items-start mb-1">
               <div>
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Refer & Earn</span>
-                <h3 className="font-black text-sm text-white">Get KES 5 per friend</h3>
+                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
+                <h3 className="font-black text-base text-white">Get KES 5 / Friend</h3>
               </div>
-              <div className="text-2xl">🎁</div>
+              <div className="text-2xl drop-shadow-md">🎁</div>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Invite a friend to start saving. You get KES 5 instantly when they sign up using your code!
+            <p className="text-[11px] text-slate-400 mb-4 font-medium">
+              Invite friends. Earn instantly when they deposit.
             </p>
 
             <button
               onClick={handleShareReferral}
-              className="w-full py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+              className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Share Invite Link</span>
+              <span>Share Link</span>
             </button>
 
-            <div className="text-[9px] text-center text-slate-500 mt-1 font-mono">
-              Your Code: {user.referral_code || user.phone}
+            <div className="mt-3 text-center">
+              <span className="text-[10px] text-slate-500 font-bold">Code: </span>
+              <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
             </div>
           </div>
 
-          <a
-            href="https://twitter.com/intent/follow?screen_name=tibapay"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-600/50 p-4 shadow-lg hover:border-slate-400 transition cursor-pointer"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
-                  𝕏
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
-                  <h3 className="font-black text-sm text-white">@tibapay on X</h3>
-                  <p className="text-[10px] text-slate-500">News, updates & community</p>
-                </div>
-              </div>
-              <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
-                Follow →
-              </div>
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-sm text-white">Recent Activity</h3>
+              <span className="text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{ledger.length} Records</span>
             </div>
-          </a>
-
-          <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 space-y-3 shadow-md">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-slate-300">My Cash In and Out Activity</span>
-              <span className="text-slate-500">Live Ledger ({ledger.length})</span>
-            </div>
-            <div className="space-y-2 text-xs max-h-72 overflow-y-auto pr-1">
-              {ledger.map((item) => (
-                <div key={item.id} className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-white">{item.type}</p>
-                      <p className="text-[10px] text-slate-500">{item.date} - {item.code}</p>
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className={`font-bold ${
-                          item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
-                            ? 'text-emerald-400'
-                            : 'text-amber-400'
-                        }`}
-                      >
-                        {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
-                        {formatMoney(item.amount)}
-                      </p>
-                      <p
-                        className={`text-[10px] ${
-                          item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
-                            ? 'text-emerald-500 font-bold'
-                            : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
-                            ? 'text-sky-400 font-semibold'
-                            : item.status === 'REJECTED' || item.status === 'FAILED'
-                            ? 'text-rose-400 font-bold'
-                            : 'text-amber-400 animate-pulse'
-                        }`}
-                      >
-                        {item.status}
-                      </p>
-                    </div>
-                  </div>
-
-                  {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
-                    <button
-                      onClick={() => setActiveSmsInputId(item.id)}
-                      className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition cursor-pointer"
-                    >
-                      Paste M-Pesa SMS for Admin Approval
-                    </button>
-                  )}
-
-                  {activeSmsInputId === item.id && (
-                    <div className="space-y-2 pt-1">
-                      <textarea
-                        value={pastedSmsText}
-                        onChange={(e) => setPastedSmsText(e.target.value)}
-                        placeholder="Paste full M-Pesa text here"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-amber-500 h-16 resize-none"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSubmitSmsForApproval(item.id)}
-                          className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer"
+            
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {ledger.length === 0 ? (
+                <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
+              ) : (
+                ledger.map((item) => (
+                  <div key={item.id} className="p-3 rounded-2xl bg-slate-950/50 border border-slate-800/80 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-xs text-white">{item.type}</p>
+                        <p className="text-[9px] text-slate-500 font-medium mt-0.5">{item.date} · {item.code}</p>
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`font-black text-sm ${
+                            item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
+                              ? 'text-emerald-400'
+                              : 'text-rose-400'
+                          }`}
                         >
-                          Submit to Treasurer
-                        </button>
-                        <button
-                          onClick={() => setActiveSmsInputId(null)}
-                          className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                          {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
+                          {formatMoney(item.amount)}
+                        </p>
+                        <p
+                          className={`text-[9px] font-bold mt-0.5 ${
+                            item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
+                              ? 'text-emerald-500'
+                              : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
+                              ? 'text-sky-400'
+                              : item.status === 'REJECTED' || item.status === 'FAILED'
+                              ? 'text-rose-500'
+                              : 'text-amber-400 animate-pulse'
+                          }`}
                         >
-                          Cancel
-                        </button>
+                          {item.status}
+                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
+                      <button
+                        onClick={() => setActiveSmsInputId(item.id)}
+                        className="w-full py-1.5 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                      >
+                        Paste M-Pesa SMS
+                      </button>
+                    )}
+
+                    {activeSmsInputId === item.id && (
+                      <div className="space-y-2 pt-2 border-t border-slate-800 mt-2">
+                        <textarea
+                          value={pastedSmsText}
+                          onChange={(e) => setPastedSmsText(e.target.value)}
+                          placeholder="Paste full M-Pesa text here"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-16 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSubmitSmsForApproval(item.id)}
+                            className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                          >
+                            Submit
+                          </button>
+                          <button
+                            onClick={() => setActiveSmsInputId(null)}
+                            className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
