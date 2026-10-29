@@ -128,9 +128,6 @@ export default function DashboardPage() {
   // Derived time states
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
-  
-  // Safely calculated 3-week rule state
-  const [has3WeeksSaving, setHas3WeeksSaving] = useState(false);
 
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
@@ -215,28 +212,6 @@ export default function DashboardPage() {
     }
     setDaysActive(Math.max(0, Math.floor((Date.now() - joinedMs) / 86400000)));
   }, [user]);
-
-  // Calculate 3-Week Consecutive Saving Rule safely inside useEffect
-  useEffect(() => {
-    const recentDeposits = ledger.filter(i => 
-      i.type.includes('Deposit') && 
-      i.status === 'COMPLETED' && 
-      i.amount >= 100
-    );
-    
-    const uniqueWeeks = new Set<number>();
-    const now = new Date().getTime();
-    
-    recentDeposits.forEach(d => {
-      const depTime = new Date(d.date).getTime();
-      const daysAgo = (now - depTime) / (1000 * 3600 * 24);
-      if (daysAgo <= 21) {
-        uniqueWeeks.add(Math.floor(daysAgo / 7));
-      }
-    });
-    
-    setHas3WeeksSaving(uniqueWeeks.size >= 3);
-  }, [ledger]);
 
   // Inactivity Auto-Logout Timer (5 Minutes)
   useEffect(() => {
@@ -914,6 +889,10 @@ export default function DashboardPage() {
   };
 
   const handleWithdraw = async () => {
+    if (hasUnpaidLoan) {
+      return setMessage('You cannot withdraw savings while you have an active loan.');
+    }
+
     const grossAmt = Math.round(parseFloat(withdrawAmountInput));
     if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
     if (grossAmt > mainPool) return setMessage(`Insufficient savings. Balance: KES ${mainPool.toLocaleString()}.`);
@@ -948,32 +927,32 @@ export default function DashboardPage() {
 
   const hasUnpaidLoan = totalBorrowed > totalRepaid;
 
-  const hasMinSavings = mainPool >= 100;
+  const hasMinSavings = mainPool >= 400;
   const isAccountActive = user?.account_status === 'active';
-  
+
+  const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && isAccountActive && !hasUnpaidLoan;
+
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
-  let stageCeiling = 20000;
-  let maxTermWeeks = 12;
+  
+  // 1. Tenure Bonus (+5% per 12 months, max +15%)
+  const tenureBonus = Math.min(Math.floor(daysActive / 365) * 0.05, 0.15);
+  // 2. Repayment Bonus (+5% per 3 loans, max +10%)
+  const repaymentBonus = Math.min(Math.floor(completedLoans / 3) * 0.05, 0.10);
+  
+  // 3. Base Limit (20%) + Bonuses (Capped at 50%)
+  const limitPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
+  const calculatedMaxLimit = Math.floor(mainPool * limitPercentage);
 
-  if (completedLoans >= 2) {
-    stageCeiling = 50000;
-    maxTermWeeks = 24;
-  } else if (completedLoans === 1) {
-    stageCeiling = 30000;
-    maxTermWeeks = 24;
-  }
-
-  const savingsMultiplier = stageCeiling === 50000 ? 6 : 5;
-  const calculatedMaxLimit = Math.min(stageCeiling, Math.floor(mainPool * savingsMultiplier));
-
-  const isEligibleForNewLoan = has3WeeksSaving && hasMinSavings && isAccountActive && !hasUnpaidLoan;
+  const isEligibleForNewLoan = meetsBaseEligibility;
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
-  const loanFee = Math.round(parsedLoanAmt * 0.05);
-  const loanGwfFee = calculateGWF(parsedLoanAmt);
-  const amountSentToMpesa = Math.max(0, parsedLoanAmt - loanFee - loanGwfFee);
   
-  const loanInterestRate = loanTermWeeks <= 4 ? 0.05 : loanTermWeeks <= 8 ? 0.08 : 0.12;
+  // 5% flat processing fee
+  const loanFee = Math.round(parsedLoanAmt * 0.05);
+  const amountSentToMpesa = Math.max(0, parsedLoanAmt - loanFee);
+
+  // 3% for 1 week, 5% for 2 weeks, 10% for 4 weeks
+  const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.10;
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
@@ -986,8 +965,8 @@ export default function DashboardPage() {
       return setMessage(`Your account is under review. Borrowing is temporarily suspended.`);
     }
 
-    if (!has3WeeksSaving) {
-      return setMessage(`Save with us to unlock a starter limit of up to KES 20,000. Save regularly for 3 weeks. Membership is free.`);
+    if (!meetsBaseEligibility) {
+      return setMessage(`You must be an active member for 4 weeks and have KES 400 in savings to unlock a starter limit.`);
     }
 
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
@@ -1004,7 +983,7 @@ export default function DashboardPage() {
       id: loanTxnId,
       requestedAmount: parsedLoanAmt,
       fee: loanFee,
-      gwfFee: loanGwfFee,
+      gwfFee: 0, // No longer used for loans
       amountSent: amountSentToMpesa,
       termWeeks: loanTermWeeks,
       interestRate: loanInterestRate,
@@ -1802,10 +1781,10 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={handleWithdraw}
-              disabled={mainPool <= 0 || parsedWithdrawAmt < 50}
+              disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || hasUnpaidLoan}
               className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-2"
             >
-              Request M-Pesa Payout (24 Hr Review)
+              {hasUnpaidLoan ? 'Cannot Withdraw (Active Loan)' : 'Request M-Pesa Payout (24 Hr Review)'}
             </button>
           </div>
         </div>
@@ -1822,7 +1801,7 @@ export default function DashboardPage() {
                   : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}>
                 Max Limit: {isEligibleForNewLoan 
-                  ? (completedLoans === 0 ? 'up to KES 20,000' : formatMoney(calculatedMaxLimit)) 
+                  ? formatMoney(calculatedMaxLimit) 
                   : 'Locked'}
               </span>
             </div>
@@ -2002,20 +1981,19 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-
                 {!isEligibleForNewLoan ? (
                   <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
                     <p className="text-sm font-bold text-slate-300">Loan Locked</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
                       {hasUnpaidLoan 
                         ? "You cannot borrow again until this loan is fully repaid and approved by admin."
-                        : "Save with us to unlock a starter limit of up to KES 20,000. Save regularly for 3 weeks. Membership is free."}
+                        : "You must be an active member for 4 consecutive weeks and have accumulated KES 400 in savings to unlock a starter limit."}
                     </p>
                   </div>
                 ) : (
                   <>
                     <p className="text-xs text-slate-400">
-                      Good news! You have unlocked a starter loan of up to <strong className="text-white">KES 20,000</strong> after 3 weeks of regular saving. Apply in the app; admin approval required.
+                      You qualify to borrow up to <strong className="text-white">{formatMoney(calculatedMaxLimit)}</strong> based on your savings and membership tenure.
                     </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
@@ -2028,18 +2006,14 @@ export default function DashboardPage() {
                           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
                         />
                       </div>
-                      {/* Subtle text showing the real math */}
-                      <p className="text-[9px] text-slate-500 text-right mt-1">
-                        Based on your savings, your current auto-approved limit is {formatMoney(calculatedMaxLimit)}.
-                      </p>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { weeks: 4, rate: '5%' },
-                          { weeks: 8, rate: '8%' },
-                          { weeks: 12, rate: '12%' },
+                          { weeks: 1, rate: '3%' },
+                          { weeks: 2, rate: '5%' },
+                          { weeks: 4, rate: '10%' },
                         ].map((term) => (
                           <button
                             key={term.weeks}
@@ -2050,7 +2024,7 @@ export default function DashboardPage() {
                                 : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
                             }`}
                           >
-                            {term.weeks} Weeks ({term.rate})
+                            {term.weeks} Week{term.weeks > 1 ? 's' : ''} ({term.rate})
                           </button>
                         ))}
                       </div>
@@ -2061,19 +2035,15 @@ export default function DashboardPage() {
                         <span className="font-bold text-white">{formatMoney(parsedLoanAmt)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-rose-400">Loan Fee (5% upfront):</span>
+                        <span className="text-rose-400">Processing Fee (5% upfront):</span>
                         <span className="font-bold text-rose-400">-{formatMoney(loanFee)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-rose-400">GWF Fee:</span>
-                        <span className="font-bold text-rose-400">-{formatMoney(loanGwfFee)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-emerald-400">Amount Sent to M-Pesa:</span>
                         <span className="font-bold text-emerald-400">{formatMoney(amountSentToMpesa)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Interest ({loanTermWeeks}w):</span>
+                        <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
                         <span className="font-bold text-white">+{formatMoney(loanInterestAmount)}</span>
                       </div>
                       <div className="border-t border-slate-800 pt-2 flex justify-between items-center">

@@ -197,9 +197,14 @@ export default function AdminPage() {
         poolUpdate = Math.max(0, Math.round(mainPool - netPayout));
         newMemberSavings = Math.max(0, currentSavings - amt);
       } else if (item.type.includes('Loan Request')) {
+        // 5% flat fee goes to treasury. The rest leaves the pool.
         const loanFee = Math.round(amt * 0.05);
-        const gwfFee = calculateGWF(amt);
-        const netDisbursed = Math.max(0, amt - loanFee - gwfFee);
+        const netDisbursed = Math.max(0, amt - loanFee);
+        
+        if (mainPool - netDisbursed < mainPool * 0.15) {
+          throw new Error(`Approval denied. This loan would drop the group's liquidity below the 15% floor.`);
+        }
+        
         poolUpdate = Math.max(0, Math.round(mainPool - netDisbursed));
       } else if (item.type.includes('Loan Repayment')) {
         poolUpdate = Math.round(mainPool + amt);
@@ -357,7 +362,7 @@ export default function AdminPage() {
     if (item.status === 'COMPLETED') {
       if (item.type.includes('Loan Request')) {
         const amt = Math.round(Number(item.amount));
-        const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+        const fees = Math.round(amt * 0.05);
         totalDisbursed += (amt - fees);
       }
       if (item.type.includes('Loan Repayment')) {
@@ -385,7 +390,7 @@ export default function AdminPage() {
       if (item.phone === phone && item.status === 'COMPLETED') {
         if (item.type.includes('Loan Request')) {
           const amt = Math.round(Number(item.amount));
-          const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+          const fees = Math.round(amt * 0.05);
           disbursed += (amt - fees);
         }
         if (item.type.includes('Loan Repayment')) {
