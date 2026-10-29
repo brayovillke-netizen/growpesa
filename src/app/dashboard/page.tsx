@@ -252,10 +252,15 @@ export default function DashboardPage() {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
 
+  // Fix: Ensure input clears properly when loan is fully paid
   useEffect(() => {
-    if (activeLoan && activeLoan.status === 'ACTIVE') {
+    if (activeLoan && (activeLoan.status === 'ACTIVE' || activeLoan.status === 'OVERDUE')) {
       const remaining = Math.round(activeLoan.totalRepay - activeLoan.amountPaid);
-      setRepayAmountInput(remaining.toString());
+      if (remaining > 0) {
+        setRepayAmountInput(remaining.toString());
+      } else {
+        setRepayAmountInput('');
+      }
     }
   }, [activeLoan]);
 
@@ -476,9 +481,9 @@ export default function DashboardPage() {
             const reqAmt = Number(latestLoan.amount);
             const fee = Math.round(reqAmt * 0.05);
             const gwf = calculateGWF(reqAmt);
-            const interest = Math.round(reqAmt * 0.10); // default 10%
+            const interest = Math.round(reqAmt * 0.10);
             const due = new Date(latestLoan.date);
-            due.setDate(due.getDate() + 28); // default 4 weeks
+            due.setDate(due.getDate() + 28);
 
             const rebuilt: ActiveLoan = {
               id: latestLoan.code,
@@ -532,16 +537,14 @@ export default function DashboardPage() {
           );
           const totalRepaid = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
-          if (currentLoan.amountPaid !== totalRepaid) {
+          // FIX: Forcefully close the loan if fully paid
+          if (totalRepaid >= currentLoan.totalRepay) {
+            setActiveLoan(null);
+            loanRef.current = null;
+            localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
+            setMessage('Congratulations! Your loan is fully repaid. You can now borrow again.');
+          } else if (currentLoan.amountPaid !== totalRepaid) {
             const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
-
-            if (totalRepaid >= currentLoan.totalRepay) {
-              updated.status = 'CLOSED';
-              setMessage('Your loan has been fully repaid!');
-            } else {
-              updated.status = currentLoan.status === 'OVERDUE' ? 'OVERDUE' : 'ACTIVE';
-            }
-
             setActiveLoan(updated);
             loanRef.current = updated;
             localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(updated));
@@ -1062,6 +1065,8 @@ export default function DashboardPage() {
 
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
+    
+    if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
 
@@ -1127,6 +1132,8 @@ export default function DashboardPage() {
 
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
+    
+    if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
 
