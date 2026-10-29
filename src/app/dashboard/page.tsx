@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import InstallPrompt from '@/components/InstallPrompt';
-import { supabase } from '@/lib/supabase/client'; 
+import { supabase } from '@/lib/supabase/client';
 
 interface LedgerItem {
   id: string;
@@ -47,12 +47,14 @@ interface ActiveSubscription {
   startDate: string;
   endDate: string;
   isLocked: boolean;
+  lastAccrualDate?: string;
 }
 
 interface ActiveLoan {
   id: string;
   requestedAmount: number;
   fee: number;
+  gwfFee?: number;
   amountSent: number;
   termWeeks: number;
   interestRate: number;
@@ -97,7 +99,7 @@ function generateReferralCode(name: string) {
 export default function DashboardPage() {
   const [user, setUser] = useState<MemberUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  
+
   // Auth Form States
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPin, setLoginPin] = useState('');
@@ -108,7 +110,7 @@ export default function DashboardPage() {
   const [regReferral, setRegReferral] = useState('');
   const [regIsAdult, setRegIsAdult] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  
+
   // PIN Visibility States
   const [showLoginPin, setShowLoginPin] = useState(false);
   const [showRegPin, setShowRegPin] = useState(false);
@@ -122,15 +124,19 @@ export default function DashboardPage() {
   const [lockPin, setLockPin] = useState('');
   const lastActivityRef = useRef(0);
 
+  // Derived time states (moved out of render body)
+  const [todayStr, setTodayStr] = useState('');
+  const [daysActive, setDaysActive] = useState(0);
+
   // App States
   const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
   const [mainPool, setMainPool] = useState<number>(0);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
-  
+
   const [loanAmountInput, setLoanAmountInput] = useState('1000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
-  
+
   // Repayment States
   const [repayPhoneInput, setRepayPhoneInput] = useState('');
   const [repayAmountInput, setRepayAmountInput] = useState('');
@@ -143,7 +149,7 @@ export default function DashboardPage() {
   const [depositAmountInput, setDepositAmountInput] = useState('1000');
   const [phoneInput, setPhoneInput] = useState('');
   const [withdrawAmountInput, setWithdrawAmountInput] = useState('1000');
-  
+
   const [activeSmsInputId, setActiveSmsInputId] = useState<string | null>(null);
   const [pastedSmsText, setPastedSmsText] = useState('');
   const [manualSmsText, setManualSmsText] = useState('');
@@ -165,6 +171,46 @@ export default function DashboardPage() {
       setAuthMode('signup');
     }
   }, []);
+
+  // Session restore on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('tibapay_auth_user');
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as MemberUser;
+      if (parsed.role === 'admin') {
+        window.location.replace('/admin');
+        return;
+      }
+      setUser(parsed);
+      setPhoneInput(parsed.phone);
+      lastActivityRef.current = Date.now();
+    } catch {
+      /* ignore corrupt auth blob */
+    }
+  }, []);
+
+  // todayStr refresh (rolls over at midnight)
+  useEffect(() => {
+    const update = () => setTodayStr(new Date().toISOString().split('T')[0]);
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // daysActive derived from user.joined_at
+  useEffect(() => {
+    if (!user?.joined_at) {
+      setDaysActive(0);
+      return;
+    }
+    const joinedMs = new Date(user.joined_at).getTime();
+    if (isNaN(joinedMs)) {
+      setDaysActive(0);
+      return;
+    }
+    setDaysActive(Math.max(0, Math.floor((Date.now() - joinedMs) / 86400000)));
+  }, [user]);
 
   // Inactivity Lock Timer
   useEffect(() => {
@@ -213,12 +259,12 @@ export default function DashboardPage() {
     const savedSavings = localStorage.getItem(`tibapay_savings_${u.phone}`);
     if (savedSavings) setMainPool(Math.round(Number(savedSavings)) || 0);
 
-    const todayStr = new Date().toISOString().split('T')[0];
     const savedSubs = localStorage.getItem(`tibapay_subs_${u.phone}`);
     if (savedSubs) {
       try {
+        // Keep expired subs so their unswept balance isn't lost
         const parsed: ActiveSubscription[] = JSON.parse(savedSubs);
-        setActiveSubscriptions(parsed.filter((s) => todayStr < s.endDate));
+        setActiveSubscriptions(parsed);
       } catch {}
     }
 
@@ -266,6 +312,49 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
+  // ---------- AUTO DAILY ACCRUAL ----------
+  // Runs on mount, on sub changes, and once a minute (midnight rollover).
+  // Capped at tier.totalPayout so long-running sessions can't over-accrue.
+  useEffect(() => {
+    if (!user || activeSubscriptions.length === 0) return;
+
+    const tick = () => {
+      const today = new Date().toISOString().split('T')[0];
+      let changed = false;
+
+      const updated = activeSubscriptions.map((sub) => {
+        const tier = PACKAGE_TIERS.find((t) => t.id === sub.tierId);
+        if (!tier) return sub;
+
+        const last = sub.lastAccrualDate || sub.startDate;
+        if (today <= last) return sub;
+
+        const lastMs = new Date(`${last}T00:00:00Z`).getTime();
+        const todayMs = new Date(`${today}T00:00:00Z`).getTime();
+        const endMs = new Date(`${sub.endDate}T00:00:00Z`).getTime();
+        if (isNaN(lastMs) || isNaN(todayMs) || isNaN(endMs)) return sub;
+
+        const effectiveEndMs = Math.min(todayMs, endMs);
+        const days = Math.floor((effectiveEndMs - lastMs) / 86400000);
+        if (days <= 0) return sub;
+
+        const next = Math.min(
+          sub.accumulatedBalance + days * tier.dailyLimit,
+          tier.totalPayout
+        );
+
+        changed = true;
+        return { ...sub, accumulatedBalance: next, lastAccrualDate: today };
+      });
+
+      if (changed) saveSubs(updated);
+    };
+
+    tick();
+    const interval = setInterval(tick, 60000);
+    return () => clearInterval(interval);
+  }, [user, activeSubscriptions]);
+
   const updateMainPool = async (newPoolAmount: number) => {
     if (!user) return;
     const rounded = Math.round(newPoolAmount);
@@ -289,20 +378,20 @@ export default function DashboardPage() {
 
   const syncFromServer = useCallback(async (currentUser: MemberUser) => {
     try {
-      // FETCH AND UPDATE SAVINGS ON EVERY POLL (Removed initialLoad check)
+      // FETCH AND UPDATE SAVINGS ON EVERY POLL
       const { data: memberData } = await supabase
         .from('members')
         .select('savings_balance, account_status, loan_limit, referrals_rewarded_count, referral_code')
         .eq('phone', currentUser.phone)
         .single();
-        
+
       if (memberData) {
         const savings = Math.round(Number(memberData.savings_balance)) || 0;
         setMainPool(savings);
         localStorage.setItem(`tibapay_savings_${currentUser.phone}`, String(savings));
-        
-        setUser(prev => prev ? { 
-          ...prev, 
+
+        setUser(prev => prev ? {
+          ...prev,
           account_status: memberData.account_status,
           loan_limit: Number(memberData.loan_limit),
           referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
@@ -313,11 +402,11 @@ export default function DashboardPage() {
       const { data: queueData } = await supabase
         .from('ledger_items')
         .select('*')
-        .eq('phone', currentUser.phone) 
+        .eq('phone', currentUser.phone)
         .order('created_at', { ascending: false });
 
       const serverQueue = queueData || [];
-      
+
       const mappedQueue = serverQueue.map((row: any) => ({
         id: String(row.id),
         phone: row.phone,
@@ -357,23 +446,23 @@ export default function DashboardPage() {
             localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
           }
         }
-        
+
         if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE' || currentLoan.status === 'CLOSED') {
           const approvedRepayments = serverQueue.filter(
             (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
           );
           const totalRepaid = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
-          
+
           if (currentLoan.amountPaid !== totalRepaid) {
             const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
-            
+
             if (totalRepaid >= currentLoan.totalRepay) {
               updated.status = 'CLOSED';
               setMessage('Your loan has been fully repaid!');
             } else {
               updated.status = currentLoan.status === 'OVERDUE' ? 'OVERDUE' : 'ACTIVE';
             }
-            
+
             setActiveLoan(updated);
             loanRef.current = updated;
             localStorage.setItem(`tibapay_loan_${currentUser.phone}`, JSON.stringify(updated));
@@ -447,12 +536,12 @@ export default function DashboardPage() {
     };
 
     localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
-    
+
     setLedger([]);
     setActiveSubscriptions([]);
     setActiveLoan(null);
     setMainPool(0);
-    
+
     setUser(loggedInUser);
     setPhoneInput(loggedInUser.phone);
     lastActivityRef.current = Date.now();
@@ -514,10 +603,10 @@ export default function DashboardPage() {
   const handleChangePin = async () => {
     if (!user) return;
     if (newPin.length !== 4) return alert('PIN must be 4 digits.');
-    
+
     const { error } = await supabase.from('members').update({ pin: newPin }).eq('phone', user.phone);
     if (error) return alert('Failed to update PIN.');
-    
+
     alert('PIN updated successfully!');
     setShowChangePin(false);
     setNewPin('');
@@ -526,12 +615,12 @@ export default function DashboardPage() {
   const handleUnlock = async () => {
     if (!user) return;
     if (lockPin.length !== 4) return alert('PIN must be 4 digits.');
-    
+
     const { data, error } = await supabase.from('members').select('pin').eq('phone', user.phone).single();
     if (error || !data) return alert('Failed to verify PIN.');
-    
+
     if (data.pin !== lockPin) return alert('Incorrect PIN.');
-    
+
     setIsLocked(false);
     setLockPin('');
     lastActivityRef.current = Date.now();
@@ -546,28 +635,38 @@ export default function DashboardPage() {
     localStorage.removeItem('tibapay_auth_user');
   };
 
-  const handleSimulateAccrual = (tierId: number) => {
-    const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
-    if (!tier) return;
-    saveSubs(
-      activeSubscriptions.map((s) =>
-        s.tierId === tierId ? { ...s, accumulatedBalance: s.accumulatedBalance + tier.dailyLimit } : s
-      )
-    );
-    setMessage(`Daily accrual added: +KES ${tier.dailyLimit} to ${tier.name}.`);
-  };
-
-  const handleSweepSub = (tierId: number) => {
+  const handleSweepSub = async (tierId: number) => {
     const sub = activeSubscriptions.find((s) => s.tierId === tierId);
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!sub || !tier || sub.accumulatedBalance <= 0) {
       setMessage('No accumulated balance to sweep.');
       return;
     }
-    const totalGroupCut = sub.accumulatedBalance * 0.1;
+
+    const totalGroupCut = Math.round(sub.accumulatedBalance * 0.1);
     const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
-    
-    updateMainPool(mainPool + totalNetSweep);
+
+    // Credit the 10% group cut to the global treasury pool
+    if (totalGroupCut > 0) {
+      try {
+        const { data: poolData } = await supabase
+          .from('treasury_pool')
+          .select('pool_balance')
+          .eq('id', 1)
+          .single();
+        if (poolData) {
+          const newPoolBal = Math.round(Number(poolData.pool_balance) + totalGroupCut);
+          await supabase
+            .from('treasury_pool')
+            .update({ pool_balance: newPoolBal, updated_at: new Date().toISOString() })
+            .eq('id', 1);
+        }
+      } catch (e) {
+        console.error('Failed to credit treasury pool:', e);
+      }
+    }
+
+    await updateMainPool(mainPool + totalNetSweep);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const isExpired = todayStr >= sub.endDate;
@@ -587,7 +686,9 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger]);
-    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Personal Savings (10% group fee: KES ${Math.round(totalGroupCut)}).`);
+    setMessage(
+      `Swept KES ${totalNetSweep.toLocaleString()} to Personal Savings (10% group fee: KES ${totalGroupCut.toLocaleString()} → Treasury Pool).`
+    );
   };
 
   const handleSubscribeTier = (tierId: number) => {
@@ -598,12 +699,22 @@ export default function DashboardPage() {
       return;
     }
     updateMainPool(mainPool - tier.entry);
-    
+
     const startDate = new Date().toISOString().split('T')[0];
     const end = new Date();
     end.setDate(end.getDate() + tier.lockDays);
     const endDate = end.toISOString().split('T')[0];
-    saveSubs([...activeSubscriptions, { tierId: tier.id, accumulatedBalance: 0, startDate, endDate, isLocked: true }]);
+    saveSubs([
+      ...activeSubscriptions,
+      {
+        tierId: tier.id,
+        accumulatedBalance: 0,
+        startDate,
+        endDate,
+        isLocked: true,
+        lastAccrualDate: startDate,
+      },
+    ]);
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -765,27 +876,27 @@ export default function DashboardPage() {
   // ==========================================
   // LOAN RISK MANAGEMENT & ELIGIBILITY CHECKS
   // ==========================================
-  
-  const daysActive = user?.joined_at ? Math.floor((Date.now() - new Date(user.joined_at).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+
   const hasMinSavings = mainPool >= 1000;
   const depositCount = ledger.filter(i => i.type.includes('Deposit') && i.status === 'COMPLETED').length;
   const hasConsistentSavings = depositCount >= 4;
   const isAccountActive = user?.account_status === 'active';
-  
+
   const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && hasConsistentSavings && isAccountActive;
-  
+
   const hasPastCompletedLoan = ledger.some(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED');
   const limitPercentage = hasPastCompletedLoan ? 0.40 : 0.20;
-  
+
   const calculatedMaxLimit = Math.min(Math.floor(mainPool * limitPercentage), 50000);
   const assignedLimit = meetsBaseEligibility ? Math.max(calculatedMaxLimit, user?.loan_limit || 0) : 0;
-  
+
   const isBlockedByOverdue = activeLoan?.status === 'OVERDUE';
   const isEligibleForNewLoan = meetsBaseEligibility && !isBlockedByOverdue;
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
   const loanFee = Math.round(parsedLoanAmt * 0.05);
-  const amountSentToMpesa = parsedLoanAmt - loanFee;
+  const loanGwfFee = calculateGWF(parsedLoanAmt);
+  const amountSentToMpesa = Math.max(0, parsedLoanAmt - loanFee - loanGwfFee);
   const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.1;
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
@@ -794,11 +905,11 @@ export default function DashboardPage() {
     if (activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') {
       return setMessage(`Repay active loan completely before borrowing again.`);
     }
-    
+
     if (isBlockedByOverdue) {
       return setMessage(`Your account has an overdue loan. Please clear it to restore borrowing privileges.`);
     }
-    
+
     if (!isAccountActive) {
       return setMessage(`Your account is under review. Borrowing is temporarily suspended.`);
     }
@@ -806,7 +917,7 @@ export default function DashboardPage() {
     if (!meetsBaseEligibility) {
       return setMessage(`You do not meet the loan eligibility requirements yet.`);
     }
-    
+
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
     if (parsedLoanAmt > assignedLimit) {
       return setMessage(`Exceeds your approved limit of KES ${assignedLimit.toLocaleString()}.`);
@@ -821,6 +932,7 @@ export default function DashboardPage() {
       id: loanTxnId,
       requestedAmount: parsedLoanAmt,
       fee: loanFee,
+      gwfFee: loanGwfFee,
       amountSent: amountSentToMpesa,
       termWeeks: loanTermWeeks,
       interestRate: loanInterestRate,
@@ -857,7 +969,7 @@ export default function DashboardPage() {
   const handleRepaySTK = async () => {
     if (!activeLoan) return;
     if (!repayPhoneInput || repayPhoneInput.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
-    
+
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
@@ -896,7 +1008,7 @@ export default function DashboardPage() {
       setMessage(`STK push sent. Enter your M-Pesa PIN. Admin will verify your payment.`);
     } catch (err: any) {
       setMessage(`STK Push error: ${err?.message || 'unknown'}.`);
-      
+
       let errItem: LedgerItem | null = null;
       setLedger((prev) => {
         const updated = prev.map((i) => {
@@ -922,7 +1034,7 @@ export default function DashboardPage() {
   const handleRepaySMS = () => {
     if (!activeLoan) return;
     if (!repaySmsText || repaySmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
-    
+
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
@@ -949,6 +1061,9 @@ export default function DashboardPage() {
   const parsedWithdrawAmt = Math.round(parseFloat(withdrawAmountInput) || 0);
   const currentGWFFee = calculateGWF(parsedWithdrawAmt);
   const currentNetPayout = Math.max(0, parsedWithdrawAmt - currentGWFFee);
+
+  // Sum across all tiers, used by Overview card
+  const packageEarnings = activeSubscriptions.reduce((sum, s) => sum + s.accumulatedBalance, 0);
 
   if (!user) {
     return (
@@ -1013,7 +1128,7 @@ export default function DashboardPage() {
               >
                 {loading ? 'Authenticating...' : 'Log In'}
               </button>
-              
+
               <div className="text-center pt-2">
                 <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
                   Don't have an account? Sign Up
@@ -1088,7 +1203,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Referral Code (Optional)</label>
                 <input
@@ -1117,7 +1232,7 @@ export default function DashboardPage() {
               >
                 {loading ? 'Creating Account...' : 'Sign Up'}
               </button>
-              
+
               <div className="text-center pt-2">
                 <button type="button" onClick={() => { setAuthMode('login'); setAuthError(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
                   Already have an account? Log In
@@ -1154,7 +1269,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
-      
+
       {/* SCREEN LOCK OVERLAY */}
       {isLocked && (
         <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col justify-center items-center p-6 space-y-6">
@@ -1165,7 +1280,7 @@ export default function DashboardPage() {
             <h2 className="text-xl font-black text-white">Screen Locked</h2>
             <p className="text-xs text-slate-400">Enter your PIN to unlock</p>
           </div>
-          
+
           <div className="w-full max-w-xs space-y-4">
             <div className="relative">
               <input
@@ -1278,10 +1393,16 @@ export default function DashboardPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">My Savings</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Main Savings Pool</p>
               <p className="text-sm font-black mt-1">KES {mainPool.toLocaleString()}</p>
+              <p className="text-[9px] opacity-70 mt-0.5">Withdrawable</p>
+            </div>
+            <div className="bg-violet-600 p-3 rounded-2xl text-white shadow-md">
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Package Earnings</p>
+              <p className="text-sm font-black mt-1">KES {packageEarnings.toLocaleString()}</p>
+              <p className="text-[9px] opacity-70 mt-0.5">Sweep anytime</p>
             </div>
             <div className="bg-sky-600 p-3 rounded-2xl text-white shadow-md">
               <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Active Subs</p>
@@ -1370,14 +1491,14 @@ export default function DashboardPage() {
             <p className="text-[11px] text-slate-400">
               Invite a friend to start saving. You get KES 5 instantly when they sign up using your code!
             </p>
-            
-            <button 
+
+            <button
               onClick={handleShareReferral}
               className="w-full py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
             >
               <span>Share Invite Link</span>
             </button>
-            
+
             <div className="text-[9px] text-center text-slate-500 mt-1 font-mono">
               Your Code: {user.referral_code || user.phone}
             </div>
@@ -1477,8 +1598,7 @@ export default function DashboardPage() {
               activeSubscriptions.map((sub) => {
                 const tier = PACKAGE_TIERS.find((t) => t.id === sub.tierId);
                 if (!tier) return null;
-                const todayStr = new Date().toISOString().split('T')[0];
-                const isExpired = todayStr >= sub.endDate;
+                const isExpired = todayStr !== '' && todayStr >= sub.endDate;
                 return (
                   <div key={sub.tierId} className="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-3 shadow-lg">
                     <div className="flex justify-between items-center">
@@ -1499,24 +1619,23 @@ export default function DashboardPage() {
                         <p className="text-xs font-black text-emerald-400 mt-0.5">+KES {tier.dailyLimit} Daily</p>
                       </div>
                       <div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Accumulated Balance</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">Package Earnings Pool</p>
                         <p className="text-xs font-black text-white mt-0.5">KES {sub.accumulatedBalance.toLocaleString()}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSimulateAccrual(sub.tierId)}
-                        className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
-                      >
-                        + Add Daily (+{tier.dailyLimit})
-                      </button>
+                    <div className="space-y-1.5">
                       <button
                         onClick={() => handleSweepSub(sub.tierId)}
                         disabled={sub.accumulatedBalance <= 0}
-                        className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-[10px] transition cursor-pointer disabled:opacity-50 shadow-md"
+                        className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-[10px] transition cursor-pointer disabled:opacity-50 shadow-md"
                       >
-                        Sweep to Savings
+                        {isExpired ? 'Claim & Close' : 'Sweep to Main Pool'}
                       </button>
+                      {sub.accumulatedBalance > 0 && (
+                        <p className="text-[9px] text-center text-slate-500 font-mono">
+                          90% → Main (KES {Math.round(sub.accumulatedBalance * 0.9).toLocaleString()})&nbsp;·&nbsp;10% → Treasury (KES {Math.round(sub.accumulatedBalance * 0.1).toLocaleString()})
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -1624,8 +1743,8 @@ export default function DashboardPage() {
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-sm text-white">TibaPay Loan Engine</h3>
               <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border ${
-                isEligibleForNewLoan 
-                  ? 'text-sky-400 bg-sky-500/10 border-sky-500/20' 
+                isEligibleForNewLoan
+                  ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                   : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}>
                 Max Limit: KES {isEligibleForNewLoan ? assignedLimit.toLocaleString() : 'Locked'}
@@ -1640,7 +1759,7 @@ export default function DashboardPage() {
                     <p className="font-black text-sm text-white">{activeLoan.id}</p>
                   </div>
                   <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
-                    activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 
+                    activeLoan.status === 'PENDING ADMIN APPROVAL' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
                     activeLoan.status === 'OVERDUE' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                     activeLoan.status === 'CLOSED' ? 'bg-slate-500/20 text-slate-300 border border-slate-500/30' :
                     'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
@@ -1648,7 +1767,7 @@ export default function DashboardPage() {
                     {activeLoan.status}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
                   <div>
                     <p className="text-[9px] text-slate-400">Principal Requested</p>
@@ -1667,7 +1786,7 @@ export default function DashboardPage() {
                     <p className="font-black text-rose-400">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
                   </div>
                 </div>
-                
+
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
                     Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
@@ -1808,7 +1927,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                
+
                 {!isEligibleForNewLoan ? (
                   <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
                     <p className="text-sm font-bold text-slate-300">Loan Locked</p>
@@ -1863,6 +1982,10 @@ export default function DashboardPage() {
                       <div className="flex justify-between">
                         <span className="text-rose-400">Loan Fee (5% upfront):</span>
                         <span className="font-bold text-rose-400">-KES {loanFee.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-rose-400">GWF Fee:</span>
+                        <span className="font-bold text-rose-400">-KES {loanGwfFee.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-emerald-400">Amount Sent to M-Pesa:</span>
