@@ -252,18 +252,6 @@ export default function DashboardPage() {
     if (user) setRepayPhoneInput(user.phone);
   }, [user]);
 
-  // FIX: Ensure input clears properly when loan is fully paid
-  useEffect(() => {
-    if (activeLoan && (activeLoan.status === 'ACTIVE' || activeLoan.status === 'OVERDUE')) {
-      const remaining = Math.round(activeLoan.totalRepay - activeLoan.amountPaid);
-      if (remaining > 0) {
-        setRepayAmountInput(remaining.toString());
-      } else {
-        setRepayAmountInput('');
-      }
-    }
-  }, [activeLoan]);
-
   const loadLocal = (u: MemberUser) => {
     const savedLedger = localStorage.getItem(`tibapay_ledger_${u.phone}`);
     if (savedLedger) {
@@ -531,13 +519,12 @@ export default function DashboardPage() {
           }
         }
 
-        if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE' || currentLoan.status === 'CLOSED') {
+        if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE') {
           const approvedRepayments = serverQueue.filter(
             (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED'
           );
           const totalRepaid = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
-          // FIX: Forcefully close the loan if fully paid
           if (totalRepaid >= currentLoan.totalRepay) {
             setActiveLoan(null);
             loanRef.current = null;
@@ -974,12 +961,9 @@ export default function DashboardPage() {
 
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
   
-  // 1. Tenure Bonus (+5% per 12 months, max +15%)
   const tenureBonus = Math.min(Math.floor(daysActive / 365) * 0.05, 0.15);
-  // 2. Repayment Bonus (+5% per 3 loans, max +10%)
   const repaymentBonus = Math.min(Math.floor(completedLoans / 3) * 0.05, 0.10);
   
-  // 3. Base Limit strictly 20% + Bonuses (Capped at 50%)
   const calculatedPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
   const calculatedMaxLimit = Math.floor(mainPool * calculatedPercentage);
 
@@ -987,13 +971,11 @@ export default function DashboardPage() {
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
   
-  // 5% flat processing fee + GWF
   const baseLoanFee = Math.round(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
   const totalFee = baseLoanFee + loanGwfFee;
   const amountSentToMpesa = Math.max(0, parsedLoanAmt - totalFee);
 
-  // 3% for 1 week, 5% for 2 weeks, 10% for 4 weeks
   const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.10;
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
@@ -1057,6 +1039,7 @@ export default function DashboardPage() {
     };
     saveLedger([item, ...ledger], item);
     setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. Awaiting Treasurer (24 hr).`);
+    setRepayAmountInput('');
   };
 
   const handleRepaySTK = async () => {
@@ -1101,6 +1084,7 @@ export default function DashboardPage() {
       }
 
       setMessage(`STK push sent. Enter your M-Pesa PIN. Admin will verify your payment.`);
+      setRepayAmountInput('');
     } catch (err: any) {
       setMessage(`STK Push error: ${err?.message || 'unknown'}.`);
 
@@ -1152,6 +1136,7 @@ export default function DashboardPage() {
     };
     saveLedger([newItem, ...ledger], newItem);
     setRepaySmsText('');
+    setRepayAmountInput('');
     setMessage(`Repayment of KES ${amt} submitted to Treasurer queue.`);
   };
 
@@ -1965,6 +1950,7 @@ export default function DashboardPage() {
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                        placeholder="Enter amount"
                       />
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
