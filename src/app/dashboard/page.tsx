@@ -23,7 +23,7 @@ interface MemberUser {
   joined_at?: string;
   account_status?: string;
   loan_limit?: number;
-  total_deposited?: number; // NEW: Tracks lifetime deposits for eligibility
+  total_deposited?: number;
   referrals_rewarded_count?: number;
   referral_code?: string;
 }
@@ -422,7 +422,6 @@ export default function DashboardPage() {
     try {
       const { data: memberData } = await supabase
         .from('members')
-        // Added total_deposited to fetch
         .select('savings_balance, total_deposited, account_status, loan_limit, referrals_rewarded_count, referral_code')
         .eq('phone', currentUser.phone)
         .single();
@@ -436,7 +435,7 @@ export default function DashboardPage() {
           ...prev,
           account_status: memberData.account_status,
           loan_limit: Number(memberData.loan_limit) || 0,
-          total_deposited: Number(memberData.total_deposited) || 0, // Store total deposited
+          total_deposited: Number(memberData.total_deposited) || 0,
           referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
           referral_code: memberData.referral_code || prev.referral_code
         } : null);
@@ -537,7 +536,6 @@ export default function DashboardPage() {
             setActiveLoan(null);
             loanRef.current = null;
             localStorage.removeItem(`tibapay_loan_${currentUser.phone}`);
-            // FIX: Removed the contradictory "you can borrow again" if they don't meet the rules
             setMessage('Congratulations! Your loan is fully repaid.');
           } else if (currentLoan.amountPaid !== totalRepaid) {
             const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaid };
@@ -664,7 +662,7 @@ export default function DashboardPage() {
       role: 'member',
       savings_balance: 0,
       loan_limit: 0,
-      total_deposited: 0, // NEW
+      total_deposited: 0,
       account_status: 'active',
       referred_by: referredBy,
       referrals_rewarded_count: 0,
@@ -965,7 +963,6 @@ export default function DashboardPage() {
 
   const hasUnpaidLoan = totalBorrowed > totalRepaid;
 
-  // NEW LOGIC: Check total_deposited instead of current savings_balance
   const hasMinDeposit = (user?.total_deposited || 0) >= 400;
   const isAccountActive = user?.account_status === 'active';
 
@@ -973,7 +970,7 @@ export default function DashboardPage() {
 
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
 
-  // STAGE CALCULATION (For UI display only)
+  // STAGE CALCULATION & TEXT (Fixes "wait 0 days" bug)
   let currentStage = 1;
   let stageName = 'Starter';
   let nextStageRequirement = '';
@@ -985,24 +982,32 @@ export default function DashboardPage() {
   } else if (completedLoans >= 2 && daysActive >= 60) {
     currentStage = 3;
     stageName = 'Trusted';
-    nextStageRequirement = `Repay 1 loan & wait ${Math.max(0, 120 - daysActive)} days for Stage 4`;
+    const daysLeft = Math.max(0, 120 - daysActive);
+    nextStageRequirement = daysLeft > 0 
+      ? `Repay 1 loan & wait ${daysLeft} days for Stage 4`
+      : `Repay 1 loan to upgrade to Stage 4`;
   } else if (completedLoans >= 1 && daysActive >= 28) {
     currentStage = 2;
     stageName = 'Advanced';
-    nextStageRequirement = `Repay 1 loan & wait ${Math.max(0, 60 - daysActive)} days for Stage 3`;
+    const daysLeft = Math.max(0, 60 - daysActive);
+    nextStageRequirement = daysLeft > 0
+      ? `Repay 1 loan & wait ${daysLeft} days for Stage 3`
+      : `Repay 1 loan to upgrade to Stage 3`;
   } else {
     currentStage = 1;
     stageName = 'Starter';
-    nextStageRequirement = `Repay 1 loan & wait ${Math.max(0, 28 - daysActive)} days for Stage 2`;
+    const daysLeft = Math.max(0, 28 - daysActive);
+    nextStageRequirement = daysLeft > 0
+      ? `Repay 1 loan & wait ${daysLeft} days for Stage 2`
+      : `Repay 1 loan to upgrade to Stage 2`;
   }
 
-  // STATIC LIMIT: Read directly from the database
   const calculatedMaxLimit = user?.loan_limit || 0;
-
   const isEligibleForNewLoan = meetsBaseEligibility;
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
-
+  
+  // Used silently for calculations & notifications
   const baseLoanFee = Math.round(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
   const totalFee = baseLoanFee + loanGwfFee;
@@ -1070,7 +1075,9 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     saveLedger([item, ...ledger], item);
-    setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. Awaiting Treasurer (24 hr).`);
+    
+    // Fee breakdown moved to notification
+    setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. A total fee of KES ${totalFee.toLocaleString()} (5% + GWF) will be deducted. You will receive KES ${amountSentToMpesa.toLocaleString()} upon approval.`);
     setRepayAmountInput('');
   };
 
@@ -1879,7 +1886,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* FIX APPLIED HERE: activeLoan renders this block reliably without flickering */}
             {activeLoan ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
@@ -2104,36 +2110,12 @@ export default function DashboardPage() {
                         ))}
                       </div>
                     </div>
-                    <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Requested Loan:</span>
-                        <span className="font-bold text-white">{formatMoney(parsedLoanAmt)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-rose-400">Processing Fee (5%):</span>
-                        <span className="font-bold text-rose-400">-{formatMoney(baseLoanFee)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-rose-400">GWF Fee:</span>
-                        <span className="font-bold text-rose-400">-{formatMoney(loanGwfFee)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-emerald-400">Amount Sent to M-Pesa:</span>
-                        <span className="font-bold text-emerald-400">{formatMoney(amountSentToMpesa)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
-                        <span className="font-bold text-white">+{formatMoney(loanInterestAmount)}</span>
-                      </div>
-                      <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
-                        <span className="font-bold text-amber-400">Total Amount to Repay:</span>
-                        <span className="text-sm font-black text-amber-400">{formatMoney(totalLoanRepay)}</span>
-                      </div>
-                    </div>
+                    {/* FEE BREAKDOWN HAS BEEN REMOVED FROM HERE */}
+                    
                     <button
                       onClick={handleApplyLoan}
                       disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
-                      className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-2"
+                      className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-4"
                     >
                       Submit Loan Request for Admin Review (24 Hr)
                     </button>
