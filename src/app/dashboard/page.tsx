@@ -44,6 +44,7 @@ interface PackageTier {
 }
 
 interface ActiveSubscription {
+  id?: string; // Added DB ID for syncing
   tierId: number;
   accumulatedBalance: number;
   startDate: string;
@@ -306,17 +307,11 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event('tibapay_sync'));
   };
 
-  const saveSubs = (subs: ActiveSubscription[]) => {
-    if (!user) return;
-    setActiveSubscriptions(subs);
-    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(subs));
-    window.dispatchEvent(new Event('tibapay_sync'));
-  };
-
+  // ---------- AUTO DAILY ACCRUAL (NOW SYNCS TO SUPABASE) ----------
   useEffect(() => {
     if (!user || activeSubscriptions.length === 0) return;
 
-    const tick = () => {
+    const tick = async () => {
       const today = new Date().toISOString().split('T')[0];
       let changed = false;
 
@@ -345,7 +340,24 @@ export default function DashboardPage() {
         return { ...sub, accumulatedBalance: next, lastAccrualDate: today };
       });
 
-      if (changed) saveSubs(updated);
+      if (changed) {
+        setActiveSubscriptions(updated);
+        localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(updated));
+        
+        // Push updates to Supabase
+        const upsertData = updated.map(sub => ({
+          id: sub.id,
+          phone: user.phone,
+          tier_id: sub.tierId,
+          accumulated_balance: sub.accumulatedBalance,
+          start_date: sub.startDate,
+          end_date: sub.endDate,
+          last_accrual_date: sub.lastAccrualDate,
+          is_locked: sub.isLocked
+        }));
+        
+        await supabase.from('subscriptions').upsert(upsertData);
+      }
     };
 
     tick();
@@ -432,6 +444,27 @@ export default function DashboardPage() {
           referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
           referral_code: memberData.referral_code || prev.referral_code
         } : null);
+      }
+
+      // --- SYNC SUBSCRIPTIONS FROM SUPABASE ---
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('phone', currentUser.phone)
+        .order('created_at', { ascending: true });
+
+      if (subData) {
+        const mappedSubs = subData.map((row: any) => ({
+          id: row.id,
+          tierId: row.tier_id,
+          accumulatedBalance: Number(row.accumulated_balance) || 0,
+          startDate: row.start_date,
+          endDate: row.end_date,
+          isLocked: row.is_locked,
+          lastAccrualDate: row.last_accrual_date,
+        }));
+        setActiveSubscriptions(mappedSubs);
+        localStorage.setItem(`tibapay_subs_${currentUser.phone}`, JSON.stringify(mappedSubs));
       }
 
       const { data: queueData } = await supabase
@@ -735,11 +768,26 @@ export default function DashboardPage() {
 
     const todayStrLocal = new Date().toISOString().split('T')[0];
     const isExpired = todayStrLocal >= sub.endDate;
-    saveSubs(
-      isExpired
-        ? activeSubscriptions.filter((s) => s.tierId !== tierId)
-        : activeSubscriptions.map((s) => (s.tierId === tierId ? { ...s, accumulatedBalance: 0 } : s))
-    );
+    
+    // --- SYNC SWEEP TO SUPABASE ---
+    if (isExpired) {
+      if (sub.id) {
+        await supabase.from('subscriptions').delete().eq('id', sub.id);
+      }
+      const updatedSubs = activeSubscriptions.filter((s) => s.tierId !== tierId);
+      setActiveSubscriptions(updatedSubs);
+      localStorage.setItem(`tibapay_subs_${user?.phone}`, JSON.stringify(updatedSubs));
+    } else {
+      if (sub.id) {
+        await supabase.from('subscriptions').update({ 
+          accumulated_balance: 0,
+          last_accrual_date: todayStrLocal 
+        }).eq('id', sub.id);
+      }
+      const updatedSubs = activeSubscriptions.map((s) => (s.tierId === tierId ? { ...s, accumulatedBalance: 0, lastAccrualDate: todayStrLocal } : s));
+      setActiveSubscriptions(updatedSubs);
+      localStorage.setItem(`tibapay_subs_${user?.phone}`, JSON.stringify(updatedSubs));
+    }
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -757,6 +805,7 @@ export default function DashboardPage() {
   };
 
   const handleSubscribeTier = async (tierId: number) => {
+    if (!user) return;
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
     if (mainPool < tier.entry) {
@@ -774,17 +823,40 @@ export default function DashboardPage() {
     const end = new Date();
     end.setDate(end.getDate() + tier.lockDays);
     const endDate = end.toISOString().split('T')[0];
-    saveSubs([
-      ...activeSubscriptions,
-      {
-        tierId: tier.id,
-        accumulatedBalance: 0,
-        startDate,
-        endDate,
-        isLocked: true,
-        lastAccrualDate: startDate,
-      },
-    ]);
+
+    // --- SYNC NEW SUBSCRIPTION TO SUPABASE ---
+    const { data: newSub, error: subErr } = await supabase
+      .from('subscriptions')
+      .insert({
+        phone: user.phone,
+        tier_id: tier.id,
+        accumulated_balance: 0,
+        start_date: startDate,
+        end_date: endDate,
+        last_accrual_date: startDate,
+        is_locked: true
+      })
+      .select()
+      .single();
+
+    if (subErr) {
+      setMessage('Failed to save subscription to database.');
+      return;
+    }
+
+    const newLocalSub: ActiveSubscription = {
+      id: newSub.id,
+      tierId: tier.id,
+      accumulatedBalance: 0,
+      startDate,
+      endDate,
+      isLocked: true,
+      lastAccrualDate: startDate,
+    };
+
+    const updatedSubs = [...activeSubscriptions, newLocalSub];
+    setActiveSubscriptions(updatedSubs);
+    localStorage.setItem(`tibapay_subs_${user.phone}`, JSON.stringify(updatedSubs));
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -1710,7 +1782,7 @@ export default function DashboardPage() {
                 const isExpired = todayStr !== '' && todayStr >= sub.endDate;
                 
                 return (
-                  <div key={sub.tierId} className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-4 shadow-xl relative overflow-hidden">
+                  <div key={sub.id || sub.tierId} className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-4 shadow-xl relative overflow-hidden">
                     {/* Glow effect */}
                     <div className={`absolute top-0 right-0 w-32 h-32 blur-3xl opacity-20 rounded-full ${isExpired ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                     
