@@ -1701,102 +1701,125 @@ export default function DashboardPage() {
       )}
 
       {activeTab === 'packages' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
+          
+          {/* ACTIVE SUBSCRIPTIONS */}
           <div className="space-y-3">
-            <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider px-1">
-              Active Subscriptions ({activeSubscriptions.length})
-            </h3>
+            <div className="flex justify-between items-end px-1">
+              <h3 className="font-black text-sm text-white">Your Active Packages</h3>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                {activeSubscriptions.length} Running
+              </span>
+            </div>
+            
             {activeSubscriptions.length === 0 ? (
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
-                No active package subscriptions.
+              <div className="p-8 rounded-2xl bg-slate-900/50 border border-slate-800 text-center">
+                <span className="text-3xl mb-3 block opacity-50">📦</span>
+                <p className="text-xs text-slate-400 font-medium">No active packages. Join a tier below to start earning.</p>
               </div>
             ) : (
               activeSubscriptions.map((sub) => {
                 const tier = PACKAGE_TIERS.find((t) => t.id === sub.tierId);
                 if (!tier) return null;
                 const isExpired = todayStr !== '' && todayStr >= sub.endDate;
+                
                 return (
-                  <div key={sub.tierId} className="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-3 shadow-lg">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-4">
-                        <div className={`${tier.sizeClass} drop-shadow-lg`}>{tier.icon}</div>
+                  <div key={sub.tierId} className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-4 shadow-xl relative overflow-hidden">
+                    {/* Glow effect */}
+                    <div className={`absolute top-0 right-0 w-32 h-32 blur-3xl opacity-20 rounded-full ${isExpired ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+                    
+                    <div className="flex justify-between items-center relative z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="text-4xl drop-shadow-md">{tier.icon}</div>
                         <div>
-                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{tier.name}</span>
-                          <h3 className="font-black text-sm text-white">Expires: {sub.endDate}</h3>
+                          <h3 className="font-black text-base text-white">{tier.name}</h3>
+                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">Ends: {sub.endDate}</p>
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${isExpired ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
-                        {isExpired ? 'Period Over' : 'Active'}
+                      <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg border ${
+                        isExpired 
+                          ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' 
+                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      }`}>
+                        {isExpired ? 'Matured' : 'Active'}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-center">
-                      <div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Daily Gross</p>
-                        <p className="text-xs font-black text-emerald-400 mt-0.5">+KES {tier.dailyLimit} Daily</p>
+
+                    <div className="grid grid-cols-2 gap-2 relative z-10">
+                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Earned</p>
+                        <p className="text-lg font-black text-white">{formatMoney(sub.accumulatedBalance)}</p>
                       </div>
-                      <div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Package Earnings Pool</p>
-                        <p className="text-xs font-black text-white mt-0.5">{formatMoney(sub.accumulatedBalance)}</p>
+                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Daily Rate</p>
+                        <p className="text-lg font-black text-emerald-400">+{formatMoney(tier.dailyLimit)}</p>
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <button
-                        onClick={() => handleSweepSub(sub.tierId)}
-                        disabled={sub.accumulatedBalance <= 0}
-                        className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-[10px] transition cursor-pointer disabled:opacity-50 shadow-md"
-                      >
-                        {isExpired ? 'Claim & Close' : 'Sweep to Main Pool'}
-                      </button>
+
+                    <button
+                      onClick={() => handleSweepSub(sub.tierId)}
+                      disabled={sub.accumulatedBalance <= 0}
+                      className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center"
+                    >
+                      <span>{isExpired ? 'Claim & Close Package' : 'Sweep to Savings'}</span>
                       {sub.accumulatedBalance > 0 && (
-                        <p className="text-[9px] text-center text-slate-500 font-mono">
-                          90% → Main ({formatMoney(Math.round(sub.accumulatedBalance * 0.9))})&nbsp;·&nbsp;10% → Treasury ({formatMoney(Math.round(sub.accumulatedBalance * 0.1))})
-                        </p>
+                        <span className="text-[8px] font-bold opacity-70">
+                          90% to Main · 10% to Treasury
+                        </span>
                       )}
-                    </div>
+                    </button>
                   </div>
                 );
               })
             )}
           </div>
 
-          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3">
-            <h3 className="font-bold text-sm text-white">Maximum Attraction Tiers</h3>
-            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+          {/* AVAILABLE TIERS */}
+          <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-4">
+            <h3 className="font-black text-sm text-white mb-3 flex items-center gap-2">
+              <span className="text-emerald-400">💎</span> Available Tiers
+            </h3>
+            
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
               {PACKAGE_TIERS.map((tier) => {
                 const isSubscribed = activeSubscriptions.some((s) => s.tierId === tier.id);
                 const hasEnough = mainPool >= tier.entry;
+                
                 return (
                   <div
                     key={tier.id}
-                    className={`p-3.5 rounded-2xl border transition flex justify-between items-center ${
+                    className={`p-3 rounded-2xl border flex justify-between items-center transition-all ${
                       isSubscribed
-                        ? 'bg-slate-900/40 border-slate-800 opacity-60'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-300'
+                        ? 'bg-slate-950/30 border-slate-800/50 opacity-60 grayscale-[50%]'
+                        : 'bg-slate-950 border border-slate-800 shadow-sm hover:border-slate-700'
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className={`${tier.sizeClass} drop-shadow-md`}>{tier.icon}</div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl drop-shadow-sm">{tier.icon}</div>
                       <div>
                         <p className="font-bold text-xs text-white">{tier.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>{formatMoney(tier.entry)}</strong> - Period: {tier.lockDays} Days
-                        </p>
-                        <p className="text-[10px] font-bold text-emerald-400 mt-1">
-                          Gross Daily: +KES {tier.dailyLimit}
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                          Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>{formatMoney(tier.entry)}</strong> 
+                          <span className="mx-1 text-slate-600">•</span> 
+                          {tier.lockDays} Days
                         </p>
                       </div>
                     </div>
-                    <div>
+                    
+                    <div className="flex flex-col items-end gap-1">
+                      <p className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        +{formatMoney(tier.dailyLimit)}/d
+                      </p>
                       {isSubscribed ? (
-                        <span className="px-2 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg">
-                          Subscribed
+                        <span className="text-[9px] font-bold text-slate-500 mr-2 mt-1">
+                          Joined
                         </span>
                       ) : (
                         <button
                           onClick={() => handleSubscribeTier(tier.id)}
-                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-[10px] transition cursor-pointer shadow"
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[10px] transition shadow-sm mt-1"
                         >
-                          Join Tier
+                          Join
                         </button>
                       )}
                     </div>
