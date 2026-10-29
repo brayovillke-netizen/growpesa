@@ -457,12 +457,12 @@ export default function DashboardPage() {
       localStorage.setItem(`tibapay_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
       const currentLoan = loanRef.current;
-      
+
       // AUTO-REBUILD MISSING LOAN FROM LEDGER
       if (!currentLoan) {
         const totalBorrowed = serverQueue.filter((i: any) => i.type.includes('Loan Request') && i.status === 'COMPLETED').reduce((sum: number, item: any) => sum + Number(item.amount), 0);
         const totalRepaid = serverQueue.filter((i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').reduce((sum: number, item: any) => sum + Number(item.amount), 0);
-        
+
         if (totalBorrowed > totalRepaid) {
           const latestLoan = serverQueue.find((i: any) => i.type.includes('Loan Request') && i.status === 'COMPLETED');
           if (latestLoan) {
@@ -960,17 +960,17 @@ export default function DashboardPage() {
   const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && isAccountActive && !hasUnpaidLoan;
 
   const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
-  
+
   const tenureBonus = Math.min(Math.floor(daysActive / 365) * 0.05, 0.15);
   const repaymentBonus = Math.min(Math.floor(completedLoans / 3) * 0.05, 0.10);
-  
+
   const calculatedPercentage = Math.min(0.20 + tenureBonus + repaymentBonus, 0.50);
   const calculatedMaxLimit = Math.floor(mainPool * calculatedPercentage);
 
   const isEligibleForNewLoan = meetsBaseEligibility;
 
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
-  
+
   const baseLoanFee = Math.round(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
   const totalFee = baseLoanFee + loanGwfFee;
@@ -1048,7 +1048,7 @@ export default function DashboardPage() {
 
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
-    
+
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
@@ -1116,7 +1116,7 @@ export default function DashboardPage() {
 
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
-    
+
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
@@ -1837,46 +1837,47 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {(activeLoan?.status === 'PENDING ADMIN APPROVAL') || (activeLoan?.status === 'ACTIVE') || (activeLoan?.status === 'OVERDUE') || hasUnpaidLoan ? (
+            {/* FIX APPLIED HERE: Using activeLoan instead of hasUnpaidLoan to prevent unmounting/flickering */}
+            {activeLoan ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Loan Reference</p>
-                    <p className="font-black text-sm text-white">{activeLoan?.id || 'ACTIVE-LOAN'}</p>
+                    <p className="font-black text-sm text-white">{activeLoan.id}</p>
                   </div>
                   <span className={`px-2.5 py-1 text-[10px] font-black rounded-xl ${
-                    (activeLoan?.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
-                    (activeLoan?.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                    (activeLoan.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' :
+                    (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                     'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   }`}>
-                    {activeLoan?.status || 'ACTIVE'}
+                    {activeLoan.status}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-xs">
                   <div>
                     <p className="text-[9px] text-slate-400">Principal Requested</p>
-                    <p className="font-bold text-white">{formatMoney(activeLoan?.requestedAmount || totalBorrowed)}</p>
+                    <p className="font-bold text-white">{formatMoney(activeLoan.requestedAmount)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Total Due / Repay</p>
-                    <p className="font-black text-amber-400">{formatMoney(activeLoan?.totalRepay || (totalBorrowed * 1.1))}</p>
+                    <p className="font-black text-amber-400">{formatMoney(activeLoan.totalRepay)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Amount Paid</p>
-                    <p className="font-bold text-emerald-400">{formatMoney(activeLoan?.amountPaid || totalRepaid)}</p>
+                    <p className="font-bold text-emerald-400">{formatMoney(activeLoan.amountPaid)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">Remaining Balance</p>
-                    <p className="font-black text-rose-400">{formatMoney((activeLoan?.totalRepay || (totalBorrowed * 1.1)) - (activeLoan?.amountPaid || totalRepaid))}</p>
+                    <p className="font-black text-rose-400">{formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}</p>
                   </div>
                 </div>
 
-                {activeLoan?.status === 'PENDING ADMIN APPROVAL' ? (
+                {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 text-center font-medium">
                     Awaiting Treasurer approval and M-Pesa disbursement (24 hr).
                   </div>
-                ) : activeLoan?.status === 'OVERDUE' ? (
+                ) : activeLoan.status === 'OVERDUE' ? (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-rose-500/30">
                     <p className="text-xs font-bold text-rose-400">Your limit increase is paused because your repayment is late. Clear the arrears to restore eligibility.</p>
                     <div className="space-y-1.5">
@@ -1886,7 +1887,7 @@ export default function DashboardPage() {
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                        placeholder={`Remaining: ${formatMoney((activeLoan?.totalRepay || (totalBorrowed * 1.1)) - (activeLoan?.amountPaid || totalRepaid))}`}
+                        placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
                       />
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
@@ -1951,7 +1952,7 @@ export default function DashboardPage() {
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                        placeholder={`Remaining: ${formatMoney((activeLoan?.totalRepay || (totalBorrowed * 1.1)) - (activeLoan?.amountPaid || totalRepaid))}`}
+                        placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
                       />
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
