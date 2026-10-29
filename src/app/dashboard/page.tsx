@@ -9,6 +9,7 @@ interface LedgerItem {
   type: string;
   amount: number;
   date: string;
+  created_at?: string;
   status: string;
   code: string;
   smsMessage?: string;
@@ -64,7 +65,7 @@ interface ActiveLoan {
   amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
-  requestedDate?: string; // NEW: Tracks exactly when the loan was created
+  requestedDate?: string; 
   phone?: string;
 }
 
@@ -262,7 +263,6 @@ export default function DashboardPage() {
           if (parsed.amountPaid >= parsed.totalRepay) {
             localStorage.removeItem(`tibapay_loan_${u.phone}`);
           } else {
-            // Retroactively add requestedDate for old loans to prevent auto-repay bug
             if (!parsed.requestedDate && parsed.dueDate) {
               const due = new Date(parsed.dueDate);
               due.setDate(due.getDate() - parsed.termWeeks * 7);
@@ -448,6 +448,7 @@ export default function DashboardPage() {
         type: String(row.type || ''),
         amount: Math.round(Number(row.amount)) || 0,
         date: String(row.date || ''),
+        created_at: String(row.created_at || row.date || ''),
         status: String(row.status || '').replace(/_/g, ' '),
         code: String(row.code || ''),
         smsMessage: row.sms_message,
@@ -485,7 +486,7 @@ export default function DashboardPage() {
               amountPaid: totalRepaid,
               status: 'ACTIVE',
               dueDate: due.toISOString().split('T')[0],
-              requestedDate: latestLoan.date,
+              requestedDate: latestLoan.created_at || latestLoan.date,
               phone: currentUser.phone
             };
             setActiveLoan(rebuilt);
@@ -519,11 +520,14 @@ export default function DashboardPage() {
         }
 
         if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE') {
-          // THE ULTIMATE FIX: Only count repayments made AFTER this specific loan was requested!
-          const loanDate = currentLoan.requestedDate ? currentLoan.requestedDate.split('T')[0] : '2099-12-31';
-          const approvedRepayments = serverQueue.filter(
-            (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED' && i.date >= loanDate
-          );
+          const loanRequestedAt = currentLoan.requestedDate || new Date().toISOString();
+
+          const approvedRepayments = serverQueue.filter((i: any) => {
+            if (!i.type.includes('Loan Repayment') || i.status !== 'COMPLETED') return false;
+            const repaymentTime = i.created_at || i.date;
+            return repaymentTime >= loanRequestedAt;
+          });
+          
           const totalRepaidForThisLoan = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
           if (totalRepaidForThisLoan >= currentLoan.totalRepay) {
@@ -1041,7 +1045,7 @@ export default function DashboardPage() {
       amountPaid: 0,
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
-      requestedDate: new Date().toISOString(), // THE FIX: Stamped with exact time
+      requestedDate: new Date().toISOString(),
       phone: user?.phone,
     };
     saveLoanState(newLoan);
@@ -1458,7 +1462,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* FIX: Moved to fixed positioning so it doesn't push the layout down and steal focus */}
       {message && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-3 bg-emerald-600 border border-emerald-500 rounded-xl text-white text-xs font-semibold leading-relaxed shadow-2xl flex justify-between items-start">
           <span>{message}</span>
@@ -1920,7 +1923,6 @@ export default function DashboardPage() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
-                        key={`repay-input-overdue-${activeLoan.id}`}
                         type="number"
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
@@ -1986,7 +1988,6 @@ export default function DashboardPage() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
-                        key={`repay-input-active-${activeLoan.id}`}
                         type="number"
                         value={repayAmountInput}
                         onChange={(e) => setRepayAmountInput(e.target.value)}
