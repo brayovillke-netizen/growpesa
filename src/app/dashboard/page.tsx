@@ -64,6 +64,7 @@ interface ActiveLoan {
   amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
+  requestedDate?: string; // NEW: Tracks exactly when the loan was created
   phone?: string;
 }
 
@@ -261,7 +262,12 @@ export default function DashboardPage() {
           if (parsed.amountPaid >= parsed.totalRepay) {
             localStorage.removeItem(`tibapay_loan_${u.phone}`);
           } else {
-            // Only update state if the data is actually different to prevent unnecessary re-renders
+            // Retroactively add requestedDate for old loans to prevent auto-repay bug
+            if (!parsed.requestedDate && parsed.dueDate) {
+              const due = new Date(parsed.dueDate);
+              due.setDate(due.getDate() - parsed.termWeeks * 7);
+              parsed.requestedDate = due.toISOString();
+            }
             setActiveLoan(prev => {
               if (prev && prev.id === parsed.id && prev.amountPaid === parsed.amountPaid && prev.status === parsed.status) {
                 return prev;
@@ -479,6 +485,7 @@ export default function DashboardPage() {
               amountPaid: totalRepaid,
               status: 'ACTIVE',
               dueDate: due.toISOString().split('T')[0],
+              requestedDate: latestLoan.date,
               phone: currentUser.phone
             };
             setActiveLoan(rebuilt);
@@ -512,12 +519,10 @@ export default function DashboardPage() {
         }
 
         if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE') {
-          // THE CRITICAL FIX: Only look at repayments made AFTER this specific loan was requested.
-          const loanRequestItem = serverQueue.find((i: any) => String(i.code) === currentLoan.id);
-          const loanStartDate = loanRequestItem ? loanRequestItem.date : '1970-01-01';
-
+          // THE ULTIMATE FIX: Only count repayments made AFTER this specific loan was requested!
+          const loanDate = currentLoan.requestedDate ? currentLoan.requestedDate.split('T')[0] : '2099-12-31';
           const approvedRepayments = serverQueue.filter(
-            (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED' && i.date >= loanStartDate
+            (i: any) => i.type.includes('Loan Repayment') && i.status === 'COMPLETED' && i.date >= loanDate
           );
           const totalRepaidForThisLoan = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
@@ -1036,6 +1041,7 @@ export default function DashboardPage() {
       amountPaid: 0,
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
+      requestedDate: new Date().toISOString(), // THE FIX: Stamped with exact time
       phone: user?.phone,
     };
     saveLoanState(newLoan);
@@ -1452,9 +1458,11 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* FIX: Moved to fixed positioning so it doesn't push the layout down and steal focus */}
       {message && (
-        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-semibold leading-relaxed">
-          {message}
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-3 bg-emerald-600 border border-emerald-500 rounded-xl text-white text-xs font-semibold leading-relaxed shadow-2xl flex justify-between items-start">
+          <span>{message}</span>
+          <button onClick={() => setMessage(null)} className="ml-2 font-bold hover:text-emerald-200">✕</button>
         </div>
       )}
 
