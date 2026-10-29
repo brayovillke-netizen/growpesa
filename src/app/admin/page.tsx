@@ -203,13 +203,25 @@ export default function AdminPage() {
       }
 
       if (item.phone && (item.type.includes('Deposit') || item.type.includes('Withdrawal'))) {
-        const { error: memberUpdateError } = await supabase
+        
+        // A. ALWAYS update the main savings balance first
+        const { error: savingsError } = await supabase
           .from('members')
-          .update({ savings_balance: newMemberSavings, total_deposited: totalDeposited })
+          .update({ savings_balance: newMemberSavings })
           .eq('phone', item.phone);
         
-        if (memberUpdateError) {
-          throw new Error(`Failed to update member balance: ${memberUpdateError.message}`);
+        if (savingsError) {
+          throw new Error(`Failed to update savings balance: ${savingsError.message}`);
+        }
+
+        // B. Try to update total_deposited separately (so it doesn't block the balance)
+        try {
+          await supabase
+            .from('members')
+            .update({ total_deposited: totalDeposited })
+            .eq('phone', item.phone);
+        } catch (depositErr) {
+          console.warn("Could not update total_deposited tracker, but balance saved.");
         }
       }
 
