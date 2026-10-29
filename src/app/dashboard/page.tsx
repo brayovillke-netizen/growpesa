@@ -926,50 +926,84 @@ export default function DashboardPage() {
   // LOAN RISK MANAGEMENT & ELIGIBILITY CHECKS
   // ==========================================
 
-  const hasMinSavings = mainPool >= 1000;
-  const depositCount = ledger.filter(i => i.type.includes('Deposit') && i.status === 'COMPLETED').length;
-  const hasConsistentSavings = depositCount >= 4;
+  // 1. Determine Active Loan via Ledger (Absolute Source of Truth)
+  const totalBorrowed = ledger
+    .filter(i => i.type.includes('Loan Request') && i.status === 'COMPLETED')
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  const totalRepaid = ledger
+    .filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED')
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  const hasUnpaidLoan = totalBorrowed > totalRepaid;
+
+  // 2. Determine 3-Week Consecutive Saving Rule
+  const recentDeposits = ledger.filter(i => 
+    i.type.includes('Deposit') && 
+    i.status === 'COMPLETED' && 
+    i.amount >= 100
+  );
+  
+  const uniqueWeeks = new Set();
+  const now = new Date().getTime();
+  recentDeposits.forEach(d => {
+    const depTime = new Date(d.date).getTime();
+    const daysAgo = (now - depTime) / (1000 * 3600 * 24);
+    if (daysAgo <= 21) {
+      // Group by 7-day blocks (0 for this week, 1 for last week, 2 for 2 weeks ago)
+      uniqueWeeks.add(Math.floor(daysAgo / 7));
+    }
+  });
+  const has3WeeksSaving = uniqueWeeks.size >= 3;
+
+  // 3. Loan Stages & Limits
+  const hasMinSavings = mainPool >= 100;
   const isAccountActive = user?.account_status === 'active';
+  
+  // Calculate Stage
+  const completedLoans = ledger.filter(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED').length;
+  let stageCeiling = 20000;
+  let maxTermWeeks = 12;
 
-  const meetsBaseEligibility = daysActive >= 28 && hasMinSavings && hasConsistentSavings && isAccountActive;
+  if (completedLoans >= 2) {
+    stageCeiling = 50000;
+    maxTermWeeks = 24;
+  } else if (completedLoans === 1) {
+    stageCeiling = 30000;
+    maxTermWeeks = 24;
+  }
 
-  const hasPastCompletedLoan = ledger.some(i => i.type.includes('Loan Repayment') && i.status === 'COMPLETED');
-  const limitPercentage = hasPastCompletedLoan ? 0.40 : 0.20;
+  const savingsMultiplier = stageCeiling === 50000 ? 6 : 5;
+  const calculatedMaxLimit = Math.min(stageCeiling, Math.floor(mainPool * savingsMultiplier));
 
-  const calculatedMaxLimit = Math.min(Math.floor(mainPool * limitPercentage), 50000);
-  const assignedLimit = meetsBaseEligibility ? Math.max(calculatedMaxLimit, user?.loan_limit || 0) : 0;
+  const isEligibleForNewLoan = has3WeeksSaving && hasMinSavings && isAccountActive && !hasUnpaidLoan;
 
-  const isBlockedByOverdue = activeLoan?.status === 'OVERDUE';
-  const isEligibleForNewLoan = meetsBaseEligibility && !isBlockedByOverdue;
-
+  // Loan Calculations
   const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
   const loanFee = Math.round(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
   const amountSentToMpesa = Math.max(0, parsedLoanAmt - loanFee - loanGwfFee);
-  const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.1;
+  
+  const loanInterestRate = loanTermWeeks <= 4 ? 0.05 : loanTermWeeks <= 8 ? 0.08 : 0.12;
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
   const handleApplyLoan = async () => {
-    if (activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED') {
-      return setMessage(`Repay active loan completely before borrowing again.`);
-    }
-
-    if (isBlockedByOverdue) {
-      return setMessage(`Your account has an overdue loan. Please clear it to restore borrowing privileges.`);
+    if (hasUnpaidLoan) {
+      return setMessage(`You cannot borrow again until your current loan is fully repaid.`);
     }
 
     if (!isAccountActive) {
       return setMessage(`Your account is under review. Borrowing is temporarily suspended.`);
     }
 
-    if (!meetsBaseEligibility) {
-      return setMessage(`You do not meet the loan eligibility requirements yet.`);
+    if (!has3WeeksSaving) {
+      return setMessage(`Save with us to unlock a starter limit of up to KES 20,000. Save regularly for 3 weeks. Membership is free.`);
     }
 
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
-    if (parsedLoanAmt > assignedLimit) {
-      return setMessage(`Exceeds your approved limit of KES ${assignedLimit.toLocaleString()}.`);
+    if (parsedLoanAmt > calculatedMaxLimit) {
+      return setMessage(`Exceeds your approved limit of KES ${calculatedMaxLimit.toLocaleString()}.`);
     }
 
     const due = new Date();
@@ -1440,7 +1474,7 @@ export default function DashboardPage() {
             </div>
             <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-md">
               <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Loan Status</p>
-              <p className="text-sm font-black mt-1">{activeLoan ? activeLoan.status : 'No Loan'}</p>
+              <p className="text-sm font-black mt-1">{hasUnpaidLoan ? 'Active Loan' : 'No Loan'}</p>
             </div>
           </div>
 
@@ -1799,11 +1833,11 @@ export default function DashboardPage() {
                   ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                   : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}>
-                Max Limit: {isEligibleForNewLoan ? formatMoney(assignedLimit) : 'Locked'}
+                Max Limit: {isEligibleForNewLoan ? formatMoney(calculatedMaxLimit) : 'Locked'}
               </span>
             </div>
 
-            {activeLoan ? (
+            {activeLoan && activeLoan.status !== 'CLOSED' && activeLoan.status !== 'REJECTED' ? (
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
                   <div>
@@ -1845,7 +1879,7 @@ export default function DashboardPage() {
                   </div>
                 ) : activeLoan.status === 'OVERDUE' ? (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-rose-500/30">
-                    <p className="text-xs font-bold text-rose-400">Your loan is overdue. Please clear the balance to restore borrowing privileges.</p>
+                    <p className="text-xs font-bold text-rose-400">Your limit increase is paused because your repayment is late. Clear the arrears to restore eligibility.</p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
@@ -1909,7 +1943,7 @@ export default function DashboardPage() {
                   </div>
                 ) : activeLoan.status === 'ACTIVE' ? (
                   <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-slate-700">
-                    <p className="text-xs font-bold text-amber-400">Make a Partial or Full Repayment:</p>
+                    <p className="text-xs font-bold text-amber-400">Repay on time to qualify for a second, larger loan.</p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
@@ -1973,7 +2007,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 text-center font-medium">
-                    Loan fully cleared! You may apply for a new one.
+                    Congratulations! You repaid on time. You now qualify for review for a second, larger loan. Keep saving to grow your limit.
                   </div>
                 )}
               </div>
@@ -1984,13 +2018,15 @@ export default function DashboardPage() {
                   <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-2xl text-center space-y-2 shadow-inner">
                     <p className="text-sm font-bold text-slate-300">Loan Locked</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      You are not yet eligible to borrow. Keep saving and building your account history to unlock this feature.
+                      {hasUnpaidLoan 
+                        ? "You cannot borrow again until this loan is fully repaid and approved by admin."
+                        : "Save with us to unlock a starter limit of up to KES 20,000. Save regularly for 3 weeks. Membership is free."}
                     </p>
                   </div>
                 ) : (
                   <>
                     <p className="text-xs text-slate-400">
-                      You qualify to borrow up to <strong className="text-white">{formatMoney(assignedLimit)}</strong> ({hasPastCompletedLoan ? '40%' : '20%'} of savings). All loans require Treasurer approval and 24-hour disbursement.
+                      Good news! You have unlocked a starter loan limit of up to <strong className="text-white">{formatMoney(calculatedMaxLimit)}</strong>. Apply in the app; admin approval required.
                     </p>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
@@ -2008,9 +2044,9 @@ export default function DashboardPage() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { weeks: 1, rate: '3%' },
-                          { weeks: 2, rate: '5%' },
-                          { weeks: 4, rate: '10%' },
+                          { weeks: 4, rate: '5%' },
+                          { weeks: 8, rate: '8%' },
+                          { weeks: 12, rate: '12%' },
                         ].map((term) => (
                           <button
                             key={term.weeks}
@@ -2021,7 +2057,7 @@ export default function DashboardPage() {
                                 : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
                             }`}
                           >
-                            {term.weeks} Week{term.weeks > 1 ? 's' : ''} ({term.rate})
+                            {term.weeks} Weeks ({term.rate})
                           </button>
                         ))}
                       </div>
@@ -2044,7 +2080,7 @@ export default function DashboardPage() {
                         <span className="font-bold text-emerald-400">{formatMoney(amountSentToMpesa)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Interest ({loanTermWeeks}w @ {loanTermWeeks === 1 ? '3%' : loanTermWeeks === 2 ? '5%' : '10%'}):</span>
+                        <span className="text-slate-400">Interest ({loanTermWeeks}w):</span>
                         <span className="font-bold text-white">+{formatMoney(loanInterestAmount)}</span>
                       </div>
                       <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
@@ -2054,7 +2090,7 @@ export default function DashboardPage() {
                     </div>
                     <button
                       onClick={handleApplyLoan}
-                      disabled={parsedLoanAmt <= 0 || parsedLoanAmt > assignedLimit}
+                      disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
                       className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-emerald-400 transition cursor-pointer disabled:opacity-50 shadow-md mt-2"
                     >
                       Submit Loan Request for Admin Review (24 Hr)

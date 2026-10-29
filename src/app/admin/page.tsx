@@ -169,6 +169,22 @@ export default function AdminPage() {
         }
       }
 
+      // PREVENT PARALLEL LOANS (Check if they already owe)
+      if (item.type.includes('Loan Request') && item.phone) {
+        const { data: memberHistory } = await supabase
+          .from('ledger_items')
+          .select('type, amount, status')
+          .eq('phone', item.phone)
+          .eq('status', 'COMPLETED');
+
+        const borrowed = (memberHistory || []).filter(h => h.type.includes('Loan Request')).reduce((s, h) => s + Number(h.amount), 0);
+        const repaid = (memberHistory || []).filter(h => h.type.includes('Loan Repayment')).reduce((s, h) => s + Number(h.amount), 0);
+
+        if (borrowed > repaid) {
+          throw new Error(`Member has an active loan of KES ${borrowed - repaid}. Must repay fully before borrowing again.`);
+        }
+      }
+
       let newMemberSavings = currentSavings;
 
       if (item.type.includes('Deposit')) {
@@ -334,7 +350,6 @@ export default function AdminPage() {
     0
   );
 
-  // --- LOAN BOOK CALCULATIONS ---
   let totalDisbursed = 0;
   let totalRepaid = 0;
 
@@ -362,7 +377,6 @@ export default function AdminPage() {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
 
-  // Calculates individual member debt
   const getMemberDebt = (phone: string) => {
     let disbursed = 0;
     let repaid = 0;
@@ -430,7 +444,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 6-CARD POOL DASHBOARD */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Available Cash</p>
