@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import InstallPrompt from '@/components/InstallPrompt';
+import { PushNotificationManager } from '@/components/PushNotificationManager';
 import { supabase } from '@/lib/supabase/client';
 
 interface LedgerItem {
@@ -1607,6 +1608,9 @@ export default function DashboardPage() {
               <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
             </div>
           </div>
+
+          {/* NOTIFICATION SETTINGS */}
+          <PushNotificationManager userPhone={user.phone} />
 
           {/* FOLLOW ON X */}
           <a
