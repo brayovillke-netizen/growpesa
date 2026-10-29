@@ -133,7 +133,7 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [fetchQueue, fetchMembers]);
 
-  // Refresh member savings stats every 10s while the members or activity tab is visible
+  // Members polling (only when tab active)
   useEffect(() => {
     if (!adminUser) return;
     if (activeAdminTab !== 'members') return;
@@ -174,14 +174,11 @@ export default function AdminPage() {
         newMemberSavings = currentSavings + amt;
         totalDeposited += amt;
       } else if (item.type.includes('Withdrawal')) {
-        // Member is charged gross; only netPayout leaves as M-Pesa cash.
-        // The GWF remains as treasury income.
         const gwfFee = calculateGWF(amt);
         const netPayout = Math.max(0, amt - gwfFee);
         poolUpdate = Math.max(0, Math.round(mainPool - netPayout));
         newMemberSavings = Math.max(0, currentSavings - amt);
       } else if (item.type.includes('Loan Request')) {
-        // 5% loan fee + GWF are retained; only net leaves the pool.
         const loanFee = Math.round(amt * 0.05);
         const gwfFee = calculateGWF(amt);
         const netDisbursed = Math.max(0, amt - loanFee - gwfFee);
@@ -206,13 +203,17 @@ export default function AdminPage() {
       }
 
       if (item.phone && (item.type.includes('Deposit') || item.type.includes('Withdrawal'))) {
-        await supabase
+        const { error: memberUpdateError } = await supabase
           .from('members')
           .update({ savings_balance: newMemberSavings, total_deposited: totalDeposited })
           .eq('phone', item.phone);
+        
+        if (memberUpdateError) {
+          throw new Error(`Failed to update member balance: ${memberUpdateError.message}`);
+        }
       }
 
-      // Referral bonus (unchanged)
+      // 6. Handle Referral Bonus (KES 5, Max 5 rewards)
       if (item.type.includes('Deposit') && referredBy && !referralPaid && totalDeposited >= 100) {
         await supabase.from('members').update({ referral_paid: true }).eq('phone', item.phone);
 
@@ -224,6 +225,7 @@ export default function AdminPage() {
 
         if (refData) {
           const refCount = Number(refData.referrals_rewarded_count) || 0;
+
           if (refCount < 5) {
             const refCurrentSavings = Number(refData.savings_balance) || 0;
             await supabase.from('members').update({
@@ -258,7 +260,9 @@ export default function AdminPage() {
         .from('ledger_items')
         .update({ status: 'REJECTED' })
         .eq('id', String(item.id));
+
       if (error) throw error;
+
       await fetchQueue();
       setMessage(`Rejected ${item.code}`);
     } catch (e: any) {
@@ -267,16 +271,18 @@ export default function AdminPage() {
   };
 
   const downloadLedgerCSV = (memberPhone: string, memberName: string) => {
-    const rows = queue.filter(i => i.phone === memberPhone);
-    if (rows.length === 0) {
+    const memberLedger = queue.filter(i => i.phone === memberPhone);
+    if (memberLedger.length === 0) {
       alert('No transactions found for this member.');
       return;
     }
+
     const headers = "ID,Type,Amount (KES),Date,Status,Code\n";
-    const body = rows.map(i =>
+    const rows = memberLedger.map(i =>
       `"${i.id}","${i.type}",${i.amount},"${i.date}","${i.status}","${i.code}"`
     ).join("\n");
-    const blob = new Blob([headers + body], { type: 'text/csv;charset=utf-8;' });
+
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -327,7 +333,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24">
-      {/* HEADER */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 font-black text-slate-950 text-lg shadow-md shadow-amber-500/20">
@@ -362,7 +367,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* POOLS GRID — 4 cards */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-emerald-600 p-3 rounded-2xl text-slate-950 shadow-md">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Treasury Pool</p>
@@ -386,7 +390,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* ADMIN TABS */}
       <div className="grid grid-cols-3 gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs font-bold">
         {(['queue', 'members', 'activity'] as const).map((tab) => (
           <button
@@ -403,7 +406,6 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* QUEUE TAB */}
       {activeAdminTab === 'queue' && (
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
           <div className="flex justify-between items-center">
@@ -506,7 +508,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* MEMBERS TAB */}
       {activeAdminTab === 'members' && (
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
           <div className="flex justify-between items-center">
@@ -557,7 +558,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ACTIVITY TAB */}
       {activeAdminTab === 'activity' && (
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
           <div className="flex justify-between items-center">

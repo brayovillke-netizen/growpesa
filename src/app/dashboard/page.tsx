@@ -119,12 +119,10 @@ export default function DashboardPage() {
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
-  // Screen Lock States
-  const [isLocked, setIsLocked] = useState(false);
-  const [lockPin, setLockPin] = useState('');
+  // Inactivity Tracker
   const lastActivityRef = useRef(0);
 
-  // Derived time states (kept out of render body)
+  // Derived time states
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
 
@@ -212,17 +210,26 @@ export default function DashboardPage() {
     setDaysActive(Math.max(0, Math.floor((Date.now() - joinedMs) / 86400000)));
   }, [user]);
 
-  // Inactivity Lock Timer
+  // Inactivity Auto-Logout Timer (5 Minutes)
   useEffect(() => {
     if (!user) return;
 
     lastActivityRef.current = Date.now();
 
     const interval = setInterval(() => {
-      if (!isLocked && Date.now() - lastActivityRef.current > 5 * 60 * 1000) {
-        setIsLocked(true);
+      // 5 minutes = 5 * 60 * 1000 = 300,000 ms
+      if (Date.now() - lastActivityRef.current > 300000) {
+        // Log user out completely
+        setUser(null);
+        setLedger([]);
+        setActiveSubscriptions([]);
+        setActiveLoan(null);
+        setMainPool(0);
+        localStorage.removeItem('tibapay_auth_user');
+        setMessage('You have been logged out due to 5 minutes of inactivity.');
+        setAuthMode('login');
       }
-    }, 10000);
+    }, 10000); // Check every 10 seconds
 
     const resetActivity = () => {
       lastActivityRef.current = Date.now();
@@ -238,7 +245,7 @@ export default function DashboardPage() {
       window.removeEventListener('touchstart', resetActivity);
       window.removeEventListener('keydown', resetActivity);
     };
-  }, [user, isLocked]);
+  }, [user]);
 
   useEffect(() => {
     if (user) setRepayPhoneInput(user.phone);
@@ -262,7 +269,6 @@ export default function DashboardPage() {
     const savedSubs = localStorage.getItem(`tibapay_subs_${u.phone}`);
     if (savedSubs) {
       try {
-        // Keep expired subs so their unswept balance isn't lost
         const parsed: ActiveSubscription[] = JSON.parse(savedSubs);
         setActiveSubscriptions(parsed);
       } catch {}
@@ -650,20 +656,6 @@ export default function DashboardPage() {
     alert('PIN updated successfully!');
     setShowChangePin(false);
     setNewPin('');
-  };
-
-  const handleUnlock = async () => {
-    if (!user) return;
-    if (lockPin.length !== 4) return alert('PIN must be 4 digits.');
-
-    const { data, error } = await supabase.from('members').select('pin').eq('phone', user.phone).single();
-    if (error || !data) return alert('Failed to verify PIN.');
-
-    if (data.pin !== lockPin) return alert('Incorrect PIN.');
-
-    setIsLocked(false);
-    setLockPin('');
-    lastActivityRef.current = Date.now();
   };
 
   const handleLogout = () => {
@@ -1134,6 +1126,12 @@ export default function DashboardPage() {
             </p>
           </div>
 
+          {message && (
+            <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-semibold leading-relaxed text-center">
+              {message}
+            </div>
+          )}
+
           {authError && (
             <div className="p-3 bg-rose-500/20 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-semibold leading-relaxed">
               {authError}
@@ -1183,7 +1181,7 @@ export default function DashboardPage() {
               </button>
 
               <div className="text-center pt-2">
-                <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
+                <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(null); setMessage(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
                   Don't have an account? Sign Up
                 </button>
               </div>
@@ -1287,7 +1285,7 @@ export default function DashboardPage() {
               </button>
 
               <div className="text-center pt-2">
-                <button type="button" onClick={() => { setAuthMode('login'); setAuthError(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
+                <button type="button" onClick={() => { setAuthMode('login'); setAuthError(null); setMessage(null); }} className="text-xs text-emerald-400 font-bold hover:underline">
                   Already have an account? Log In
                 </button>
               </div>
@@ -1322,45 +1320,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
-
-      {/* SCREEN LOCK OVERLAY */}
-      {isLocked && (
-        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col justify-center items-center p-6 space-y-6">
-          <div className="text-center space-y-2 mb-4">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 text-3xl shadow-lg border border-slate-700">
-              🔒
-            </div>
-            <h2 className="text-xl font-black text-white">Screen Locked</h2>
-            <p className="text-xs text-slate-400">Enter your PIN to unlock</p>
-          </div>
-
-          <div className="w-full max-w-xs space-y-4">
-            <div className="relative">
-              <input
-                type="password"
-                maxLength={4}
-                value={lockPin}
-                onChange={(e) => setLockPin(e.target.value)}
-                placeholder="****"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-xl"
-              />
-            </div>
-            <button
-              onClick={handleUnlock}
-              className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
-            >
-              Unlock
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full py-2 bg-transparent text-rose-400 font-bold rounded-xl text-xs transition cursor-pointer"
-            >
-              Sign Out completely
-            </button>
-          </div>
-        </div>
-      )}
-
+      
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
@@ -1532,7 +1492,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* REFERRAL CARD */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-900/50 to-slate-900 border border-indigo-500/30 p-4 space-y-3 shadow-lg">
             <div className="flex justify-between items-center">
               <div>
@@ -1557,7 +1516,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* FOLLOW ON X CARD */}
           <a
             href="https://twitter.com/intent/follow?screen_name=tibapay"
             target="_blank"
