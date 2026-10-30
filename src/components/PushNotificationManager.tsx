@@ -21,16 +21,13 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
 
   const syncSubscriptionToDB = async (sub: PushSubscription) => {
     try {
-      console.log("Syncing existing subscription to Supabase...");
       const { error } = await supabase.from('push_subscriptions').upsert({
         phone: userPhone,
         subscription: sub.toJSON(),
       }, { onConflict: 'phone' });
-
       if (error) throw error;
-      console.log("✅ Successfully synced subscription to DB.");
     } catch (err) {
-      console.error("❌ Failed to sync to DB:", err);
+      console.error("Failed to sync to DB:", err);
     }
   };
 
@@ -47,7 +44,6 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
       reg.pushManager.getSubscription().then((sub) => {
         if (sub) {
           setSubscription(sub);
-          // AUTO-FIX: If browser has a sub, make sure the DB has it too
           syncSubscriptionToDB(sub); 
         }
       });
@@ -91,16 +87,8 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
     }
   };
 
-  if (!isSupported || isDismissed) return null;
-
-  // If already subscribed, show a small confirmation badge instead of the big button
-  if (subscription) {
-    return (
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900/90 border border-emerald-500/50 p-2 rounded-xl shadow-lg flex justify-between items-center px-4">
-         <span className="text-[10px] text-emerald-400 font-bold">✅ Push Notifications Active</span>
-      </div>
-    );
-  }
+  // If not supported, already subscribed, or dismissed, completely hide the component
+  if (!isSupported || subscription || isDismissed) return null;
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900 border border-slate-700 p-4 rounded-2xl shadow-2xl flex flex-col gap-3">
