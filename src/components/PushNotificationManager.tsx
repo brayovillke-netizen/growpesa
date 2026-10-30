@@ -17,7 +17,6 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   const [isSupported, setIsSupported] = useState(true);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
 
   const syncSubscriptionToDB = async (sub: PushSubscription) => {
     try {
@@ -32,9 +31,6 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   };
 
   useEffect(() => {
-    const dismissed = localStorage.getItem('tibapay_push_dismissed');
-    if (dismissed === 'true') setIsDismissed(true);
-
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       setIsSupported(false);
       return;
@@ -50,14 +46,15 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
     });
   }, [userPhone]);
 
-  const handleDismiss = () => {
-    setIsDismissed(true);
-    localStorage.setItem('tibapay_push_dismissed', 'true');
-  };
-
   const subscribeToPush = async () => {
     setLoading(true);
     try {
+      // 1. Check browser permission first
+      const permission = await Notification.requestPermission();
+      if (permission === 'denied') {
+        throw new Error("Browser blocked notifications. Please tap the 'Lock' icon in the URL bar and allow notifications.");
+      }
+
       const reg = await navigator.serviceWorker.ready;
       
       if (subscription) {
@@ -68,6 +65,7 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
         throw new Error("VAPID Public Key is missing.");
       }
 
+      // 2. Request subscription
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
@@ -77,7 +75,6 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
       await syncSubscriptionToDB(sub);
 
       alert('Notifications enabled successfully!');
-      localStorage.removeItem('tibapay_push_dismissed');
 
     } catch (error: any) {
       console.error('Failed to subscribe:', error);
@@ -87,9 +84,10 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
     }
   };
 
-  // If not supported, already subscribed, or dismissed, completely hide the component
-  if (!isSupported || subscription || isDismissed) return null;
+  // Hide if not supported, or if successfully subscribed
+  if (!isSupported || subscription) return null;
 
+  // The banner will now show on every refresh until they successfully subscribe
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900 border border-slate-700 p-4 rounded-2xl shadow-2xl flex flex-col gap-3">
       <div className="flex justify-between items-start">
@@ -100,7 +98,8 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
             <p className="text-[10px] text-slate-400 mt-0.5">Get instant alerts for deposits & loans.</p>
           </div>
         </div>
-        <button onClick={handleDismiss} className="text-slate-500 hover:text-white font-bold text-lg leading-none">
+        {/* We keep the X to hide it for the current page view, but it will reappear on refresh */}
+        <button onClick={() => setSubscription({} as PushSubscription)} className="text-slate-500 hover:text-white font-bold text-lg leading-none">
           ✕
         </button>
       </div>
