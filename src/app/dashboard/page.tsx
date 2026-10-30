@@ -1278,6 +1278,11 @@ export default function DashboardPage() {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
 
+  // Filter ledger for display in review mode to hide financial history
+  const displayLedger = isReviewMode
+    ? ledger.filter(item => !item.type.includes('Withdrawal') && !item.type.includes('Loan') && !item.type.includes('Sweep'))
+    : ledger;
+
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center p-6 max-w-md mx-auto font-sans">
@@ -1831,14 +1836,14 @@ export default function DashboardPage() {
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-bold text-sm text-white">Recent Activity</h3>
-              <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{ledger.length} Records</span>
+              <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{displayLedger.length} Records</span>
             </div>
             
             <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-              {ledger.length === 0 ? (
+              {displayLedger.length === 0 ? (
                 <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
               ) : (
-                ledger.map((item) => (
+                displayLedger.map((item) => (
                   <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
                     <div className="flex justify-between items-center">
                       <div className="max-w-[65%]">
