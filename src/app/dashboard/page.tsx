@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import InstallPrompt from '@/components/InstallPrompt';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
-import { BiometricLock, useBiometrics } from '@/components/BiometricLock';
+import { useBiometrics } from '@/components/BiometricLock';
 import { supabase } from '@/lib/supabase/client';
 
 interface LedgerItem {
@@ -156,7 +156,6 @@ export default function DashboardPage() {
 
   const [ledger, setLedger] = useState<LedgerItem[]>([]);
 
-  // Biometric Hooks & State
   const { isEnabled: bioEnabled, isSupported: bioSupported, enableBiometrics, disableBiometrics, loginWithBiometrics } = useBiometrics();
   const [hasSavedBio, setHasSavedBio] = useState(false);
 
@@ -165,7 +164,6 @@ export default function DashboardPage() {
     loanRef.current = activeLoan;
   }, [activeLoan]);
 
-  // Check for saved biometrics on mount
   useEffect(() => {
     if (localStorage.getItem('tibapay_biometric_id')) {
       setHasSavedBio(true);
@@ -1498,813 +1496,811 @@ export default function DashboardPage() {
   };
 
   return (
-    <BiometricLock>
-      <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
-        
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
-              TP
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-base font-bold tracking-tight text-white">
-                  Tiba<span className="text-emerald-400">Pay</span>
-                </h1>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-400 border border-emerald-500/20">
-                  Member
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 truncate max-w-[150px]">{user.name}</p>
-            </div>
+    <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
+      
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
+            TP
           </div>
-          <div className="flex flex-col gap-1 items-end">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setHideBalances(!hideBalances)}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
-                title={hideBalances ? "Reveal Balances" : "Hide Balances"}
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-base font-bold tracking-tight text-white">
+                Tiba<span className="text-emerald-400">Pay</span>
+              </h1>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-400 border border-emerald-500/20">
+                Member
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 truncate max-w-[150px]">{user.name}</p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1 items-end">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setHideBalances(!hideBalances)}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
+              title={hideBalances ? "Reveal Balances" : "Hide Balances"}
+            >
+              {hideBalances ? '🙈' : '👁️'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
+            >
+              Sign Out
+            </button>
+          </div>
+          
+          <div className="flex gap-2 mt-1 justify-end">
+            <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
+              Change PIN
+            </button>
+            
+            {bioSupported && (
+              <button 
+                onClick={async () => {
+                  if (bioEnabled) {
+                    disableBiometrics();
+                  } else {
+                    const success = await enableBiometrics(user.phone);
+                    if (success) alert('Biometrics enabled! You will be prompted on next refresh.');
+                    else alert('Failed to enable biometrics. Your device may not support it.');
+                  }
+                }} 
+                className="text-[9px] text-sky-400 font-bold hover:underline"
               >
-                {hideBalances ? '🙈' : '👁️'}
+                {bioEnabled ? 'Disable Biometrics' : 'Enable Biometrics'}
               </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
-              >
-                Sign Out
-              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showChangePin && (
+        <div className="p-4 bg-slate-900 border border-slate-700 rounded-xl space-y-3">
+          <h3 className="text-xs font-bold text-white">Change Your PIN</h3>
+          <div className="relative">
+            <input
+              type={showNewPin ? "text" : "password"}
+              maxLength={4}
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value)}
+              placeholder="Enter new 4-digit PIN"
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPin(!showNewPin)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            >
+              {showNewPin ? '👁️' : '🙈'}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleChangePin} className="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
+              Update PIN
+            </button>
+            <button onClick={() => setShowChangePin(false)} className="px-3 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-3 bg-emerald-600 border border-emerald-500 rounded-xl text-white text-xs font-semibold leading-relaxed shadow-2xl flex justify-between items-start">
+          <span>{message}</span>
+          <button onClick={() => setMessage(null)} className="ml-2 font-bold hover:text-emerald-200">✕</button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
+        {(['overview', 'packages', 'withdraw', 'loans'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => { setActiveTab(tab); setMessage(null); }}
+            className={`py-2.5 rounded-xl capitalize transition cursor-pointer ${
+              activeTab === tab
+                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          
+          {/* BALANCE GRID */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Main Savings</p>
+              <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
             </div>
             
-            <div className="flex gap-2 mt-1 justify-end">
-              <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
-                Change PIN
+            <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
+              <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
+              <p className="text-xl font-black mt-1">
+                {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
+              <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+            </div>
+          </div>
+
+          {/* DEPOSIT SECTION */}
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center">
+              <h3 className="font-black text-base text-white flex items-center gap-2">
+                <span className="text-emerald-400">💵</span> Deposit Funds
+              </h3>
+              <button
+                onClick={() => setShowManualDeposit(!showManualDeposit)}
+                className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition cursor-pointer"
+              >
+                {showManualDeposit ? 'Use STK Push' : 'Paste SMS'}
               </button>
-              
-              {bioSupported && (
-                <button 
-                  onClick={async () => {
-                    if (bioEnabled) {
-                      disableBiometrics();
-                    } else {
-                      const success = await enableBiometrics(user.phone);
-                      if (success) alert('Biometrics enabled! You will be prompted on next refresh.');
-                      else alert('Failed to enable biometrics. Your device may not support it.');
-                    }
-                  }} 
-                  className="text-[9px] text-sky-400 font-bold hover:underline"
+            </div>
+
+            {!showManualDeposit ? (
+              <>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Phone Number</label>
+                    <input
+                      type="text"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+                      placeholder="0712345678"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Amount</label>
+                    <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                      <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700/50">KES</span>
+                      <input
+                        type="number"
+                        value={depositAmountInput}
+                        onChange={(e) => setDepositAmountInput(e.target.value)}
+                        className="w-full bg-transparent px-4 py-1.5 text-lg text-white font-black focus:outline-none"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleDeposit}
+                  disabled={loading}
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 hover:opacity-90 transition cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2"
                 >
-                  {bioEnabled ? 'Disable Biometrics' : 'Enable Biometrics'}
+                  {loading ? (
+                    <>Processing...</>
+                  ) : (
+                    <>⚡ Push to Phone</>
+                  )}
                 </button>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Paste the M-Pesa SMS to submit for Treasurer approval:
+                </p>
+                <textarea
+                  value={manualSmsText}
+                  onChange={(e) => setManualSmsText(e.target.value)}
+                  placeholder="Paste full SMS here..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-24 resize-none transition"
+                />
+                <button
+                  onClick={handleDirectSmsSubmit}
+                  className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
+                >
+                  Submit Confirmation
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* REFER & EARN SECTION */}
+          <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
+            <div className="flex justify-between items-start mb-1">
+              <div>
+                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
+                <h3 className="font-black text-base text-white">Earn up to KES 50</h3>
+              </div>
+              <div className="text-2xl drop-shadow-md">🎁</div>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-4 font-medium">
+              Share your invite link. Get rewarded instantly when your friends make their first deposit.
+            </p>
+
+            <button
+              onClick={handleShareReferral}
+              className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>↗️ Share Invite</span>
+            </button>
+
+            <div className="mt-3 text-center">
+              <span className="text-[10px] text-slate-500 font-bold">Code: </span>
+              <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
+            </div>
+          </div>
+
+          {/* FOLLOW ON X */}
+          <a
+            href="https://twitter.com/intent/follow?screen_name=tibapay"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
+                  𝕏
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
+                  <h3 className="font-black text-sm text-white">@tibapay on X</h3>
+                  <p className="text-[10px] text-slate-500">News, updates & community</p>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
+                Follow →
+              </div>
+            </div>
+          </a>
+
+          {/* ACTIVITY LEDGER */}
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-sm text-white">Recent Activity</h3>
+              <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{ledger.length} Records</span>
+            </div>
+            
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+              {ledger.length === 0 ? (
+                <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
+              ) : (
+                ledger.map((item) => (
+                  <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <div className="max-w-[65%]">
+                        <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
+                        <p className="text-[8px] text-slate-500 font-medium">{item.date} · {item.code}</p>
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`font-black text-[12px] ${
+                            item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
+                              ? 'text-emerald-400'
+                              : 'text-rose-400'
+                          }`}
+                        >
+                          {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
+                          {formatMoney(item.amount)}
+                        </p>
+                        <p
+                          className={`text-[8px] font-bold ${
+                            item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
+                              ? 'text-emerald-500'
+                              : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
+                              ? 'text-sky-400'
+                              : item.status === 'REJECTED' || item.status === 'FAILED'
+                              ? 'text-rose-500'
+                              : 'text-amber-400 animate-pulse'
+                          }`}
+                        >
+                          {item.status}
+                        </p>
+                      </div>
+                    </div>
+
+                    {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
+                      <button
+                        onClick={() => setActiveSmsInputId(item.id)}
+                        className="w-full py-1 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold transition cursor-pointer"
+                      >
+                        Paste M-Pesa SMS
+                      </button>
+                    )}
+
+                    {activeSmsInputId === item.id && (
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80 mt-2">
+                        <textarea
+                          value={pastedSmsText}
+                          onChange={(e) => setPastedSmsText(e.target.value)}
+                          placeholder="Paste full M-Pesa text here"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-14 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSubmitSmsForApproval(item.id)}
+                            className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[9px] transition cursor-pointer"
+                          >
+                            Submit
+                          </button>
+                          <button
+                            onClick={() => setActiveSmsInputId(null)}
+                            className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[9px] transition cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           </div>
         </div>
+      )}
 
-        {showChangePin && (
-          <div className="p-4 bg-slate-900 border border-slate-700 rounded-xl space-y-3">
-            <h3 className="text-xs font-bold text-white">Change Your PIN</h3>
-            <div className="relative">
-              <input
-                type={showNewPin ? "text" : "password"}
-                maxLength={4}
-                value={newPin}
-                onChange={(e) => setNewPin(e.target.value)}
-                placeholder="Enter new 4-digit PIN"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPin(!showNewPin)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-              >
-                {showNewPin ? '👁️' : '🙈'}
-              </button>
+      {activeTab === 'packages' && (
+        <div className="space-y-5">
+          
+          {/* ACTIVE SUBSCRIPTIONS */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-end px-1">
+              <h3 className="font-black text-sm text-white">Your Active Packages</h3>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                {activeSubscriptions.length} Running
+              </span>
             </div>
-            <div className="flex gap-2">
-              <button onClick={handleChangePin} className="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
-                Update PIN
-              </button>
-              <button onClick={() => setShowChangePin(false)} className="px-3 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {message && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-3 bg-emerald-600 border border-emerald-500 rounded-xl text-white text-xs font-semibold leading-relaxed shadow-2xl flex justify-between items-start">
-            <span>{message}</span>
-            <button onClick={() => setMessage(null)} className="ml-2 font-bold hover:text-emerald-200">✕</button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
-          {(['overview', 'packages', 'withdraw', 'loans'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setMessage(null); }}
-              className={`py-2.5 rounded-xl capitalize transition cursor-pointer ${
-                activeTab === tab
-                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'overview' && (
-          <div className="space-y-4">
             
-            {/* BALANCE GRID */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Main Savings</p>
-                <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
+            {activeSubscriptions.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-900/50 border border-slate-800 text-center">
+                <span className="text-3xl mb-3 block opacity-50">📦</span>
+                <p className="text-xs text-slate-400 font-medium">No active packages. Join a tier below to start earning.</p>
               </div>
-              
-              <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
-                <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
-                <p className="text-xl font-black mt-1">
-                  {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
-                </p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
-                <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+            ) : (
+              activeSubscriptions.map((sub) => {
+                const tier = PACKAGE_TIERS.find((t) => t.id === sub.tierId);
+                if (!tier) return null;
+                const isExpired = todayStr !== '' && todayStr >= sub.endDate;
+                
+                return (
+                  <div key={sub.tierId} className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-4 shadow-xl relative overflow-hidden">
+                    {/* Glow effect */}
+                    <div className={`absolute top-0 right-0 w-32 h-32 blur-3xl opacity-20 rounded-full ${isExpired ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+                    
+                    <div className="flex justify-between items-center relative z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="text-4xl drop-shadow-md">{tier.icon}</div>
+                        <div>
+                          <h3 className="font-black text-base text-white">{tier.name}</h3>
+                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">Ends: {sub.endDate}</p>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg border ${
+                        isExpired 
+                          ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' 
+                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      }`}>
+                        {isExpired ? 'Matured' : 'Active'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 relative z-10">
+                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Earned</p>
+                        <p className="text-lg font-black text-white">{formatMoney(sub.accumulatedBalance)}</p>
+                      </div>
+                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Daily Rate</p>
+                        <p className="text-lg font-black text-emerald-400">+{formatMoney(tier.dailyLimit)}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSweepSub(sub.tierId)}
+                      disabled={sub.accumulatedBalance <= 0}
+                      className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center"
+                    >
+                      <span>{isExpired ? 'Claim & Close Package 🎉' : 'Sweep to Vault 🚀'}</span>
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* AVAILABLE TIERS */}
+          <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-4">
+            <h3 className="font-black text-sm text-white mb-3 flex items-center gap-2">
+              <span className="text-emerald-400">💎</span> Available Tiers
+            </h3>
+            
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {PACKAGE_TIERS.map((tier) => {
+                const isSubscribed = activeSubscriptions.some((s) => s.tierId === tier.id);
+                const hasEnough = mainPool >= tier.entry;
+                
+                return (
+                  <div
+                    key={tier.id}
+                    className={`p-3 rounded-2xl border flex justify-between items-center transition-all ${
+                      isSubscribed
+                        ? 'bg-slate-950/30 border-slate-800/50 opacity-60 grayscale-[50%]'
+                        : 'bg-slate-950 border border-slate-800 shadow-sm hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl drop-shadow-sm">{tier.icon}</div>
+                      <div>
+                        <p className="font-bold text-xs text-white">{tier.name}</p>
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                          Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>{formatMoney(tier.entry)}</strong> 
+                          <span className="mx-1 text-slate-600">•</span> 
+                          {tier.lockDays} Days
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col items-end gap-1">
+                      <p className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        +{formatMoney(tier.dailyLimit)}/d
+                      </p>
+                      {isSubscribed ? (
+                        <span className="text-[9px] font-bold text-slate-500 mr-2 mt-1">
+                          Joined
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleSubscribeTier(tier.id)}
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[10px] transition shadow-sm mt-1"
+                        >
+                          Join
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'withdraw' && (
+        <div className="space-y-3">
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-5 shadow-2xl backdrop-blur-sm">
+            
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="font-black text-lg text-white flex items-center gap-2">
+                <span className="text-emerald-400">🏦</span> Withdraw
+              </h3>
+              <span className="text-[11px] font-black px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 shadow-sm">
+                Bal: {formatMoney(mainPool)}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Withdraw (Min KES 50)</label>
+              <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
+                <input
+                  type="number"
+                  value={withdrawAmountInput}
+                  onChange={(e) => setWithdrawAmountInput(e.target.value)}
+                  className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
+                  placeholder="0"
+                />
               </div>
             </div>
 
-            {/* DEPOSIT SECTION */}
-            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
-              <div className="flex justify-between items-center">
-                <h3 className="font-black text-base text-white flex items-center gap-2">
-                  <span className="text-emerald-400">💵</span> Deposit Funds
-                </h3>
-                <button
-                  onClick={() => setShowManualDeposit(!showManualDeposit)}
-                  className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition cursor-pointer"
-                >
-                  {showManualDeposit ? 'Use STK Push' : 'Paste SMS'}
-                </button>
-              </div>
+            <button
+              onClick={handleWithdraw}
+              disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || parsedWithdrawAmt > mainPool || hasUnpaidLoan}
+              className="w-full py-3.5 mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2"
+            >
+              {hasUnpaidLoan ? (
+                <>🚫 Active Loan</>
+              ) : loading ? (
+                <>Processing...</>
+              ) : (
+                <>Request Payout</>
+              )}
+            </button>
+            
+            <p className="text-center text-[9px] text-slate-500 font-medium">
+              Funds are typically disbursed within 24 hours.
+            </p>
+          </div>
+        </div>
+      )}
 
-              {!showManualDeposit ? (
-                <>
-                  <div className="space-y-3">
+      {activeTab === 'loans' && (
+        <div className="space-y-3">
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
+            
+            {/* HEADER */}
+            <div className="flex justify-between items-center">
+              <h3 className="font-black text-lg text-white flex items-center gap-2">
+                <span className="text-emerald-400">💸</span> Loan Engine
+              </h3>
+              <span className={`text-[11px] font-black px-3 py-1.5 rounded-lg border shadow-sm ${
+                calculatedMaxLimit > 0
+                  ? 'text-sky-300 bg-sky-500/10 border-sky-500/30'
+                  : 'text-rose-300 bg-rose-500/10 border-rose-500/30'
+              }`}>
+                Limit: {calculatedMaxLimit > 0 ? `KES ${calculatedMaxLimit.toLocaleString()}` : 'Locked'}
+              </span>
+            </div>
+
+            {/* STAGE CARD */}
+            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-inner flex flex-col items-center justify-center space-y-2 relative overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full"></div>
+              
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest relative z-10">Your Membership Tier</p>
+              <div className="flex items-center gap-3 relative z-10">
+                <span className="text-emerald-400 font-black text-2xl drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">Stage {currentStage}</span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-xs px-3 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-500/30 shadow-sm">{stageName}</span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium relative z-10">Keep saving & repaying to unlock higher limits.</p>
+            </div>
+
+            {activeLoan ? (
+              <div className="space-y-4">
+                {/* ACTIVE LOAN SUMMARY */}
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Phone Number</label>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Loan Ref</p>
+                      <p className="font-black text-sm text-white">{activeLoan.id}</p>
+                    </div>
+                    <span className={`px-3 py-1 text-[10px] font-black rounded-lg border ${
+                      (activeLoan.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
+                      (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                      'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    }`}>
+                      {activeLoan.status}
+                    </span>
+                  </div>
+
+                  {/* PROGRESS BAR */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                      <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
+                      <span>Total: <span className="text-white">KES {activeLoan.totalRepay.toLocaleString()}</span></span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, (activeLoan.amountPaid / activeLoan.totalRepay) * 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase font-bold">Requested</p>
+                      <p className="font-bold text-white text-sm mt-0.5">KES {activeLoan.requestedAmount.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase font-bold">Remaining</p>
+                      <p className="font-black text-rose-400 text-sm mt-0.5">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* REPAYMENT INTERFACE */}
+                {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
+                  <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-xs text-sky-300 text-center font-bold">
+                    Awaiting Treasurer Approval (24 hr).
+                  </div>
+                ) : activeLoan.status === 'OVERDUE' ? (
+                  <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-rose-500/40 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
+                    <p className="text-xs font-bold text-rose-400">Limit increase paused. Clear arrears immediately.</p>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
                       <input
-                        type="text"
-                        value={phoneInput}
-                        onChange={(e) => setPhoneInput(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
-                        placeholder="0712345678"
+                        type="number"
+                        value={repayAmountInput}
+                        onChange={(e) => setRepayAmountInput(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition"
+                        placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
                       />
                     </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Amount</label>
+                    <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
+                      <button
+                        onClick={() => setRepayMode('stk')}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+                      >
+                        Pay via STK Push
+                      </button>
+                      <button
+                        onClick={() => setRepayMode('sms')}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+                      >
+                        Paste SMS
+                      </button>
+                    </div>
+
+                    {repayMode === 'stk' ? (
+                      <div className="space-y-3 pt-1">
+                        <input
+                          type="text"
+                          value={repayPhoneInput}
+                          onChange={(e) => setRepayPhoneInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-rose-500"
+                          placeholder="M-Pesa Number (0712345678)"
+                        />
+                        <button
+                          onClick={handleRepaySTK}
+                          disabled={loading}
+                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20 disabled:opacity-50"
+                        >
+                          {loading ? 'Sending...' : 'Trigger STK Push'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 pt-1">
+                        <textarea
+                          value={repaySmsText}
+                          onChange={(e) => setRepaySmsText(e.target.value)}
+                          placeholder="Paste M-Pesa SMS here..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500 h-20 resize-none"
+                        />
+                        <button
+                          onClick={handleRepaySMS}
+                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20"
+                        >
+                          Submit SMS
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
+                      <input
+                        type="number"
+                        value={repayAmountInput}
+                        onChange={(e) => setRepayAmountInput(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+                        placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
+                      />
+                    </div>
+                    <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
+                      <button
+                        onClick={() => setRepayMode('stk')}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+                      >
+                        STK Push
+                      </button>
+                      <button
+                        onClick={() => setRepayMode('sms')}
+                        className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+                      >
+                        Paste SMS
+                      </button>
+                    </div>
+
+                    {repayMode === 'stk' ? (
+                      <div className="space-y-3 pt-1">
+                        <input
+                          type="text"
+                          value={repayPhoneInput}
+                          onChange={(e) => setRepayPhoneInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                          placeholder="M-Pesa Number (0712345678)"
+                        />
+                        <button
+                          onClick={handleRepaySTK}
+                          disabled={loading}
+                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                        >
+                          {loading ? 'Sending...' : 'Trigger STK Push'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 pt-1">
+                        <textarea
+                          value={repaySmsText}
+                          onChange={(e) => setRepaySmsText(e.target.value)}
+                          placeholder="Paste M-Pesa SMS here..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-20 resize-none"
+                        />
+                        <button
+                          onClick={handleRepaySMS}
+                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
+                        >
+                          Submit SMS
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2">
+                {!isEligibleForNewLoan ? (
+                  <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl text-center space-y-3 shadow-inner relative overflow-hidden">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-amber-500/5 blur-3xl rounded-full"></div>
+                    <div className="text-3xl mb-1 relative z-10">🚀</div>
+                    <p className="text-sm font-bold text-slate-200 relative z-10">Building Your Credit</p>
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium relative z-10">
+                      Keep saving and checking in. Your borrowing power unlocks automatically as your vault grows.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
                       <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
-                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700/50">KES</span>
+                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
                         <input
                           type="number"
-                          value={depositAmountInput}
-                          onChange={(e) => setDepositAmountInput(e.target.value)}
-                          className="w-full bg-transparent px-4 py-1.5 text-lg text-white font-black focus:outline-none"
+                          value={loanAmountInput}
+                          onChange={(e) => setLoanAmountInput(e.target.value)}
+                          className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
                           placeholder="0"
                         />
                       </div>
                     </div>
-                  </div>
-                  <button
-                    onClick={handleDeposit}
-                    disabled={loading}
-                    className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 hover:opacity-90 transition cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2"
-                  >
-                    {loading ? (
-                      <>Processing...</>
-                    ) : (
-                      <>⚡ Push to Phone</>
-                    )}
-                  </button>
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Paste the M-Pesa SMS to submit for Treasurer approval:
-                  </p>
-                  <textarea
-                    value={manualSmsText}
-                    onChange={(e) => setManualSmsText(e.target.value)}
-                    placeholder="Paste full SMS here..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-24 resize-none transition"
-                  />
-                  <button
-                    onClick={handleDirectSmsSubmit}
-                    className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
-                  >
-                    Submit Confirmation
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* REFER & EARN SECTION */}
-            <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
-              <div className="flex justify-between items-start mb-1">
-                <div>
-                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
-                  <h3 className="font-black text-base text-white">Earn up to KES 50</h3>
-                </div>
-                <div className="text-2xl drop-shadow-md">🎁</div>
-              </div>
-              <p className="text-[11px] text-slate-400 mb-4 font-medium">
-                Share your invite link. Get rewarded instantly when your friends make their first deposit.
-              </p>
-
-              <button
-                onClick={handleShareReferral}
-                className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>↗️ Share Invite</span>
-              </button>
-
-              <div className="mt-3 text-center">
-                <span className="text-[10px] text-slate-500 font-bold">Code: </span>
-                <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
-              </div>
-            </div>
-
-            {/* FOLLOW ON X */}
-            <a
-              href="https://twitter.com/intent/follow?screen_name=tibapay"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
-                    𝕏
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
-                    <h3 className="font-black text-sm text-white">@tibapay on X</h3>
-                    <p className="text-[10px] text-slate-500">News, updates & community</p>
-                  </div>
-                </div>
-                <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
-                  Follow →
-                </div>
-              </div>
-            </a>
-
-            {/* ACTIVITY LEDGER */}
-            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-bold text-sm text-white">Recent Activity</h3>
-                <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{ledger.length} Records</span>
-              </div>
-              
-              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                {ledger.length === 0 ? (
-                  <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
-                ) : (
-                  ledger.map((item) => (
-                    <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <div className="max-w-[65%]">
-                          <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
-                          <p className="text-[8px] text-slate-500 font-medium">{item.date} · {item.code}</p>
-                        </div>
-                        <div className="text-right">
-                          <p
-                            className={`font-black text-[12px] ${
-                              item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
-                                ? 'text-emerald-400'
-                                : 'text-rose-400'
-                            }`}
-                          >
-                            {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
-                            {formatMoney(item.amount)}
-                          </p>
-                          <p
-                            className={`text-[8px] font-bold ${
-                              item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
-                                ? 'text-emerald-500'
-                                : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
-                                ? 'text-sky-400'
-                                : item.status === 'REJECTED' || item.status === 'FAILED'
-                                ? 'text-rose-500'
-                                : 'text-amber-400 animate-pulse'
-                            }`}
-                          >
-                            {item.status}
-                          </p>
-                        </div>
-                      </div>
-
-                      {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
-                        <button
-                          onClick={() => setActiveSmsInputId(item.id)}
-                          className="w-full py-1 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold transition cursor-pointer"
-                        >
-                          Paste M-Pesa SMS
-                        </button>
-                      )}
-
-                      {activeSmsInputId === item.id && (
-                        <div className="space-y-2 pt-2 border-t border-slate-800/80 mt-2">
-                          <textarea
-                            value={pastedSmsText}
-                            onChange={(e) => setPastedSmsText(e.target.value)}
-                            placeholder="Paste full M-Pesa text here"
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-14 resize-none"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleSubmitSmsForApproval(item.id)}
-                              className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[9px] transition cursor-pointer"
-                            >
-                              Submit
-                            </button>
-                            <button
-                              onClick={() => setActiveSmsInputId(null)}
-                              className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[9px] transition cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'packages' && (
-          <div className="space-y-5">
-            
-            {/* ACTIVE SUBSCRIPTIONS */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-end px-1">
-                <h3 className="font-black text-sm text-white">Your Active Packages</h3>
-                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                  {activeSubscriptions.length} Running
-                </span>
-              </div>
-              
-              {activeSubscriptions.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-slate-900/50 border border-slate-800 text-center">
-                  <span className="text-3xl mb-3 block opacity-50">📦</span>
-                  <p className="text-xs text-slate-400 font-medium">No active packages. Join a tier below to start earning.</p>
-                </div>
-              ) : (
-                activeSubscriptions.map((sub) => {
-                  const tier = PACKAGE_TIERS.find((t) => t.id === sub.tierId);
-                  if (!tier) return null;
-                  const isExpired = todayStr !== '' && todayStr >= sub.endDate;
-                  
-                  return (
-                    <div key={sub.tierId} className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-4 shadow-xl relative overflow-hidden">
-                      {/* Glow effect */}
-                      <div className={`absolute top-0 right-0 w-32 h-32 blur-3xl opacity-20 rounded-full ${isExpired ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-                      
-                      <div className="flex justify-between items-center relative z-10">
-                        <div className="flex items-center gap-3">
-                          <div className="text-4xl drop-shadow-md">{tier.icon}</div>
-                          <div>
-                            <h3 className="font-black text-base text-white">{tier.name}</h3>
-                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">Ends: {sub.endDate}</p>
-                          </div>
-                        </div>
-                        <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg border ${
-                          isExpired 
-                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' 
-                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                        }`}>
-                          {isExpired ? 'Matured' : 'Active'}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 relative z-10">
-                        <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Earned</p>
-                          <p className="text-lg font-black text-white">{formatMoney(sub.accumulatedBalance)}</p>
-                        </div>
-                        <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Daily Rate</p>
-                          <p className="text-lg font-black text-emerald-400">+{formatMoney(tier.dailyLimit)}</p>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleSweepSub(sub.tierId)}
-                        disabled={sub.accumulatedBalance <= 0}
-                        className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center"
-                      >
-                        <span>{isExpired ? 'Claim & Close Package 🎉' : 'Sweep to Vault 🚀'}</span>
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* AVAILABLE TIERS */}
-            <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-4">
-              <h3 className="font-black text-sm text-white mb-3 flex items-center gap-2">
-                <span className="text-emerald-400">💎</span> Available Tiers
-              </h3>
-              
-              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {PACKAGE_TIERS.map((tier) => {
-                  const isSubscribed = activeSubscriptions.some((s) => s.tierId === tier.id);
-                  const hasEnough = mainPool >= tier.entry;
-                  
-                  return (
-                    <div
-                      key={tier.id}
-                      className={`p-3 rounded-2xl border flex justify-between items-center transition-all ${
-                        isSubscribed
-                          ? 'bg-slate-950/30 border-slate-800/50 opacity-60 grayscale-[50%]'
-                          : 'bg-slate-950 border border-slate-800 shadow-sm hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="text-3xl drop-shadow-sm">{tier.icon}</div>
-                        <div>
-                          <p className="font-bold text-xs text-white">{tier.name}</p>
-                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                            Entry: <strong className={hasEnough ? 'text-emerald-400' : 'text-rose-400'}>{formatMoney(tier.entry)}</strong> 
-                            <span className="mx-1 text-slate-600">•</span> 
-                            {tier.lockDays} Days
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-col items-end gap-1">
-                        <p className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                          +{formatMoney(tier.dailyLimit)}/d
-                        </p>
-                        {isSubscribed ? (
-                          <span className="text-[9px] font-bold text-slate-500 mr-2 mt-1">
-                            Joined
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleSubscribeTier(tier.id)}
-                            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[10px] transition shadow-sm mt-1"
-                          >
-                            Join
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'withdraw' && (
-          <div className="space-y-3">
-            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-5 shadow-2xl backdrop-blur-sm">
-              
-              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                <h3 className="font-black text-lg text-white flex items-center gap-2">
-                  <span className="text-emerald-400">🏦</span> Withdraw
-                </h3>
-                <span className="text-[11px] font-black px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 shadow-sm">
-                  Bal: {formatMoney(mainPool)}
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Withdraw (Min KES 50)</label>
-                <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
-                  <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
-                  <input
-                    type="number"
-                    value={withdrawAmountInput}
-                    onChange={(e) => setWithdrawAmountInput(e.target.value)}
-                    className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={handleWithdraw}
-                disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || parsedWithdrawAmt > mainPool || hasUnpaidLoan}
-                className="w-full py-3.5 mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2"
-              >
-                {hasUnpaidLoan ? (
-                  <>🚫 Active Loan</>
-                ) : loading ? (
-                  <>Processing...</>
-                ) : (
-                  <>Request Payout</>
-                )}
-              </button>
-              
-              <p className="text-center text-[9px] text-slate-500 font-medium">
-                Funds are typically disbursed within 24 hours.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'loans' && (
-          <div className="space-y-3">
-            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
-              
-              {/* HEADER */}
-              <div className="flex justify-between items-center">
-                <h3 className="font-black text-lg text-white flex items-center gap-2">
-                  <span className="text-emerald-400">💸</span> Loan Engine
-                </h3>
-                <span className={`text-[11px] font-black px-3 py-1.5 rounded-lg border shadow-sm ${
-                  calculatedMaxLimit > 0
-                    ? 'text-sky-300 bg-sky-500/10 border-sky-500/30'
-                    : 'text-rose-300 bg-rose-500/10 border-rose-500/30'
-                }`}>
-                  Limit: {calculatedMaxLimit > 0 ? `KES ${calculatedMaxLimit.toLocaleString()}` : 'Locked'}
-                </span>
-              </div>
-
-              {/* STAGE CARD */}
-              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-inner flex flex-col items-center justify-center space-y-2 relative overflow-hidden">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full"></div>
-                
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest relative z-10">Your Membership Tier</p>
-                <div className="flex items-center gap-3 relative z-10">
-                  <span className="text-emerald-400 font-black text-2xl drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">Stage {currentStage}</span>
-                  <span className="bg-emerald-500/20 text-emerald-300 text-xs px-3 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-500/30 shadow-sm">{stageName}</span>
-                </div>
-                <p className="text-[10px] text-slate-500 font-medium relative z-10">Keep saving & repaying to unlock higher limits.</p>
-              </div>
-
-              {activeLoan ? (
-                <div className="space-y-4">
-                  {/* ACTIVE LOAN SUMMARY */}
-                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Loan Ref</p>
-                        <p className="font-black text-sm text-white">{activeLoan.id}</p>
-                      </div>
-                      <span className={`px-3 py-1 text-[10px] font-black rounded-lg border ${
-                        (activeLoan.status === 'PENDING ADMIN APPROVAL') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
-                        (activeLoan.status === 'OVERDUE') ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
-                        'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                      }`}>
-                        {activeLoan.status}
-                      </span>
-                    </div>
-
-                    {/* PROGRESS BAR */}
+                    
                     <div className="space-y-1.5">
-                      <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                        <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
-                        <span>Total: <span className="text-white">KES {activeLoan.totalRepay.toLocaleString()}</span></span>
-                      </div>
-                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                        <div 
-                          className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
-                          style={{ width: `${Math.min(100, (activeLoan.amountPaid / activeLoan.totalRepay) * 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 text-center">
-                      <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Requested</p>
-                        <p className="font-bold text-white text-sm mt-0.5">KES {activeLoan.requestedAmount.toLocaleString()}</p>
-                      </div>
-                      <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Remaining</p>
-                        <p className="font-black text-rose-400 text-sm mt-0.5">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* REPAYMENT INTERFACE */}
-                  {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
-                    <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-xs text-sky-300 text-center font-bold">
-                      Awaiting Treasurer Approval (24 hr).
-                    </div>
-                  ) : activeLoan.status === 'OVERDUE' ? (
-                    <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-rose-500/40 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
-                      <p className="text-xs font-bold text-rose-400">Limit increase paused. Clear arrears immediately.</p>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
-                        <input
-                          type="number"
-                          value={repayAmountInput}
-                          onChange={(e) => setRepayAmountInput(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition"
-                          placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
-                        />
-                      </div>
-                      <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
-                        <button
-                          onClick={() => setRepayMode('stk')}
-                          className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
-                        >
-                          Pay via STK Push
-                        </button>
-                        <button
-                          onClick={() => setRepayMode('sms')}
-                          className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
-                        >
-                          Paste SMS
-                        </button>
-                      </div>
-
-                      {repayMode === 'stk' ? (
-                        <div className="space-y-3 pt-1">
-                          <input
-                            type="text"
-                            value={repayPhoneInput}
-                            onChange={(e) => setRepayPhoneInput(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-rose-500"
-                            placeholder="M-Pesa Number (0712345678)"
-                          />
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { weeks: 1, rate: '3%' },
+                          { weeks: 2, rate: '5%' },
+                          { weeks: 4, rate: '10%' },
+                        ].map((term) => (
                           <button
-                            onClick={handleRepaySTK}
-                            disabled={loading}
-                            className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20 disabled:opacity-50"
+                            key={term.weeks}
+                            onClick={() => setLoanTermWeeks(term.weeks)}
+                            className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                              loanTermWeeks === term.weeks
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                                : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-300'
+                            }`}
                           >
-                            {loading ? 'Sending...' : 'Trigger STK Push'}
+                            {term.weeks}W <span className="opacity-70 text-[10px]">({term.rate})</span>
                           </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3 pt-1">
-                          <textarea
-                            value={repaySmsText}
-                            onChange={(e) => setRepaySmsText(e.target.value)}
-                            placeholder="Paste M-Pesa SMS here..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500 h-20 resize-none"
-                          />
-                          <button
-                            onClick={handleRepaySMS}
-                            className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20"
-                          >
-                            Submit SMS
-                          </button>
-                        </div>
-                      )}
+                        ))}
+                      </div>
                     </div>
-                  ) : (
-                    <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Pay (KES)</label>
-                        <input
-                          type="number"
-                          value={repayAmountInput}
-                          onChange={(e) => setRepayAmountInput(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
-                          placeholder={`Remaining: ${formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}`}
-                        />
-                      </div>
-                      <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
-                        <button
-                          onClick={() => setRepayMode('stk')}
-                          className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'stk' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
-                        >
-                          STK Push
-                        </button>
-                        <button
-                          onClick={() => setRepayMode('sms')}
-                          className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition ${repayMode === 'sms' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
-                        >
-                          Paste SMS
-                        </button>
-                      </div>
 
-                      {repayMode === 'stk' ? (
-                        <div className="space-y-3 pt-1">
-                          <input
-                            type="text"
-                            value={repayPhoneInput}
-                            onChange={(e) => setRepayPhoneInput(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
-                            placeholder="M-Pesa Number (0712345678)"
-                          />
-                          <button
-                            onClick={handleRepaySTK}
-                            disabled={loading}
-                            className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
-                          >
-                            {loading ? 'Sending...' : 'Trigger STK Push'}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3 pt-1">
-                          <textarea
-                            value={repaySmsText}
-                            onChange={(e) => setRepaySmsText(e.target.value)}
-                            placeholder="Paste M-Pesa SMS here..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-20 resize-none"
-                          />
-                          <button
-                            onClick={handleRepaySMS}
-                            className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
-                          >
-                            Submit SMS
-                          </button>
-                        </div>
-                      )}
+                    <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex justify-between items-center mt-2">
+                      <span className="text-xs font-bold text-slate-400">Total Repay:</span>
+                      <span className="text-sm font-black text-emerald-400">KES {totalLoanRepay.toLocaleString()}</span>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4 pt-2">
-                  {!isEligibleForNewLoan ? (
-                    <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl text-center space-y-3 shadow-inner relative overflow-hidden">
-                      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-amber-500/5 blur-3xl rounded-full"></div>
-                      <div className="text-3xl mb-1 relative z-10">🚀</div>
-                      <p className="text-sm font-bold text-slate-200 relative z-10">Building Your Credit</p>
-                      <p className="text-[11px] text-slate-500 leading-relaxed font-medium relative z-10">
-                        Keep saving and checking in. Your borrowing power unlocks automatically as your vault grows.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loan Amount (KES)</label>
-                        <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
-                          <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
-                          <input
-                            type="number"
-                            value={loanAmountInput}
-                            onChange={(e) => setLoanAmountInput(e.target.value)}
-                            className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[
-                            { weeks: 1, rate: '3%' },
-                            { weeks: 2, rate: '5%' },
-                            { weeks: 4, rate: '10%' },
-                          ].map((term) => (
-                            <button
-                              key={term.weeks}
-                              onClick={() => setLoanTermWeeks(term.weeks)}
-                              className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
-                                loanTermWeeks === term.weeks
-                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                                  : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-300'
-                              }`}
-                            >
-                              {term.weeks}W <span className="opacity-70 text-[10px]">({term.rate})</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
 
-                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex justify-between items-center mt-2">
-                        <span className="text-xs font-bold text-slate-400">Total Repay:</span>
-                        <span className="text-sm font-black text-emerald-400">KES {totalLoanRepay.toLocaleString()}</span>
-                      </div>
-
-                      <button
-                        onClick={handleApplyLoan}
-                        disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
-                        className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale"
-                      >
-                        Submit Request
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                    <button
+                      onClick={handleApplyLoan}
+                      disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
+                      className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale"
+                    >
+                      Submit Request
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
-        <InstallPrompt />
-        <PushNotificationManager userPhone={user.phone} />
-      </div>
-    </BiometricLock>
+      <InstallPrompt />
+      <PushNotificationManager userPhone={user.phone} />
+    </div>
   );
 }
