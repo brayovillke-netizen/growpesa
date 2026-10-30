@@ -1617,7 +1617,7 @@ export default function DashboardPage() {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
             }`}
           >
-            {tab === 'packages' && isReviewMode ? 'Challenges' : tab}
+            {tab === 'packages' && isReviewMode ? 'Goals' : tab}
           </button>
         ))}
       </div>
@@ -1626,43 +1626,36 @@ export default function DashboardPage() {
         <div className="space-y-4">
           
           {/* BALANCE GRID */}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-2'} gap-2.5`}>
             <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Main Savings</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Tracked Balance</p>
               <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
             </div>
             
-            {/* CONDITIONAL CARD: Earns vs Active Goals */}
-            {isReviewMode ? (
-              <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Goals</p>
-                <p className="text-xl font-black mt-1">{activeSubscriptions.length} Active</p>
-              </div>
-            ) : (
-              <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
-                <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
-              </div>
-            )}
-            
-            <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
-              <p className="text-xl font-black mt-1">
-                {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
-              </p>
-            </div>
-            
-            {/* CONDITIONAL CARD: Loan Status vs Days Active */}
             {isReviewMode ? (
               <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Days Active</p>
                 <p className="text-xl font-black mt-1">{daysActive} Days</p>
               </div>
             ) : (
-              <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
-                <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
-              </div>
+              <>
+                <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
+                  <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
+                </div>
+                
+                <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
+                  <p className="text-xl font-black mt-1">
+                    {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
+                  </p>
+                </div>
+                
+                <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
+                  <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+                </div>
+              </>
             )}
           </div>
 
@@ -1712,7 +1705,7 @@ export default function DashboardPage() {
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
             <div className="flex justify-between items-center">
               <h3 className="font-black text-base text-white flex items-center gap-2">
-                <span className="text-emerald-400">💵</span> Deposit Funds
+                <span className="text-emerald-400">💵</span> {isReviewMode ? 'Log Transaction' : 'Deposit Funds'}
               </h3>
               <button
                 onClick={() => setShowManualDeposit(!showManualDeposit)}
@@ -1757,7 +1750,7 @@ export default function DashboardPage() {
                   {loading ? (
                     <>Processing...</>
                   ) : (
-                    <>{isReviewMode ? 'Deposit via M-Pesa' : '⚡ Push to Phone'}</>
+                    <>{isReviewMode ? 'Sync M-Pesa' : '⚡ Push to Phone'}</>
                   )}
                 </button>
               </>
@@ -1782,31 +1775,33 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* REFER & EARN SECTION */}
-          <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
-            <div className="flex justify-between items-start mb-1">
-              <div>
-                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
-                <h3 className="font-black text-base text-white">Earn up to KES 50</h3>
+          {/* HIDE REFER & EARN IN REVIEW MODE */}
+          {!isReviewMode && (
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
+              <div className="flex justify-between items-start mb-1">
+                <div>
+                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
+                  <h3 className="font-black text-base text-white">Earn up to KES 50</h3>
+                </div>
+                <div className="text-2xl drop-shadow-md">🎁</div>
               </div>
-              <div className="text-2xl drop-shadow-md">🎁</div>
-            </div>
-            <p className="text-[11px] text-slate-400 mb-4 font-medium">
-              Share your invite link. Get rewarded instantly when your friends make their first deposit.
-            </p>
+              <p className="text-[11px] text-slate-400 mb-4 font-medium">
+                Share your invite link. Get rewarded instantly when your friends make their first deposit.
+              </p>
 
-            <button
-              onClick={handleShareReferral}
-              className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>↗️ Share Invite</span>
-            </button>
+              <button
+                onClick={handleShareReferral}
+                className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>↗️ Share Invite</span>
+              </button>
 
-            <div className="mt-3 text-center">
-              <span className="text-[10px] text-slate-500 font-bold">Code: </span>
-              <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
+              <div className="mt-3 text-center">
+                <span className="text-[10px] text-slate-500 font-bold">Code: </span>
+                <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* FOLLOW ON X */}
           <a
