@@ -19,12 +19,25 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   const [loading, setLoading] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
+  const syncSubscriptionToDB = async (sub: PushSubscription) => {
+    try {
+      console.log("Syncing existing subscription to Supabase...");
+      const { error } = await supabase.from('push_subscriptions').upsert({
+        phone: userPhone,
+        subscription: sub.toJSON(),
+      }, { onConflict: 'phone' });
+
+      if (error) throw error;
+      console.log("✅ Successfully synced subscription to DB.");
+    } catch (err) {
+      console.error("❌ Failed to sync to DB:", err);
+    }
+  };
+
   useEffect(() => {
-    // Check if user previously dismissed the prompt
     const dismissed = localStorage.getItem('tibapay_push_dismissed');
     if (dismissed === 'true') setIsDismissed(true);
 
-    // Check if browser supports push
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       setIsSupported(false);
       return;
@@ -32,10 +45,14 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
 
     navigator.serviceWorker.register('/sw.js').then((reg) => {
       reg.pushManager.getSubscription().then((sub) => {
-        if (sub) setSubscription(sub);
+        if (sub) {
+          setSubscription(sub);
+          // AUTO-FIX: If browser has a sub, make sure the DB has it too
+          syncSubscriptionToDB(sub); 
+        }
       });
     });
-  }, []);
+  }, [userPhone]);
 
   const handleDismiss = () => {
     setIsDismissed(true);
@@ -45,49 +62,45 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   const subscribeToPush = async () => {
     setLoading(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const reg = await navigator.serviceWorker.ready;
       
-      // Force a new subscription if the old one is dead
       if (subscription) {
         await subscription.unsubscribe();
       }
 
-      const sub = await registration.pushManager.subscribe({
+      if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) {
+        throw new Error("VAPID Public Key is missing.");
+      }
+
+      const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
       });
       
       setSubscription(sub);
-
-      await supabase.from('push_subscriptions').upsert({
-        phone: userPhone,
-        subscription: sub.toJSON(),
-      }, { onConflict: 'phone' });
+      await syncSubscriptionToDB(sub);
 
       alert('Notifications enabled successfully!');
-      localStorage.removeItem('tibapay_push_dismissed'); // Reset dismissal just in case
+      localStorage.removeItem('tibapay_push_dismissed');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to subscribe:', error);
-      alert('Failed to enable notifications. (Note: iPhones MUST tap "Share" -> "Add to Home Screen" and open from the icon first).');
+      alert(`Failed: ${error.message}\n\nIf on iPhone, you MUST tap "Share" -> "Add to Home Screen".`);
     } finally {
       setLoading(false);
     }
   };
 
-  // If iOS Safari (not added to home screen), show a warning
-  if (!isSupported) {
+  if (!isSupported || isDismissed) return null;
+
+  // If already subscribed, show a small confirmation badge instead of the big button
+  if (subscription) {
     return (
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-amber-900/90 border border-amber-500/50 p-4 rounded-2xl shadow-2xl flex flex-col gap-2">
-         <h3 className="font-bold text-xs text-amber-300">📱 iPhone Users</h3>
-         <p className="text-[10px] text-amber-100">To get alerts, tap the <strong>Share</strong> button in Safari and select <strong>"Add to Home Screen"</strong>. Then open the app from your home screen.</p>
-         <button onClick={handleDismiss} className="text-[10px] text-amber-400 underline mt-1 text-left">Dismiss</button>
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900/90 border border-emerald-500/50 p-2 rounded-xl shadow-lg flex justify-between items-center px-4">
+         <span className="text-[10px] text-emerald-400 font-bold">✅ Push Notifications Active</span>
       </div>
     );
   }
-
-  // If already subscribed or dismissed, don't show the banner
-  if (subscription || isDismissed) return null;
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900 border border-slate-700 p-4 rounded-2xl shadow-2xl flex flex-col gap-3">
