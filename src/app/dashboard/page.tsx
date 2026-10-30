@@ -925,7 +925,11 @@ export default function DashboardPage() {
         throw new Error(data.error || 'STK push failed');
       }
 
-      setMessage(`STK push sent to ${targetPhone}. Enter your M-Pesa PIN. Admin will verify code ${tempCode}.`);
+      setMessage(
+        isReviewMode 
+          ? `STK push sent to ${targetPhone}. Enter your M-Pesa PIN to complete.` 
+          : `STK push sent to ${targetPhone}. Enter your M-Pesa PIN. Admin will verify code ${tempCode}.`
+      );
 
       setTimeout(() => {
         let timeoutItem: LedgerItem | null = null;
@@ -941,7 +945,7 @@ export default function DashboardPage() {
           if (timeoutItem) submitToServerQueue(timeoutItem);
           return updated;
         });
-        setMessage('STK push pending. If M-Pesa deducted, paste your SMS below so the Treasurer can verify.');
+        setMessage('STK push pending. If M-Pesa deducted, paste your SMS below to log the transaction.');
       }, 20000);
     } catch (err: any) {
       setMessage(`STK Push error: ${err?.message || 'unknown'}. Paste your M-Pesa SMS below if you paid manually.`);
@@ -991,7 +995,7 @@ export default function DashboardPage() {
     await saveLedger([item, ...ledger], item);
     setManualSmsText('');
     setShowManualDeposit(false);
-    setMessage('Confirmation submitted to Treasurer queue.');
+    setMessage(isReviewMode ? 'Transaction logged successfully.' : 'Confirmation submitted to Treasurer queue.');
     
     await notifyAdmin('New Deposit 📥', `Manual deposit from ${user?.phone} for KES ${item.amount}`);
   };
@@ -1016,7 +1020,7 @@ export default function DashboardPage() {
     await saveLedger(updated, updatedItem || undefined);
     setPastedSmsText('');
     setActiveSmsInputId(null);
-    setMessage('Submitted to Treasurer queue.');
+    setMessage(isReviewMode ? 'Transaction logged successfully.' : 'Submitted to Treasurer queue.');
     
     if (updatedItem) {
       await notifyAdmin('New STK Deposit 📥', `STK deposit from ${user?.phone} for KES ${(updatedItem as LedgerItem).amount}`);
@@ -1762,7 +1766,7 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 <p className="text-[11px] text-slate-400 font-medium">
-                  Paste the M-Pesa SMS to submit for Treasurer approval:
+                  {isReviewMode ? 'Paste your M-Pesa SMS to log the transaction:' : 'Paste the M-Pesa SMS to submit for Treasurer approval:'}
                 </p>
                 <textarea
                   value={manualSmsText}
@@ -1774,7 +1778,7 @@ export default function DashboardPage() {
                   onClick={handleDirectSmsSubmit}
                   className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
                 >
-                  Submit Confirmation
+                  {isReviewMode ? 'Log Transaction' : 'Submit Confirmation'}
                 </button>
               </div>
             )}
@@ -1899,7 +1903,7 @@ export default function DashboardPage() {
                             onClick={() => handleSubmitSmsForApproval(item.id)}
                             className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[9px] transition cursor-pointer"
                           >
-                            Submit
+                            {isReviewMode ? 'Log Transaction' : 'Submit'}
                           </button>
                           <button
                             onClick={() => setActiveSmsInputId(null)}
