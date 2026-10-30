@@ -438,8 +438,6 @@ export default function DashboardPage() {
         
         if (latestEntry) {
           const entryDate = latestEntry.date;
-          
-          // Check if there is a SWEEP *after* the entry date
           const latestSweep = mappedQueue.find((i: any) => i.type.includes(`Tier Sweep (${tier.name})`) && i.status === 'COMPLETED' && i.date >= entryDate);
           
           const end = new Date(entryDate);
@@ -447,8 +445,6 @@ export default function DashboardPage() {
           const endDate = end.toISOString().split('T')[0];
           const isExpired = today >= endDate;
 
-          // If it has expired AND been swept, do not rebuild it (it's closed).
-          // If it hasn't expired, rebuild it based on the latest sweep date (or entry date).
           if (!isExpired || (isExpired && !latestSweep)) {
             const calcStartDate = latestSweep ? latestSweep.date : entryDate;
             const startMs = new Date(calcStartDate).getTime();
@@ -760,7 +756,6 @@ export default function DashboardPage() {
     const todayStrLocal = new Date().toISOString().split('T')[0];
     const isExpired = todayStrLocal >= sub.endDate;
 
-    // Update local state instantly based on expiration
     let nextSubs;
     if (isExpired) {
       nextSubs = activeSubscriptions.filter(s => s.tierId !== tierId);
@@ -920,7 +915,10 @@ export default function DashboardPage() {
     if (!manualSmsText || manualSmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
 
     const codeMatch = manualSmsText.match(/\b([A-Z0-9]{10})\b/);
-    const extractedCode = codeMatch ? codeMatch[1] : 'MPESA-' + Math.floor(1000 + Math.random() * 9000);
+    if (!codeMatch) {
+      return setMessage('Invalid message: Could not detect the 10-character M-Pesa code. Please paste the full SMS.');
+    }
+    const extractedCode = codeMatch[1];
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -944,7 +942,10 @@ export default function DashboardPage() {
     if (!pastedSmsText || pastedSmsText.length < 10) return setMessage('Paste a valid M-Pesa confirmation.');
 
     const codeMatch = pastedSmsText.match(/\b([A-Z0-9]{10})\b/);
-    const extractedCode = codeMatch ? codeMatch[1] : 'MPESA-' + Math.floor(1000 + Math.random() * 9000);
+    if (!codeMatch) {
+      return setMessage('Invalid message: Could not detect the 10-character M-Pesa code. Please paste the full SMS.');
+    }
+    const extractedCode = codeMatch[1];
 
     let updatedItem: LedgerItem | null = null;
     const updated = ledger.map((item) => {
@@ -1178,15 +1179,18 @@ export default function DashboardPage() {
     if (!activeLoan) return;
     if (!repaySmsText || repaySmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
 
+    const codeMatch = repaySmsText.match(/\b([A-Z0-9]{10})\b/);
+    if (!codeMatch) {
+      return setMessage('Invalid message: Could not detect the 10-character M-Pesa code. Please paste the full SMS.');
+    }
+    const extractedCode = codeMatch[1];
+
     const amt = Math.round(parseFloat(repayAmountInput));
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
 
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
-
-    const codeMatch = repaySmsText.match(/\b([A-Z0-9]{10})\b/);
-    const extractedCode = codeMatch ? codeMatch[1] : 'MPESA-' + Math.floor(1000 + Math.random() * 9000);
 
     const newItem: LedgerItem = {
       id: Date.now().toString(),
