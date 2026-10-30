@@ -1505,9 +1505,9 @@ export default function DashboardPage() {
     }
   };
 
-  // TABS DEFINITION (Hide loans/withdraw in review mode)
+  // TABS DEFINITION (Hide everything except overview in review mode)
   const availableTabs = isReviewMode 
-    ? (['overview', 'packages'] as const)
+    ? (['overview'] as const)
     : (['overview', 'packages', 'withdraw', 'loans'] as const);
 
   return (
@@ -1611,7 +1611,7 @@ export default function DashboardPage() {
       )}
 
       {/* TABS RENDER */}
-      <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-4'} gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold`}>
+      <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-4'} gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold`}>
         {availableTabs.map((tab) => (
           <button
             key={tab}
