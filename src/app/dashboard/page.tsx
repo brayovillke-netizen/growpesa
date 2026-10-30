@@ -227,7 +227,7 @@ export default function DashboardPage() {
       return;
     }
     setDaysActive(Math.max(0, Math.floor((Date.now() - joinedMs) / 86400000)));
-  }, [user]);
+  }, [user?.joined_at]);
 
   useEffect(() => {
     if (!user) return;
@@ -261,11 +261,11 @@ export default function DashboardPage() {
       window.removeEventListener('touchstart', resetActivity);
       window.removeEventListener('keydown', resetActivity);
     };
-  }, [user]);
+  }, [user?.phone]); // Only depend on phone string, not the whole user object
 
   useEffect(() => {
     if (user) setRepayPhoneInput(user.phone);
-  }, [user]);
+  }, [user?.phone]); // Only depend on phone string
 
   const loadLocal = (u: MemberUser) => {
     const savedLedger = localStorage.getItem(`growpesa_ledger_${u.phone}`);
@@ -404,17 +404,22 @@ export default function DashboardPage() {
 
       if (memberData) {
         const savings = Math.round(Number(memberData.savings_balance)) || 0;
-        setMainPool(savings);
-        localStorage.setItem(`growpesa_savings_${currentUser.phone}`, String(savings));
+        
+        // ✅ DEEP COMPARE TO PREVENT FLICKER
+        setMainPool(prev => prev === savings ? prev : savings);
 
-        setUser(prev => prev ? {
-          ...prev,
-          account_status: memberData.account_status,
-          loan_limit: Number(memberData.loan_limit) || 0,
-          total_deposited: Number(memberData.total_deposited) || 0,
-          referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
-          referral_code: memberData.referral_code || prev.referral_code
-        } : null);
+        setUser(prev => {
+          if (!prev) return null;
+          const updated = {
+            ...prev,
+            account_status: memberData.account_status,
+            loan_limit: Number(memberData.loan_limit) || 0,
+            total_deposited: Number(memberData.total_deposited) || 0,
+            referrals_rewarded_count: Number(memberData.referrals_rewarded_count) || 0,
+            referral_code: memberData.referral_code || prev.referral_code
+          };
+          return JSON.stringify(prev) === JSON.stringify(updated) ? prev : updated;
+        });
       }
 
       const { data: queueData } = await supabase
@@ -437,8 +442,12 @@ export default function DashboardPage() {
         smsMessage: row.sms_message,
       }));
 
-      setLedger(mappedQueue);
-      localStorage.setItem(`growpesa_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
+      // ✅ DEEP COMPARE TO PREVENT FLICKER
+      setLedger(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(mappedQueue)) return prev;
+        localStorage.setItem(`growpesa_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
+        return mappedQueue;
+      });
 
       // ==========================================
       // REBUILD ACTIVE PACKAGES FROM LEDGER
@@ -481,11 +490,10 @@ export default function DashboardPage() {
       });
 
       setActiveSubscriptions(prev => {
-        if (rebuiltSubs.length === 0 && prev.length > 0) return prev;
         if (JSON.stringify(prev) === JSON.stringify(rebuiltSubs)) return prev;
+        localStorage.setItem(`growpesa_subs_${currentUser.phone}`, JSON.stringify(rebuiltSubs));
         return rebuiltSubs;
       });
-      localStorage.setItem(`growpesa_subs_${currentUser.phone}`, JSON.stringify(rebuiltSubs));
 
       // ==========================================
       // LOAN SYNC LOGIC
@@ -528,6 +536,7 @@ export default function DashboardPage() {
           }
         }
       } else {
+        // Only update if status changed to OVERDUE
         if (currentLoan.status === 'ACTIVE') {
           const today = new Date().toISOString().split('T')[0];
           if (today > currentLoan.dueDate) {
@@ -600,7 +609,7 @@ export default function DashboardPage() {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('growpesa_sync', handleStorage);
     };
-  }, [user, syncFromServer]);
+  }, [user?.phone, syncFromServer]); // Use user?.phone to prevent resetting loop on every object update
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

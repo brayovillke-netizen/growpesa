@@ -81,7 +81,12 @@ export default function AdminPage() {
         .single();
 
       if (poolError) throw poolError;
-      if (poolData) setMainPool(Math.round(Number(poolData.pool_balance)));
+      
+      // ✅ DEEP COMPARE TO PREVENT FLICKER
+      if (poolData) {
+        const newPool = Math.round(Number(poolData.pool_balance));
+        setMainPool(prev => prev === newPool ? prev : newPool);
+      }
 
       const { data: queueData, error: queueError } = await supabase
         .from('ledger_items')
@@ -101,7 +106,8 @@ export default function AdminPage() {
         smsMessage: row.sms_message,
       }));
 
-      setQueue(mappedQueue);
+      // ✅ DEEP COMPARE TO PREVENT FLICKER
+      setQueue(prev => JSON.stringify(prev) === JSON.stringify(mappedQueue) ? prev : mappedQueue);
     } catch (err: any) {
       console.error('Sync error:', err.message);
     } finally {
@@ -116,14 +122,17 @@ export default function AdminPage() {
         .select('*')
         .order('full_name');
       if (error) throw error;
-      setMembers(data || []);
+      
+      // ✅ DEEP COMPARE TO PREVENT FLICKER
+      setMembers(prev => JSON.stringify(prev) === JSON.stringify(data || []) ? prev : (data || []));
     } catch (e: any) {
       console.error('Members fetch error:', e.message);
     }
   }, []);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('GrowPesa_auth_user');
+    // ✅ FIXED CAPITALIZATION: growpesa_auth_user (lowercase 'g')
+    const savedUser = localStorage.getItem('growpesa_auth_user');
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
@@ -494,7 +503,8 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => {
-              localStorage.removeItem('GrowPesa_auth_user');
+              // ✅ FIXED CAPITALIZATION: growpesa_auth_user (lowercase 'g')
+              localStorage.removeItem('growpesa_auth_user');
               window.location.replace('/dashboard');
             }}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
