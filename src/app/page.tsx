@@ -27,10 +27,10 @@ export default function LandingPage() {
       <header className="p-6 flex justify-between items-center relative z-10">
         <div className="flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 font-black text-slate-950 text-xl shadow-lg shadow-emerald-500/20">
-            T
+            G
           </div>
           <span className="text-xl font-black tracking-tight">
-            Tiba<span className="text-emerald-400">Pay</span>
+            Grow<span className="text-emerald-400">Pesa</span>
           </span>
         </div>
       </header>

@@ -168,7 +168,7 @@ export default function DashboardPage() {
   }, [activeLoan]);
 
   useEffect(() => {
-    if (localStorage.getItem('GrowPesa_biometric_id')) {
+    if (localStorage.getItem('growpesa_biometric_id')) {
       setHasSavedBio(true);
     }
   }, []);
@@ -195,7 +195,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem('GrowPesa_auth_user');
+    const saved = localStorage.getItem('growpesa_auth_user');
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved) as MemberUser;
@@ -241,7 +241,7 @@ export default function DashboardPage() {
         setActiveSubscriptions([]);
         setActiveLoan(null);
         setMainPool(0);
-        localStorage.removeItem('GrowPesa_auth_user');
+        localStorage.removeItem('growpesa_auth_user');
         setMessage('You have been logged out due to 5 minutes of inactivity.');
         setAuthMode('login');
       }
@@ -268,14 +268,14 @@ export default function DashboardPage() {
   }, [user]);
 
   const loadLocal = (u: MemberUser) => {
-    const savedLedger = localStorage.getItem(`GrowPesa_ledger_${u.phone}`);
+    const savedLedger = localStorage.getItem(`growpesa_ledger_${u.phone}`);
     if (savedLedger) {
       try { setLedger(JSON.parse(savedLedger)); } catch {}
     }
-    const savedSavings = localStorage.getItem(`GrowPesa_savings_${u.phone}`);
+    const savedSavings = localStorage.getItem(`growpesa_savings_${u.phone}`);
     if (savedSavings) setMainPool(Math.round(Number(savedSavings)) || 0);
 
-    const savedSubs = localStorage.getItem(`GrowPesa_subs_${u.phone}`);
+    const savedSubs = localStorage.getItem(`growpesa_subs_${u.phone}`);
     if (savedSubs) {
       try {
         const parsed: ActiveSubscription[] = JSON.parse(savedSubs);
@@ -283,13 +283,13 @@ export default function DashboardPage() {
       } catch {}
     }
 
-    const savedLoan = localStorage.getItem(`GrowPesa_loan_${u.phone}`);
+    const savedLoan = localStorage.getItem(`growpesa_loan_${u.phone}`);
     if (savedLoan) {
       try {
         const parsed: ActiveLoan = JSON.parse(savedLoan);
         if (parsed.status !== 'CLOSED' && parsed.status !== 'REJECTED') {
           if (parsed.amountPaid >= parsed.totalRepay) {
-            localStorage.removeItem(`GrowPesa_loan_${u.phone}`);
+            localStorage.removeItem(`growpesa_loan_${u.phone}`);
           } else {
             if (!parsed.requestedDate && parsed.dueDate) {
               const due = new Date(parsed.dueDate);
@@ -329,11 +329,11 @@ export default function DashboardPage() {
   const saveLedger = async (newLedger: LedgerItem[], syncItem?: LedgerItem) => {
     if (!user) return;
     setLedger(newLedger);
-    localStorage.setItem(`GrowPesa_ledger_${user.phone}`, JSON.stringify(newLedger));
+    localStorage.setItem(`growpesa_ledger_${user.phone}`, JSON.stringify(newLedger));
     if (syncItem) {
       await submitToServerQueue(syncItem);
     }
-    window.dispatchEvent(new Event('GrowPesa_sync'));
+    window.dispatchEvent(new Event('growpesa_sync'));
   };
 
   const updateMainPool = async (newPoolAmount: number): Promise<boolean> => {
@@ -343,7 +343,7 @@ export default function DashboardPage() {
     if (delta === 0) return true;
 
     setMainPool(rounded);
-    localStorage.setItem(`GrowPesa_savings_${user.phone}`, String(rounded));
+    localStorage.setItem(`growpesa_savings_${user.phone}`, String(rounded));
 
     try {
       const { data, error } = await supabase.rpc('increment_member_savings', {
@@ -361,24 +361,24 @@ export default function DashboardPage() {
         if (updErr) {
           console.error('Both RPC and direct update failed:', updErr);
           setMainPool(rounded - delta);
-          localStorage.setItem(`GrowPesa_savings_${user.phone}`, String(rounded - delta));
+          localStorage.setItem(`growpesa_savings_${user.phone}`, String(rounded - delta));
           setMessage(`Could not save balance: ${updErr.message}`);
           return false;
         }
       } else if (typeof data === 'number') {
         const dbBal = Math.round(data);
         setMainPool(dbBal);
-        localStorage.setItem(`GrowPesa_savings_${user.phone}`, String(dbBal));
+        localStorage.setItem(`growpesa_savings_${user.phone}`, String(dbBal));
       }
     } catch (e: any) {
       console.error('Exception updating savings:', e);
       setMainPool(rounded - delta);
-      localStorage.setItem(`GrowPesa_savings_${user.phone}`, String(rounded - delta));
+      localStorage.setItem(`growpesa_savings_${user.phone}`, String(rounded - delta));
       setMessage(`Error saving balance: ${e?.message || 'unknown'}`);
       return false;
     }
 
-    window.dispatchEvent(new Event('GrowPesa_sync'));
+    window.dispatchEvent(new Event('growpesa_sync'));
     return true;
   };
 
@@ -387,11 +387,11 @@ export default function DashboardPage() {
     setActiveLoan(loan);
     loanRef.current = loan;
     if (loan && loan.status !== 'CLOSED' && loan.status !== 'REJECTED') {
-      localStorage.setItem(`GrowPesa_loan_${user.phone}`, JSON.stringify(loan));
+      localStorage.setItem(`growpesa_loan_${user.phone}`, JSON.stringify(loan));
     } else {
-      localStorage.removeItem(`GrowPesa_loan_${user.phone}`);
+      localStorage.removeItem(`growpesa_loan_${user.phone}`);
     }
-    window.dispatchEvent(new Event('GrowPesa_sync'));
+    window.dispatchEvent(new Event('growpesa_sync'));
   };
 
   const syncFromServer = useCallback(async (currentUser: MemberUser) => {
@@ -405,7 +405,7 @@ export default function DashboardPage() {
       if (memberData) {
         const savings = Math.round(Number(memberData.savings_balance)) || 0;
         setMainPool(savings);
-        localStorage.setItem(`GrowPesa_savings_${currentUser.phone}`, String(savings));
+        localStorage.setItem(`growpesa_savings_${currentUser.phone}`, String(savings));
 
         setUser(prev => prev ? {
           ...prev,
@@ -438,7 +438,7 @@ export default function DashboardPage() {
       }));
 
       setLedger(mappedQueue);
-      localStorage.setItem(`GrowPesa_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
+      localStorage.setItem(`growpesa_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
 
       // ==========================================
       // REBUILD ACTIVE PACKAGES FROM LEDGER
@@ -485,7 +485,7 @@ export default function DashboardPage() {
         if (JSON.stringify(prev) === JSON.stringify(rebuiltSubs)) return prev;
         return rebuiltSubs;
       });
-      localStorage.setItem(`GrowPesa_subs_${currentUser.phone}`, JSON.stringify(rebuiltSubs));
+      localStorage.setItem(`growpesa_subs_${currentUser.phone}`, JSON.stringify(rebuiltSubs));
 
       // ==========================================
       // LOAN SYNC LOGIC
@@ -524,7 +524,7 @@ export default function DashboardPage() {
             };
             setActiveLoan(rebuilt);
             loanRef.current = rebuilt;
-            localStorage.setItem(`GrowPesa_loan_${currentUser.phone}`, JSON.stringify(rebuilt));
+            localStorage.setItem(`growpesa_loan_${currentUser.phone}`, JSON.stringify(rebuilt));
           }
         }
       } else {
@@ -534,7 +534,7 @@ export default function DashboardPage() {
             const overdueLoan: ActiveLoan = { ...currentLoan, status: 'OVERDUE' };
             setActiveLoan(overdueLoan);
             loanRef.current = overdueLoan;
-            localStorage.setItem(`GrowPesa_loan_${currentUser.phone}`, JSON.stringify(overdueLoan));
+            localStorage.setItem(`growpesa_loan_${currentUser.phone}`, JSON.stringify(overdueLoan));
           }
         }
 
@@ -544,11 +544,11 @@ export default function DashboardPage() {
             const updated: ActiveLoan = { ...currentLoan, status: 'ACTIVE' };
             setActiveLoan(updated);
             loanRef.current = updated;
-            localStorage.setItem(`GrowPesa_loan_${currentUser.phone}`, JSON.stringify(updated));
+            localStorage.setItem(`growpesa_loan_${currentUser.phone}`, JSON.stringify(updated));
           } else if (loanItem?.status === 'REJECTED') {
             setActiveLoan(null);
             loanRef.current = null;
-            localStorage.removeItem(`GrowPesa_loan_${currentUser.phone}`);
+            localStorage.removeItem(`growpesa_loan_${currentUser.phone}`);
           }
         }
 
@@ -566,13 +566,13 @@ export default function DashboardPage() {
           if (totalRepaidForThisLoan >= currentLoan.totalRepay) {
             setActiveLoan(null);
             loanRef.current = null;
-            localStorage.removeItem(`GrowPesa_loan_${currentUser.phone}`);
+            localStorage.removeItem(`growpesa_loan_${currentUser.phone}`);
             setMessage('Congratulations! Your loan is fully repaid.');
           } else if (currentLoan.amountPaid !== totalRepaidForThisLoan) {
             const updated: ActiveLoan = { ...currentLoan, amountPaid: totalRepaidForThisLoan };
             setActiveLoan(updated);
             loanRef.current = updated;
-            localStorage.setItem(`GrowPesa_loan_${currentUser.phone}`, JSON.stringify(updated));
+            localStorage.setItem(`growpesa_loan_${currentUser.phone}`, JSON.stringify(updated));
           }
         }
       }
@@ -589,7 +589,7 @@ export default function DashboardPage() {
 
     const handleStorage = () => loadLocal(user);
     window.addEventListener('storage', handleStorage);
-    window.addEventListener('GrowPesa_sync', handleStorage);
+    window.addEventListener('growpesa_sync', handleStorage);
 
     const interval = setInterval(() => {
       syncFromServer(user);
@@ -598,7 +598,7 @@ export default function DashboardPage() {
     return () => {
       clearInterval(interval);
       window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('GrowPesa_sync', handleStorage);
+      window.removeEventListener('growpesa_sync', handleStorage);
     };
   }, [user, syncFromServer]);
 
@@ -613,7 +613,7 @@ export default function DashboardPage() {
 
     if ((cleanPhone === '0700413388' || cleanPhone === '254700413388') && cleanPin === '6200') {
       const adminUser: MemberUser = { phone: cleanPhone, name: 'Brian Kegode (Admin)', role: 'admin' };
-      localStorage.setItem('GrowPesa_auth_user', JSON.stringify(adminUser));
+      localStorage.setItem('growpesa_auth_user', JSON.stringify(adminUser));
       window.location.replace('/admin');
       return;
     }
@@ -643,7 +643,7 @@ export default function DashboardPage() {
       referral_code: refCode,
     };
 
-    localStorage.setItem('GrowPesa_auth_user', JSON.stringify(loggedInUser));
+    localStorage.setItem('growpesa_auth_user', JSON.stringify(loggedInUser));
 
     setLedger([]);
     setActiveSubscriptions([]);
@@ -688,7 +688,7 @@ export default function DashboardPage() {
       referral_code: refCode,
     };
 
-    localStorage.setItem('GrowPesa_auth_user', JSON.stringify(loggedInUser));
+    localStorage.setItem('growpesa_auth_user', JSON.stringify(loggedInUser));
 
     setLedger([]);
     setActiveSubscriptions([]);
@@ -772,7 +772,7 @@ export default function DashboardPage() {
     setActiveSubscriptions([]);
     setActiveLoan(null);
     setMainPool(0);
-    localStorage.removeItem('GrowPesa_auth_user');
+    localStorage.removeItem('growpesa_auth_user');
   };
 
   const handleSweepSub = async (tierId: number) => {
@@ -824,7 +824,7 @@ export default function DashboardPage() {
     }
     
     setActiveSubscriptions(nextSubs);
-    localStorage.setItem(`GrowPesa_subs_${user!.phone}`, JSON.stringify(nextSubs));
+    localStorage.setItem(`growpesa_subs_${user!.phone}`, JSON.stringify(nextSubs));
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -872,7 +872,7 @@ export default function DashboardPage() {
 
     const nextSubs = [...activeSubscriptions, newSub];
     setActiveSubscriptions(nextSubs);
-    localStorage.setItem(`GrowPesa_subs_${user!.phone}`, JSON.stringify(nextSubs));
+    localStorage.setItem(`growpesa_subs_${user!.phone}`, JSON.stringify(nextSubs));
 
     const item: LedgerItem = {
       id: Date.now().toString(),
@@ -941,7 +941,7 @@ export default function DashboardPage() {
             }
             return i;
           });
-          if (user) localStorage.setItem(`GrowPesa_ledger_${user.phone}`, JSON.stringify(updated));
+          if (user) localStorage.setItem(`growpesa_ledger_${user.phone}`, JSON.stringify(updated));
           if (timeoutItem) submitToServerQueue(timeoutItem);
           return updated;
         });
@@ -963,7 +963,7 @@ export default function DashboardPage() {
           }
           return i;
         });
-        if (user) localStorage.setItem(`GrowPesa_ledger_${user.phone}`, JSON.stringify(updated));
+        if (user) localStorage.setItem(`growpesa_ledger_${user.phone}`, JSON.stringify(updated));
         if (errItem) submitToServerQueue(errItem);
         return updated;
       });
@@ -1228,7 +1228,7 @@ export default function DashboardPage() {
           }
           return i;
         });
-        if (user) localStorage.setItem(`GrowPesa_ledger_${user.phone}`, JSON.stringify(updated));
+        if (user) localStorage.setItem(`growpesa_ledger_${user.phone}`, JSON.stringify(updated));
         if (errItem) submitToServerQueue(errItem);
         return updated;
       });
@@ -1293,10 +1293,10 @@ export default function DashboardPage() {
         <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-xl shadow-2xl space-y-6">
           <div className="text-center space-y-2">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 font-black text-slate-950 text-2xl shadow-lg shadow-emerald-500/20">
-              TP
+              GP
             </div>
             <h1 className="text-2xl font-black tracking-tight text-white">
-              Tiba<span className="text-emerald-400">Pay</span> Vault
+              Grow<span className="text-emerald-400">Pesa</span> Vault
             </h1>
             <p className="text-xs text-slate-400">
               {authMode === 'login' ? 'Welcome back. Please log in.' : 'Create your savings account.'}
@@ -1487,7 +1487,7 @@ export default function DashboardPage() {
     );
   }
 
-  const referralLink = `https://GrowPesa.vercel.app?ref=${user!.referral_code}`;
+  const referralLink = `https://growpesa.vercel.app?ref=${user!.referral_code}`;
   const shareMessage = `Join me on GrowPesa and let's grow our wealth together! Use my code ${user!.referral_code} to sign up and get started. ${referralLink}`;
 
   const handleShareReferral = async () => {
@@ -1520,12 +1520,12 @@ export default function DashboardPage() {
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
-            TP
+            GP
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <h1 className="text-base font-bold tracking-tight text-white">
-                Tiba<span className="text-emerald-400">Pay</span>
+                Grow<span className="text-emerald-400">Pesa</span>
               </h1>
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-400 border border-emerald-500/20">
                 Member
@@ -1814,7 +1814,7 @@ export default function DashboardPage() {
 
           {/* FOLLOW ON X */}
           <a
-            href="https://twitter.com/intent/follow?screen_name=GrowPesa"
+            href="https://twitter.com/intent/follow?screen_name=growpesa"
             target="_blank"
             rel="noopener noreferrer"
             className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
@@ -1826,7 +1826,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
-                  <h3 className="font-black text-sm text-white">@GrowPesa on X</h3>
+                  <h3 className="font-black text-sm text-white">@growpesa on X</h3>
                   <p className="text-[10px] text-slate-500">News, updates & community</p>
                 </div>
               </div>
