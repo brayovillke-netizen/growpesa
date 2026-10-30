@@ -70,7 +70,7 @@ interface ActiveLoan {
   phone?: string;
 }
 
-const ADMIN_PHONE = '0700413388'; // Admin's phone number for notifications
+const ADMIN_PHONE = '0700413388';
 
 const PACKAGE_TIERS: PackageTier[] = [
   { id: 1, name: 'Bronze', entry: 200, dailyLimit: 20, lockDays: 12, groupCut: 2, netSweep: 18, totalPayout: 240, roi: 40, icon: '🥉', sizeClass: 'text-3xl' },
@@ -438,17 +438,24 @@ export default function DashboardPage() {
         
         if (latestEntry) {
           const entryDate = latestEntry.date;
-          const hasSweep = mappedQueue.some((i: any) => i.type.includes(`Tier Sweep (${tier.name})`) && i.status === 'COMPLETED' && i.date >= entryDate);
+          
+          // Check if there is a SWEEP *after* the entry date
+          const latestSweep = mappedQueue.find((i: any) => i.type.includes(`Tier Sweep (${tier.name})`) && i.status === 'COMPLETED' && i.date >= entryDate);
+          
+          const end = new Date(entryDate);
+          end.setDate(end.getDate() + tier.lockDays);
+          const endDate = end.toISOString().split('T')[0];
+          const isExpired = today >= endDate;
 
-          if (!hasSweep) {
-            const startMs = new Date(entryDate).getTime();
-            const end = new Date(entryDate);
-            end.setDate(end.getDate() + tier.lockDays);
-            const endDate = end.toISOString().split('T')[0];
-
+          // If it has expired AND been swept, do not rebuild it (it's closed).
+          // If it hasn't expired, rebuild it based on the latest sweep date (or entry date).
+          if (!isExpired || (isExpired && !latestSweep)) {
+            const calcStartDate = latestSweep ? latestSweep.date : entryDate;
+            const startMs = new Date(calcStartDate).getTime();
             const todayMs = new Date(today).getTime();
-            const calcMs = Math.min(todayMs, end.getTime());
-            const daysElapsed = Math.max(0, Math.floor((calcMs - startMs) / 86400000));
+            
+            const effectiveEndMs = Math.min(todayMs, end.getTime());
+            const daysElapsed = Math.max(0, Math.floor((effectiveEndMs - startMs) / 86400000));
             
             const balance = Math.min(daysElapsed * tier.dailyLimit, tier.totalPayout);
 
@@ -751,8 +758,18 @@ export default function DashboardPage() {
     }
 
     const todayStrLocal = new Date().toISOString().split('T')[0];
+    const isExpired = todayStrLocal >= sub.endDate;
+
+    // Update local state instantly based on expiration
+    let nextSubs;
+    if (isExpired) {
+      nextSubs = activeSubscriptions.filter(s => s.tierId !== tierId);
+    } else {
+      nextSubs = activeSubscriptions.map(s => 
+        s.tierId === tierId ? { ...s, accumulatedBalance: 0, lastAccrualDate: todayStrLocal } : s
+      );
+    }
     
-    const nextSubs = activeSubscriptions.filter(s => s.tierId !== tierId);
     setActiveSubscriptions(nextSubs);
     localStorage.setItem(`tibapay_subs_${user!.phone}`, JSON.stringify(nextSubs));
 
@@ -766,8 +783,9 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
     await saveLedger([item, ...ledger], item);
+    
     setMessage(
-      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings.`
+      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`
     );
   };
 
@@ -1801,12 +1819,7 @@ export default function DashboardPage() {
                       disabled={sub.accumulatedBalance <= 0}
                       className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center"
                     >
-                      <span>{isExpired ? 'Claim & Close Package' : 'Sweep to Savings'}</span>
-                      {sub.accumulatedBalance > 0 && (
-                        <span className="text-[8px] font-bold opacity-70">
-                          90% to Main · 10% to Treasury
-                        </span>
-                      )}
+                      <span>{isExpired ? 'Claim & Close Package 🎉' : 'Sweep to Vault 🚀'}</span>
                     </button>
                   </div>
                 );
