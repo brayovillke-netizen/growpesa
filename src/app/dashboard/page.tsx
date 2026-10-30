@@ -156,12 +156,21 @@ export default function DashboardPage() {
 
   const [ledger, setLedger] = useState<LedgerItem[]>([]);
 
-  const { isEnabled: bioEnabled, isSupported: bioSupported, enableBiometrics, disableBiometrics } = useBiometrics();
+  // Biometric Hooks & State
+  const { isEnabled: bioEnabled, isSupported: bioSupported, enableBiometrics, disableBiometrics, loginWithBiometrics } = useBiometrics();
+  const [hasSavedBio, setHasSavedBio] = useState(false);
 
   const loanRef = useRef<ActiveLoan | null>(null);
   useEffect(() => {
     loanRef.current = activeLoan;
   }, [activeLoan]);
+
+  // Check for saved biometrics on mount
+  useEffect(() => {
+    if (localStorage.getItem('tibapay_biometric_id')) {
+      setHasSavedBio(true);
+    }
+  }, []);
 
   const notifyAdmin = async (title: string, body: string) => {
     try {
@@ -614,6 +623,51 @@ export default function DashboardPage() {
 
     if (error || !data) return setAuthError('Member not found. Please sign up.');
     if (data.pin !== cleanPin) return setAuthError('Incorrect PIN.');
+
+    let refCode = data.referral_code;
+    if (!refCode) {
+      refCode = generateReferralCode(data.full_name);
+      await supabase.from('members').update({ referral_code: refCode }).eq('phone', data.phone);
+    }
+
+    const loggedInUser: MemberUser = {
+      phone: data.phone,
+      name: data.full_name,
+      role: data.role,
+      joined_at: data.created_at,
+      account_status: data.account_status || 'active',
+      loan_limit: Number(data.loan_limit) || 0,
+      total_deposited: Number(data.total_deposited) || 0,
+      referrals_rewarded_count: Number(data.referrals_rewarded_count) || 0,
+      referral_code: refCode,
+    };
+
+    localStorage.setItem('tibapay_auth_user', JSON.stringify(loggedInUser));
+
+    setLedger([]);
+    setActiveSubscriptions([]);
+    setActiveLoan(null);
+    setMainPool(0);
+
+    setUser(loggedInUser);
+    setPhoneInput(loggedInUser.phone);
+    lastActivityRef.current = Date.now();
+  };
+
+  const handleBiometricLogin = async () => {
+    setLoading(true);
+    setAuthError(null);
+    const savedPhone = await loginWithBiometrics();
+    
+    if (!savedPhone) {
+      setLoading(false);
+      return setAuthError('Biometric authentication failed. Please use your PIN.');
+    }
+
+    const { data, error } = await supabase.from('members').select('*').eq('phone', savedPhone).single();
+    setLoading(false);
+
+    if (error || !data) return setAuthError('Member not found. Please log in with PIN.');
 
     let refCode = data.referral_code;
     if (!refCode) {
@@ -1292,6 +1346,18 @@ export default function DashboardPage() {
               >
                 {loading ? 'Authenticating...' : 'Log In'}
               </button>
+
+              {bioSupported && hasSavedBio && (
+                <button
+                  type="button"
+                  onClick={handleBiometricLogin}
+                  disabled={loading}
+                  className="w-full py-3.5 bg-slate-800 text-sky-400 font-black rounded-xl text-sm border border-sky-500/30 shadow-lg hover:bg-slate-700 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <span className="text-xl">🫆</span>
+                  {loading ? 'Verifying...' : 'Login with Biometrics'}
+                </button>
+              )}
 
               <div className="text-center pt-2">
                 <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(null); setMessage(null); }} className="text-xs text-emerald-400 font-bold hover:underline">

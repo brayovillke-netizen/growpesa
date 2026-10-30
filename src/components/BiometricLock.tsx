@@ -83,7 +83,6 @@ export function BiometricLock({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Hook to manage enabling/disabling biometrics
 export function useBiometrics() {
   const [isEnabled, setIsEnabled] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
@@ -93,7 +92,7 @@ export function useBiometrics() {
     setIsEnabled(localStorage.getItem('tibapay_biometric_enabled') === 'true');
   }, []);
 
-  const enableBiometrics = async (userName: string) => {
+  const enableBiometrics = async (phoneNumber: string) => {
     try {
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
@@ -107,8 +106,8 @@ export function useBiometrics() {
           rp: { name: 'TibaPay Vault' },
           user: {
             id: userID,
-            name: userName,
-            displayName: userName,
+            name: phoneNumber,
+            displayName: phoneNumber,
           },
           pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
           authenticatorSelection: { userVerification: 'required' },
@@ -118,6 +117,7 @@ export function useBiometrics() {
 
       const credentialId = bufferToBase64(credential.rawId);
       localStorage.setItem('tibapay_biometric_id', credentialId);
+      localStorage.setItem('tibapay_biometric_phone', phoneNumber); // Save phone for login
       localStorage.setItem('tibapay_biometric_enabled', 'true');
       setIsEnabled(true);
       return true;
@@ -130,8 +130,35 @@ export function useBiometrics() {
   const disableBiometrics = () => {
     localStorage.removeItem('tibapay_biometric_enabled');
     localStorage.removeItem('tibapay_biometric_id');
+    localStorage.removeItem('tibapay_biometric_phone');
     setIsEnabled(false);
   };
 
-  return { isEnabled, isSupported, enableBiometrics, disableBiometrics };
+  const loginWithBiometrics = async (): Promise<string | null> => {
+    try {
+      const credentialIdBase64 = localStorage.getItem('tibapay_biometric_id');
+      const phone = localStorage.getItem('tibapay_biometric_phone');
+      
+      if (!credentialIdBase64 || !phone) return null;
+
+      await navigator.credentials.get({
+        publicKey: {
+          challenge: new Uint8Array(32),
+          allowCredentials: [{
+            id: base64ToBuffer(credentialIdBase64),
+            type: 'public-key',
+          }],
+          userVerification: 'required',
+          timeout: 60000,
+        }
+      });
+
+      return phone; // Return the saved phone number on success
+    } catch (err) {
+      console.error('Biometric login failed', err);
+      return null;
+    }
+  };
+
+  return { isEnabled, isSupported, enableBiometrics, disableBiometrics, loginWithBiometrics };
 }
