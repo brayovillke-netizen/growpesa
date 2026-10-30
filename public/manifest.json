@@ -1,6 +1,6 @@
 ﻿{
-  "name": "TibaPay",
-  "short_name": "TibaPay",
+  "name": "GrowPesa",
+  "short_name": "GrowPesa",
   "description": "Smart Community Savings & Payout Platform",
   "start_url": "/",
   "display": "standalone",

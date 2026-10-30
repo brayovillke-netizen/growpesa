@@ -66,7 +66,7 @@ export async function GET(req: Request) {
 
       // Fire the Push Notification using your existing API route
       try {
-        await fetch(`https://tibapay.vercel.app/api/push/send`, {
+        await fetch(`https://GrowPesa.vercel.app/api/push/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

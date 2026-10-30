@@ -97,7 +97,7 @@ export default function LandingPage() {
       {/* FOOTER */}
       <footer className="p-6 text-center relative z-10">
         <p className="text-[10px] text-slate-600 font-medium">
-          © {new Date().getFullYear()} TibaPay. {isReviewMode ? 'Built for reliable personal savings tracking.' : 'Built for reliable group & personal finance.'}
+          © {new Date().getFullYear()} GrowPesa. {isReviewMode ? 'Built for reliable personal savings tracking.' : 'Built for reliable group & personal finance.'}
         </p>
       </footer>
     </div>

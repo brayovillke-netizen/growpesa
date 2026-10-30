@@ -25,7 +25,7 @@ export function useBiometrics() {
 
   useEffect(() => {
     if (window.PublicKeyCredential) setIsSupported(true);
-    setIsEnabled(localStorage.getItem('tibapay_biometric_enabled') === 'true');
+    setIsEnabled(localStorage.getItem('GrowPesa_biometric_enabled') === 'true');
   }, []);
 
   const enableBiometrics = async (phoneNumber: string) => {
@@ -39,7 +39,7 @@ export function useBiometrics() {
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: 'TibaPay Vault' },
+          rp: { name: 'GrowPesa Vault' },
           user: {
             id: userID,
             name: phoneNumber,
@@ -52,9 +52,9 @@ export function useBiometrics() {
       }) as PublicKeyCredential;
 
       const credentialId = bufferToBase64(credential.rawId);
-      localStorage.setItem('tibapay_biometric_id', credentialId);
-      localStorage.setItem('tibapay_biometric_phone', phoneNumber);
-      localStorage.setItem('tibapay_biometric_enabled', 'true');
+      localStorage.setItem('GrowPesa_biometric_id', credentialId);
+      localStorage.setItem('GrowPesa_biometric_phone', phoneNumber);
+      localStorage.setItem('GrowPesa_biometric_enabled', 'true');
       setIsEnabled(true);
       return true;
     } catch (err) {
@@ -64,16 +64,16 @@ export function useBiometrics() {
   };
 
   const disableBiometrics = () => {
-    localStorage.removeItem('tibapay_biometric_enabled');
-    localStorage.removeItem('tibapay_biometric_id');
-    localStorage.removeItem('tibapay_biometric_phone');
+    localStorage.removeItem('GrowPesa_biometric_enabled');
+    localStorage.removeItem('GrowPesa_biometric_id');
+    localStorage.removeItem('GrowPesa_biometric_phone');
     setIsEnabled(false);
   };
 
   const loginWithBiometrics = async (): Promise<string | null> => {
     try {
-      const credentialIdBase64 = localStorage.getItem('tibapay_biometric_id');
-      const phone = localStorage.getItem('tibapay_biometric_phone');
+      const credentialIdBase64 = localStorage.getItem('GrowPesa_biometric_id');
+      const phone = localStorage.getItem('GrowPesa_biometric_phone');
       
       if (!credentialIdBase64 || !phone) return null;
 

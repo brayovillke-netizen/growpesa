@@ -43,7 +43,7 @@ export default function InstallPrompt() {
             TP
           </div>
           <div>
-            <p className="text-xs font-bold text-white">Install TibaPay</p>
+            <p className="text-xs font-bold text-white">Install GrowPesa</p>
             <p className="text-[10px] text-slate-400">Add to home screen for quick access</p>
           </div>
         </div>

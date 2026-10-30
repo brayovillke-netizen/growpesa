@@ -1,5 +1,5 @@
 ﻿/**
- * TibaPay Graduated Withdrawal Fee (GWF v6) Engine
+ * GrowPesa Graduated Withdrawal Fee (GWF v6) Engine
  * Calculates exact fees based on total daily aggregated cashout amounts.
  */
 export function calculateGWF(amount: number): number {

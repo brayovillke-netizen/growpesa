@@ -1,5 +1,5 @@
 ﻿/**
- * TibaPay Loan Calculation & Eligibility Engine
+ * GrowPesa Loan Calculation & Eligibility Engine
  */
 
 export interface MemberStats {

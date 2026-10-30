@@ -19,7 +19,7 @@ function resolveBaseUrl(request: Request): string {
     const url = new URL(request.url);
     return `${url.protocol}//${url.host}`;
   } catch {
-    return 'https://tibapay.vercel.app';
+    return 'https://GrowPesa.vercel.app';
   }
 }
 
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         amount,
         phone,
-        description: 'TibaPay Savings Contribution',
+        description: 'GrowPesa Savings Contribution',
         callback_url: callbackUrl,
       }),
       cache: 'no-store',

@@ -123,7 +123,7 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('tibapay_auth_user');
+    const savedUser = localStorage.getItem('GrowPesa_auth_user');
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
@@ -377,7 +377,7 @@ export default function AdminPage() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `TibaPay_Ledger_${memberName.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `GrowPesa_Ledger_${memberName.replace(/\s+/g, '_')}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -394,7 +394,7 @@ export default function AdminPage() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `TibaPay_System_Ledger_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `GrowPesa_System_Ledger_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -494,7 +494,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => {
-              localStorage.removeItem('tibapay_auth_user');
+              localStorage.removeItem('GrowPesa_auth_user');
               window.location.replace('/dashboard');
             }}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
