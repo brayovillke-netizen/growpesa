@@ -2397,8 +2397,12 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <InstallPrompt />
-      <PushNotificationManager userPhone={user.phone} />
+      {!isReviewMode && (
+        <>
+          <InstallPrompt />
+          <PushNotificationManager userPhone={user.phone} />
+        </>
+      )}
     </div>
   );
 }
