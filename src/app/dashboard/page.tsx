@@ -1304,7 +1304,7 @@ export default function DashboardPage() {
           )}
 
           {authMode === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">M-Pesa Phone Number</label>
                 <input
@@ -1313,6 +1313,7 @@ export default function DashboardPage() {
                   onChange={(e) => setLoginPhone(e.target.value)}
                   placeholder="0712XXXXXX"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500"
+                  autoComplete="off"
                   required
                 />
               </div>
@@ -1326,6 +1327,7 @@ export default function DashboardPage() {
                     onChange={(e) => setLoginPin(e.target.value)}
                     placeholder="****"
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 tracking-widest text-center text-lg"
+                    autoComplete="new-password"
                     required
                   />
                   <button
@@ -1638,6 +1640,48 @@ export default function DashboardPage() {
               <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
             </div>
           </div>
+
+          {/* WEEKLY SAVINGS GOAL TRACKER */}
+          {(() => {
+            const weeksActive = Math.floor(daysActive / 7);
+            if (weeksActive === 0) return null;
+
+            const expected = weeksActive * 100;
+            const actual = user?.total_deposited || 0;
+            const deficit = expected - actual;
+            const progressPercent = Math.min(100, (actual / expected) * 100);
+
+            return (
+              <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-3 shadow-xl">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-black text-sm text-white flex items-center gap-2">
+                    <span className="text-emerald-400">🎯</span> Weekly Savings Goal
+                  </h3>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${deficit <= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                    {deficit <= 0 ? 'On Track' : 'Behind'}
+                  </span>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>Saved: <span className="text-white">KES {actual.toLocaleString()}</span></span>
+                    <span>Target: <span className="text-emerald-400">KES {expected.toLocaleString()}</span></span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-500 ${deficit <= 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                      style={{ width: `${progressPercent}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  {deficit <= 0 
+                    ? "Amazing! You're ahead of your KES 100/week goal." 
+                    : `You need KES ${deficit.toLocaleString()} more to catch up on your ${weeksActive}-week target.`}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* DEPOSIT SECTION */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
