@@ -1880,14 +1880,14 @@ export default function DashboardPage() {
                           className={`text-[8px] font-bold ${
                             item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
                               ? 'text-emerald-500'
-                              : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN'
+                              : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN' || (isReviewMode && item.status.includes('ADMIN'))
                               ? 'text-sky-400'
                               : item.status === 'REJECTED' || item.status === 'FAILED'
                               ? 'text-rose-500'
                               : 'text-amber-400 animate-pulse'
                           }`}
                         >
-                          {item.status}
+                          {isReviewMode && item.status.includes('ADMIN') ? 'PENDING SYNC' : item.status}
                         </p>
                       </div>
                     </div>
