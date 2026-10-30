@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 export async function GET(req: Request) {
+  // ✅ Move Supabase initialization inside the handler
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
   // Security check: Vercel Cron sends a specific auth header
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && process.env.NODE_ENV === 'production') {
@@ -22,6 +23,11 @@ export async function GET(req: Request) {
 
     const today = new Date();
     let processedCount = 0;
+    
+    // Get the base URL dynamically for the push API
+    const host = req.headers.get('host') || 'growpesa.vercel.app';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
 
     for (const member of members) {
       const joinedDate = new Date(member.created_at);
@@ -66,7 +72,7 @@ export async function GET(req: Request) {
 
       // Fire the Push Notification using your existing API route
       try {
-        await fetch(`https://GrowPesa.vercel.app/api/push/send`, {
+        await fetch(`${baseUrl}/api/push/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
