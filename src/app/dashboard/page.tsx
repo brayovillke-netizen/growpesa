@@ -1821,29 +1821,31 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* FOLLOW ON X */}
-          <a
-            href="https://twitter.com/intent/follow?screen_name=growpesa"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
-                  𝕏
+          {/* FOLLOW ON X (HIDDEN IN REVIEW MODE) */}
+          {!isReviewMode && (
+            <a
+              href="https://twitter.com/intent/follow?screen_name=growpesa"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
+                    𝕏
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
+                    <h3 className="font-black text-sm text-white">@growpesa on X</h3>
+                    <p className="text-[10px] text-slate-500">News, updates & community</p>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
-                  <h3 className="font-black text-sm text-white">@growpesa on X</h3>
-                  <p className="text-[10px] text-slate-500">News, updates & community</p>
+                <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
+                  Follow →
                 </div>
               </div>
-              <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
-                Follow →
-              </div>
-            </div>
-          </a>
+            </a>
+          )}
 
           {/* ACTIVITY LEDGER */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
