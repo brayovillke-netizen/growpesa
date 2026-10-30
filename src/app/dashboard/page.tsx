@@ -104,6 +104,9 @@ function generateReferralCode(name: string) {
 }
 
 export default function DashboardPage() {
+  // 🚨 TUMA REVIEW MODE TOGGLE
+  const isReviewMode = process.env.NEXT_PUBLIC_TUMA_REVIEW_MODE === 'true';
+
   const [user, setUser] = useState<MemberUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
@@ -1497,6 +1500,11 @@ export default function DashboardPage() {
     }
   };
 
+  // TABS DEFINITION (Hide loans/withdraw in review mode)
+  const availableTabs = isReviewMode 
+    ? (['overview', 'packages'] as const)
+    : (['overview', 'packages', 'withdraw', 'loans'] as const);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
@@ -1597,8 +1605,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
-        {(['overview', 'packages', 'withdraw', 'loans'] as const).map((tab) => (
+      {/* TABS RENDER */}
+      <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-4'} gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold`}>
+        {availableTabs.map((tab) => (
           <button
             key={tab}
             onClick={() => { setActiveTab(tab); setMessage(null); }}
@@ -1608,7 +1617,7 @@ export default function DashboardPage() {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
             }`}
           >
-            {tab}
+            {tab === 'packages' && isReviewMode ? 'Challenges' : tab}
           </button>
         ))}
       </div>
@@ -1623,10 +1632,18 @@ export default function DashboardPage() {
               <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
             </div>
             
-            <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
-              <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
-            </div>
+            {/* CONDITIONAL CARD: Earns vs Active Goals */}
+            {isReviewMode ? (
+              <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Goals</p>
+                <p className="text-xl font-black mt-1">{activeSubscriptions.length} Active</p>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
+                <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
+              </div>
+            )}
             
             <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
               <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
@@ -1635,10 +1652,18 @@ export default function DashboardPage() {
               </p>
             </div>
             
-            <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
-              <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
-            </div>
+            {/* CONDITIONAL CARD: Loan Status vs Days Active */}
+            {isReviewMode ? (
+              <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Days Active</p>
+                <p className="text-xl font-black mt-1">{daysActive} Days</p>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
+                <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+              </div>
+            )}
           </div>
 
           {/* WEEKLY SAVINGS GOAL TRACKER */}
@@ -1732,7 +1757,7 @@ export default function DashboardPage() {
                   {loading ? (
                     <>Processing...</>
                   ) : (
-                    <>⚡ Push to Phone</>
+                    <>{isReviewMode ? 'Deposit via M-Pesa' : '⚡ Push to Phone'}</>
                   )}
                 </button>
               </>
@@ -1899,7 +1924,9 @@ export default function DashboardPage() {
           {/* ACTIVE SUBSCRIPTIONS */}
           <div className="space-y-3">
             <div className="flex justify-between items-end px-1">
-              <h3 className="font-black text-sm text-white">Your Active Packages</h3>
+              <h3 className="font-black text-sm text-white">
+                {isReviewMode ? 'Your Active Challenges' : 'Your Active Packages'}
+              </h3>
               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
                 {activeSubscriptions.length} Running
               </span>
@@ -1938,23 +1965,30 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 relative z-10">
-                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Earned</p>
-                        <p className="text-lg font-black text-white">{formatMoney(sub.accumulatedBalance)}</p>
+                    {/* HIDE FINANCIAL BREAKDOWN IN REVIEW MODE */}
+                    {!isReviewMode && (
+                      <div className="grid grid-cols-2 gap-2 relative z-10">
+                        <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Earned</p>
+                          <p className="text-lg font-black text-white">{formatMoney(sub.accumulatedBalance)}</p>
+                        </div>
+                        <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Daily Rate</p>
+                          <p className="text-lg font-black text-emerald-400">+{formatMoney(tier.dailyLimit)}</p>
+                        </div>
                       </div>
-                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Daily Rate</p>
-                        <p className="text-lg font-black text-emerald-400">+{formatMoney(tier.dailyLimit)}</p>
-                      </div>
-                    </div>
+                    )}
 
                     <button
                       onClick={() => handleSweepSub(sub.tierId)}
                       disabled={sub.accumulatedBalance <= 0}
                       className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center"
                     >
-                      <span>{isExpired ? 'Claim & Close Package 🎉' : 'Sweep to Vault 🚀'}</span>
+                      <span>
+                        {isReviewMode 
+                          ? (isExpired ? 'Complete Goal 🎉' : 'Update Progress 🚀')
+                          : (isExpired ? 'Claim & Close Package 🎉' : 'Sweep to Vault 🚀')}
+                      </span>
                     </button>
                   </div>
                 );
@@ -1995,9 +2029,12 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="flex flex-col items-end gap-1">
-                      <p className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                        +{formatMoney(tier.dailyLimit)}/d
-                      </p>
+                      {/* HIDE FINANCIAL RATE IN REVIEW MODE */}
+                      {!isReviewMode && (
+                        <p className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                          +{formatMoney(tier.dailyLimit)}/d
+                        </p>
+                      )}
                       {isSubscribed ? (
                         <span className="text-[9px] font-bold text-slate-500 mr-2 mt-1">
                           Joined
@@ -2019,7 +2056,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {activeTab === 'withdraw' && (
+      {/* HIDE WITHDRAW TAB IN REVIEW MODE */}
+      {activeTab === 'withdraw' && !isReviewMode && (
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-5 shadow-2xl backdrop-blur-sm">
             
@@ -2067,7 +2105,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {activeTab === 'loans' && (
+      {/* HIDE LOANS TAB IN REVIEW MODE */}
+      {activeTab === 'loans' && !isReviewMode && (
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
             
