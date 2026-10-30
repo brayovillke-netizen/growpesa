@@ -470,12 +470,12 @@ export default function AdminPage() {
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 font-black text-slate-950 text-lg shadow-md shadow-amber-500/20">
-            TR
+            GR
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <h1 className="text-base font-bold tracking-tight text-white">
-                Tiba<span className="text-amber-400">Pay</span> Treasurer
+                Grow<span className="text-amber-400">Pesa</span> Treasurer
               </h1>
               <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold text-amber-400 border border-amber-500/20">
                 Admin
