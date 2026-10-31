@@ -1496,7 +1496,7 @@ export default function DashboardPage() {
     );
   }
 
-  const referralLink = `https://growpesa.vercel.app?ref=${user!.referral_code}`;
+  const referralLink = `https://growpesa.co.ke?ref=${user!.referral_code}`;
   const shareMessage = `Join me on GrowPesa and let's grow our wealth together! Use my code ${user!.referral_code} to sign up and get started. ${referralLink}`;
 
   const handleShareReferral = async () => {
@@ -1847,89 +1847,91 @@ export default function DashboardPage() {
             </a>
           )}
 
-          {/* ACTIVITY LEDGER */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-sm text-white">Recent Activity</h3>
-              <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{displayLedger.length} Records</span>
-            </div>
-            
-            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-              {displayLedger.length === 0 ? (
-                <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
-              ) : (
-                displayLedger.map((item) => (
-                  <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <div className="max-w-[65%]">
-                        <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
-                        <p className="text-[8px] text-slate-500 font-medium">{item.date} · {item.code}</p>
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={`font-black text-[12px] ${
-                            item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
-                              ? 'text-emerald-400'
-                              : 'text-rose-400'
-                          }`}
-                        >
-                          {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
-                          {formatMoney(item.amount)}
-                        </p>
-                        <p
-                          className={`text-[8px] font-bold ${
-                            item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
-                              ? 'text-emerald-500'
-                              : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN' || (isReviewMode && item.status.includes('ADMIN'))
-                              ? 'text-sky-400'
-                              : item.status === 'REJECTED' || item.status === 'FAILED'
-                              ? 'text-rose-500'
-                              : 'text-amber-400 animate-pulse'
-                          }`}
-                        >
-                          {isReviewMode && item.status.includes('ADMIN') ? 'PENDING SYNC' : item.status}
-                        </p>
-                      </div>
-                    </div>
-
-                    {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
-                      <button
-                        onClick={() => setActiveSmsInputId(item.id)}
-                        className="w-full py-1 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold transition cursor-pointer"
-                      >
-                        Paste M-Pesa SMS
-                      </button>
-                    )}
-
-                    {activeSmsInputId === item.id && (
-                      <div className="space-y-2 pt-2 border-t border-slate-800/80 mt-2">
-                        <textarea
-                          value={pastedSmsText}
-                          onChange={(e) => setPastedSmsText(e.target.value)}
-                          placeholder="Paste full M-Pesa text here"
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-14 resize-none"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleSubmitSmsForApproval(item.id)}
-                            className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[9px] transition cursor-pointer"
+          {/* ACTIVITY LEDGER (HIDDEN IN REVIEW MODE) */}
+          {!isReviewMode && (
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-bold text-sm text-white">Recent Activity</h3>
+                <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{displayLedger.length} Records</span>
+              </div>
+              
+              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                {displayLedger.length === 0 ? (
+                  <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
+                ) : (
+                  displayLedger.map((item) => (
+                    <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <div className="max-w-[65%]">
+                          <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
+                          <p className="text-[8px] text-slate-500 font-medium">{item.date} · {item.code}</p>
+                        </div>
+                        <div className="text-right">
+                          <p
+                            className={`font-black text-[12px] ${
+                              item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
+                                ? 'text-emerald-400'
+                                : 'text-rose-400'
+                            }`}
                           >
-                            {isReviewMode ? 'Log Transaction' : 'Submit'}
-                          </button>
-                          <button
-                            onClick={() => setActiveSmsInputId(null)}
-                            className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[9px] transition cursor-pointer"
+                            {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
+                            {formatMoney(item.amount)}
+                          </p>
+                          <p
+                            className={`text-[8px] font-bold ${
+                              item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
+                                ? 'text-emerald-500'
+                                : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN' || (isReviewMode && item.status.includes('ADMIN'))
+                                ? 'text-sky-400'
+                                : item.status === 'REJECTED' || item.status === 'FAILED'
+                                ? 'text-rose-500'
+                                : 'text-amber-400 animate-pulse'
+                            }`}
                           >
-                            Cancel
-                          </button>
+                            {isReviewMode && item.status.includes('ADMIN') ? 'PENDING SYNC' : item.status}
+                          </p>
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))
-              )}
+
+                      {(item.status.includes('TIMEOUT') || item.status === 'PENDING PIN') && activeSmsInputId !== item.id && (
+                        <button
+                          onClick={() => setActiveSmsInputId(item.id)}
+                          className="w-full py-1 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold transition cursor-pointer"
+                        >
+                          Paste M-Pesa SMS
+                        </button>
+                      )}
+
+                      {activeSmsInputId === item.id && (
+                        <div className="space-y-2 pt-2 border-t border-slate-800/80 mt-2">
+                          <textarea
+                            value={pastedSmsText}
+                            onChange={(e) => setPastedSmsText(e.target.value)}
+                            placeholder="Paste full M-Pesa text here"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-white focus:outline-none focus:border-amber-500 h-14 resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSubmitSmsForApproval(item.id)}
+                              className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-[9px] transition cursor-pointer"
+                            >
+                              {isReviewMode ? 'Log Transaction' : 'Submit'}
+                            </button>
+                            <button
+                              onClick={() => setActiveSmsInputId(null)}
+                              className="px-3 py-1.5 bg-slate-800 text-slate-400 font-bold rounded-lg text-[9px] transition cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
