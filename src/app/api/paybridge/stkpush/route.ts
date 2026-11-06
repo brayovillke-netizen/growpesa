@@ -4,46 +4,58 @@ export async function POST(req: Request) {
   try {
     const { amount, phone } = await req.json();
 
-    const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
-    
-    // 🚨 MAKE SURE THIS IS THE EXACT URL FROM PAYBRIDGE
-    const PAYBRIDGE_URL = 'https://api.paybridge.co.ke/v1/stkpush'; 
+    // 🚨 These must be in your Vercel Environment Variables
+    const PAYBRIDGE_CLIENT_ID = process.env.PAYBRIDGE_CLIENT_ID;
+    const PAYBRIDGE_CLIENT_SECRET = process.env.PAYBRIDGE_CLIENT_SECRET;
+    const PAYBRIDGE_URL = 'https://pesa-bridge.com/api/bridgepay/v1';
 
-    if (!PAYBRIDGE_API_KEY) {
-      console.error('Paybridge Error: API key is missing in Vercel Environment Variables');
-      return NextResponse.json({ success: false, error: 'Paybridge API key missing' }, { status: 500 });
+    if (!PAYBRIDGE_CLIENT_ID || !PAYBRIDGE_CLIENT_SECRET) {
+      return NextResponse.json({ success: false, error: 'Paybridge credentials missing' }, { status: 500 });
     }
 
-    // Format phone to 2547...
+    // Format phone to 2547xxxxxxxx (12 digits, no plus sign)
     let formattedPhone = phone.trim();
     if (formattedPhone.startsWith('0')) formattedPhone = '254' + formattedPhone.slice(1);
     if (formattedPhone.startsWith('+')) formattedPhone = formattedPhone.slice(1);
 
-    // 🚨 MAKE SURE THIS PAYLOAD MATCHES PAYBRIDGE'S DOCS
+    // 1. Get OAuth Bearer Token
+    const tokenRes = await fetch(`${PAYBRIDGE_URL}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: PAYBRIDGE_CLIENT_ID,
+        client_secret: PAYBRIDGE_CLIENT_SECRET,
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || !tokenData.access_token) {
+      throw new Error(tokenData.message || 'Failed to get Paybridge token');
+    }
+
+    const token = tokenData.access_token;
+
+    // 2. Push STK Prompt
     const payload = {
+      payer_msisdn: formattedPhone,
       amount: Number(amount),
-      phone: formattedPhone, // Some use 'phone_number', 'msisdn', etc.
+      reference: `GROW-${Date.now()}`,
+      idem: `GROW-${Date.now()}`, // Idempotency key
     };
 
-    console.log('Sending to Paybridge:', PAYBRIDGE_URL, payload);
-
-    const response = await fetch(PAYBRIDGE_URL, {
+    const response = await fetch(`${PAYBRIDGE_URL}/partner/stk`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // 🚨 MAKE SURE THIS IS THE RIGHT AUTH HEADER
-        'Authorization': `Bearer ${PAYBRIDGE_API_KEY}`, 
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
     });
 
     const data = await response.json();
-    
-    // Log the exact response from Paybridge
-    console.log('Paybridge Response:', data);
 
     if (!response.ok) {
-      throw new Error(data.message || data.error || 'Paybridge STK Push failed');
+      throw new Error(data.message || 'Paybridge STK Push failed');
     }
 
     return NextResponse.json({ success: true, data });
