@@ -4,13 +4,14 @@ export async function POST(req: Request) {
   try {
     const { amount, phone } = await req.json();
 
-    // 🚨 These must be in your Vercel Environment Variables
-    const PAYBRIDGE_CLIENT_ID = process.env.PAYBRIDGE_CLIENT_ID;
-    const PAYBRIDGE_CLIENT_SECRET = process.env.PAYBRIDGE_CLIENT_SECRET;
-    const PAYBRIDGE_URL = 'https://pesa-bridge.com/api/bridgepay/v1';
+    // 🚨 Use your sk_live key from the PayBridge dashboard
+    const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
+    
+    // 🚨 Use the exact URL from your Usage section
+    const PAYBRIDGE_URL = 'https://paybridge.kingscreation.co.ke/api/v1/payments'; 
 
-    if (!PAYBRIDGE_CLIENT_ID || !PAYBRIDGE_CLIENT_SECRET) {
-      return NextResponse.json({ success: false, error: 'Paybridge credentials missing' }, { status: 500 });
+    if (!PAYBRIDGE_API_KEY) {
+      return NextResponse.json({ success: false, error: 'Paybridge API key missing' }, { status: 500 });
     }
 
     // Format phone to 2547xxxxxxxx (12 digits, no plus sign)
@@ -18,36 +19,18 @@ export async function POST(req: Request) {
     if (formattedPhone.startsWith('0')) formattedPhone = '254' + formattedPhone.slice(1);
     if (formattedPhone.startsWith('+')) formattedPhone = formattedPhone.slice(1);
 
-    // 1. Get OAuth Bearer Token
-    const tokenRes = await fetch(`${PAYBRIDGE_URL}/oauth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: PAYBRIDGE_CLIENT_ID,
-        client_secret: PAYBRIDGE_CLIENT_SECRET,
-      }),
-    });
-
-    const tokenData = await tokenRes.json();
-    if (!tokenRes.ok || !tokenData.access_token) {
-      throw new Error(tokenData.message || 'Failed to get Paybridge token');
-    }
-
-    const token = tokenData.access_token;
-
-    // 2. Push STK Prompt
     const payload = {
-      payer_msisdn: formattedPhone,
+      phone: formattedPhone,
       amount: Number(amount),
-      reference: `GROW-${Date.now()}`,
-      idem: `GROW-${Date.now()}`, // Idempotency key
+      // Check if your dashboard requires other fields like 'reference' or 'callback_url'
     };
 
-    const response = await fetch(`${PAYBRIDGE_URL}/partner/stk`, {
+    const response = await fetch(PAYBRIDGE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        // 🚨 This is the direct Bearer token method shown in your dashboard
+        'Authorization': `Bearer ${PAYBRIDGE_API_KEY}`, 
       },
       body: JSON.stringify(payload),
     });
@@ -55,7 +38,7 @@ export async function POST(req: Request) {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Paybridge STK Push failed');
+      throw new Error(data.message || data.error || 'Paybridge STK Push failed');
     }
 
     return NextResponse.json({ success: true, data });
