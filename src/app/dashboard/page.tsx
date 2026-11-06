@@ -924,8 +924,9 @@ export default function DashboardPage() {
       });
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'STK push failed');
+       if (!res.ok || !data.success) {
+        const errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        throw new Error(errorMsg || 'STK push failed');
       }
 
       setMessage(
