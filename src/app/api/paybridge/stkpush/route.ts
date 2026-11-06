@@ -6,10 +6,11 @@ export async function POST(req: Request) {
 
     const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
     const PAYBRIDGE_ACCOUNT_ID = process.env.PAYBRIDGE_ACCOUNT_ID;
+    
     const PAYBRIDGE_URL = 'https://paybridge.kingscreation.co.ke/api/v1/payments'; 
 
     if (!PAYBRIDGE_API_KEY || !PAYBRIDGE_ACCOUNT_ID) {
-      return NextResponse.json({ success: false, error: 'Paybridge credentials missing' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Credentials missing in Vercel' }, { status: 500 });
     }
 
     let formattedPhone = phone.trim();
@@ -20,11 +21,8 @@ export async function POST(req: Request) {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
       phone: formattedPhone,
       amount: Number(amount),
+      reference: `GP-${Date.now()}`,
     };
-
-    // Log exactly what we are sending
-    console.log('--- SENDING TO PAYBRIDGE ---');
-    console.log(JSON.stringify(payload, null, 2));
 
     const response = await fetch(PAYBRIDGE_URL, {
       method: 'POST',
@@ -37,12 +35,7 @@ export async function POST(req: Request) {
 
     const data = await response.json();
     
-    // Log exactly what they replied
-    console.log('--- PAYBRIDGE REPLIED ---');
-    console.log(JSON.stringify(data, null, 2));
-
     if (!response.ok) {
-      // Force the exact PayBridge error to show
       throw new Error(JSON.stringify(data));
     }
 
