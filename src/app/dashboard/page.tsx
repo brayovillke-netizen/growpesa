@@ -104,7 +104,7 @@ function generateReferralCode(name: string) {
 }
 
 export default function DashboardPage() {
-  // 🚨 TUMA REVIEW MODE TOGGLE
+  // 🚨 SET THIS TO false IN VERCEL TO UNLOCK THE FULL APP
   const isReviewMode = process.env.NEXT_PUBLIC_TUMA_REVIEW_MODE === 'true';
 
   const [user, setUser] = useState<MemberUser | null>(null);
@@ -261,11 +261,11 @@ export default function DashboardPage() {
       window.removeEventListener('touchstart', resetActivity);
       window.removeEventListener('keydown', resetActivity);
     };
-  }, [user?.phone]); // Only depend on phone string, not the whole user object
+  }, [user?.phone]);
 
   useEffect(() => {
     if (user) setRepayPhoneInput(user.phone);
-  }, [user?.phone]); // Only depend on phone string
+  }, [user?.phone]);
 
   const loadLocal = (u: MemberUser) => {
     const savedLedger = localStorage.getItem(`growpesa_ledger_${u.phone}`);
@@ -405,7 +405,6 @@ export default function DashboardPage() {
       if (memberData) {
         const savings = Math.round(Number(memberData.savings_balance)) || 0;
         
-        // ✅ DEEP COMPARE TO PREVENT FLICKER
         setMainPool(prev => prev === savings ? prev : savings);
 
         setUser(prev => {
@@ -442,16 +441,13 @@ export default function DashboardPage() {
         smsMessage: row.sms_message,
       }));
 
-      // ✅ DEEP COMPARE TO PREVENT FLICKER
       setLedger(prev => {
         if (JSON.stringify(prev) === JSON.stringify(mappedQueue)) return prev;
         localStorage.setItem(`growpesa_ledger_${currentUser.phone}`, JSON.stringify(mappedQueue));
         return mappedQueue;
       });
 
-      // ==========================================
       // REBUILD ACTIVE PACKAGES FROM LEDGER
-      // ==========================================
       const rebuiltSubs: ActiveSubscription[] = [];
       const today = new Date().toISOString().split('T')[0];
 
@@ -495,9 +491,7 @@ export default function DashboardPage() {
         return rebuiltSubs;
       });
 
-      // ==========================================
       // LOAN SYNC LOGIC
-      // ==========================================
       const currentLoan = loanRef.current;
 
       if (!currentLoan) {
@@ -536,7 +530,6 @@ export default function DashboardPage() {
           }
         }
       } else {
-        // Only update if status changed to OVERDUE
         if (currentLoan.status === 'ACTIVE') {
           const today = new Date().toISOString().split('T')[0];
           if (today > currentLoan.dueDate) {
@@ -609,7 +602,7 @@ export default function DashboardPage() {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('growpesa_sync', handleStorage);
     };
-  }, [user?.phone, syncFromServer]); // Use user?.phone to prevent resetting loop on every object update
+  }, [user?.phone, syncFromServer]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -922,7 +915,8 @@ export default function DashboardPage() {
     await saveLedger([newItem, ...ledger], newItem);
 
     try {
-      const res = await fetch('/api/tuma/stkpush', {
+      // 🚨 CHANGED TO PAYBRIDGE ROUTE HERE
+      const res = await fetch('/api/paybridge/stkpush', {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
@@ -1207,7 +1201,8 @@ export default function DashboardPage() {
     await saveLedger([newItem, ...ledger], newItem);
 
     try {
-      const res = await fetch('/api/tuma/stkpush', {
+      // 🚨 CHANGED TO PAYBRIDGE ROUTE HERE
+      const res = await fetch('/api/paybridge/stkpush', {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
@@ -1962,7 +1957,6 @@ export default function DashboardPage() {
                 
                 return (
                   <div key={sub.tierId} className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-4 space-y-4 shadow-xl relative overflow-hidden">
-                    {/* Glow effect */}
                     <div className={`absolute top-0 right-0 w-32 h-32 blur-3xl opacity-20 rounded-full ${isExpired ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                     
                     <div className="flex justify-between items-center relative z-10">
@@ -1982,7 +1976,6 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
-                    {/* HIDE FINANCIAL BREAKDOWN IN REVIEW MODE */}
                     {!isReviewMode && (
                       <div className="grid grid-cols-2 gap-2 relative z-10">
                         <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
@@ -2046,7 +2039,6 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="flex flex-col items-end gap-1">
-                      {/* HIDE FINANCIAL RATE IN REVIEW MODE */}
                       {!isReviewMode && (
                         <p className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
                           +{formatMoney(tier.dailyLimit)}/d
@@ -2127,7 +2119,6 @@ export default function DashboardPage() {
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
             
-            {/* HEADER */}
             <div className="flex justify-between items-center">
               <h3 className="font-black text-lg text-white flex items-center gap-2">
                 <span className="text-emerald-400">💸</span> Loan Engine
@@ -2141,7 +2132,6 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* STAGE CARD */}
             <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-inner flex flex-col items-center justify-center space-y-2 relative overflow-hidden">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full"></div>
               
@@ -2155,7 +2145,6 @@ export default function DashboardPage() {
 
             {activeLoan ? (
               <div className="space-y-4">
-                {/* ACTIVE LOAN SUMMARY */}
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                     <div>
@@ -2171,7 +2160,6 @@ export default function DashboardPage() {
                     </span>
                   </div>
 
-                  {/* PROGRESS BAR */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[10px] font-bold text-slate-400">
                       <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
@@ -2197,7 +2185,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* REPAYMENT INTERFACE */}
                 {activeLoan.status === 'PENDING ADMIN APPROVAL' ? (
                   <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-xs text-sky-300 text-center font-bold">
                     Awaiting Treasurer Approval (24 hr).
