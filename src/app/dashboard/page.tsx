@@ -104,7 +104,6 @@ function generateReferralCode(name: string) {
 }
 
 export default function DashboardPage() {
-  // 🚨 SET THIS TO false IN VERCEL TO UNLOCK THE FULL APP
   const isReviewMode = process.env.NEXT_PUBLIC_TUMA_REVIEW_MODE === 'true';
 
   const [user, setUser] = useState<MemberUser | null>(null);
@@ -447,7 +446,7 @@ export default function DashboardPage() {
         return mappedQueue;
       });
 
-      // REBUILD ACTIVE PACKAGES FROM LEDGER
+      // REBUILD ACTIVE PACKAGES
       const rebuiltSubs: ActiveSubscription[] = [];
       const today = new Date().toISOString().split('T')[0];
 
@@ -915,7 +914,6 @@ export default function DashboardPage() {
     await saveLedger([newItem, ...ledger], newItem);
 
     try {
-      // 🚨 CHANGED TO PAYBRIDGE ROUTE HERE
       const res = await fetch('/api/paybridge/stkpush', {
         method: 'POST',
         cache: 'no-store',
@@ -924,9 +922,9 @@ export default function DashboardPage() {
       });
       const data = await res.json();
 
-       if (!res.ok || !data.success) {
-        const errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-        throw new Error(errorMsg || 'STK push failed');
+      if (!res.ok || !data.success) {
+        // 🚨 THIS WILL NOW SHOW THE EXACT JSON ERROR
+        throw new Error(JSON.stringify(data));
       }
 
       setMessage(
@@ -1202,7 +1200,6 @@ export default function DashboardPage() {
     await saveLedger([newItem, ...ledger], newItem);
 
     try {
-      // 🚨 CHANGED TO PAYBRIDGE ROUTE HERE
       const res = await fetch('/api/paybridge/stkpush', {
         method: 'POST',
         cache: 'no-store',
@@ -1212,7 +1209,8 @@ export default function DashboardPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'STK push failed');
+        // 🚨 THIS WILL NOW SHOW THE EXACT JSON ERROR
+        throw new Error(JSON.stringify(data));
       }
 
       setMessage(`STK push sent. Enter your M-Pesa PIN. Admin will verify your payment.`);
@@ -1287,7 +1285,6 @@ export default function DashboardPage() {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
 
-  // Filter ledger for display in review mode to hide financial history
   const displayLedger = isReviewMode
     ? ledger.filter(item => !item.type.includes('Withdrawal') && !item.type.includes('Loan') && !item.type.includes('Sweep'))
     : ledger;
@@ -1514,7 +1511,6 @@ export default function DashboardPage() {
     }
   };
 
-  // TABS DEFINITION (Hide everything except overview in review mode)
   const availableTabs = isReviewMode 
     ? (['overview'] as const)
     : (['overview', 'packages', 'withdraw', 'loans'] as const);
@@ -1619,7 +1615,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* TABS RENDER */}
       <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-4'} gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold`}>
         {availableTabs.map((tab) => (
           <button
@@ -1638,8 +1633,6 @@ export default function DashboardPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          
-          {/* BALANCE GRID */}
           <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-2'} gap-2.5`}>
             <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
               <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Tracked Balance</p>
@@ -1673,7 +1666,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* WEEKLY SAVINGS GOAL TRACKER */}
           {(() => {
             const weeksActive = Math.floor(daysActive / 7);
             if (weeksActive === 0) return null;
@@ -1715,7 +1707,6 @@ export default function DashboardPage() {
             );
           })()}
 
-          {/* DEPOSIT SECTION */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
             <div className="flex justify-between items-center">
               <h3 className="font-black text-base text-white flex items-center gap-2">
@@ -1789,7 +1780,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* HIDE REFER & EARN IN REVIEW MODE */}
           {!isReviewMode && (
             <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
               <div className="flex justify-between items-start mb-1">
@@ -1817,7 +1807,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* FOLLOW ON X (HIDDEN IN REVIEW MODE) */}
           {!isReviewMode && (
             <a
               href="https://twitter.com/intent/follow?screen_name=growpesa"
@@ -1843,7 +1832,6 @@ export default function DashboardPage() {
             </a>
           )}
 
-          {/* ACTIVITY LEDGER (HIDDEN IN REVIEW MODE) */}
           {!isReviewMode && (
             <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
               <div className="flex justify-between items-center mb-2">
@@ -1933,8 +1921,6 @@ export default function DashboardPage() {
 
       {activeTab === 'packages' && (
         <div className="space-y-5">
-          
-          {/* ACTIVE SUBSCRIPTIONS */}
           <div className="space-y-3">
             <div className="flex justify-between items-end px-1">
               <h3 className="font-black text-sm text-white">
@@ -2007,7 +1993,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* AVAILABLE TIERS */}
           <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-4">
             <h3 className="font-black text-sm text-white mb-3 flex items-center gap-2">
               <span className="text-emerald-400">💎</span> Available Tiers
@@ -2066,7 +2051,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* HIDE WITHDRAW TAB IN REVIEW MODE */}
       {activeTab === 'withdraw' && !isReviewMode && (
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-5 shadow-2xl backdrop-blur-sm">
@@ -2115,7 +2099,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* HIDE LOANS TAB IN REVIEW MODE */}
       {activeTab === 'loans' && !isReviewMode && (
         <div className="space-y-3">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">

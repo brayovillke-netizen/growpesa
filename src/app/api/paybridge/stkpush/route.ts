@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 
 export async function POST(req: Request) {
   try {
@@ -23,30 +22,28 @@ export async function POST(req: Request) {
       amount: Number(amount),
     };
 
-    const rawBody = JSON.stringify(payload);
-
-    // 🚨 GENERATE HMAC SIGNATURE
-    // This signs the body with your secret key so PayBridge knows it's really you
-    const signature = crypto
-      .createHmac('sha256', PAYBRIDGE_API_KEY)
-      .update(rawBody)
-      .digest('hex');
+    // Log exactly what we are sending
+    console.log('--- SENDING TO PAYBRIDGE ---');
+    console.log(JSON.stringify(payload, null, 2));
 
     const response = await fetch(PAYBRIDGE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${PAYBRIDGE_API_KEY}`, 
-        'x-signature': signature, // Sending the signature
-        'x-paybridge-signature': signature, // Trying both common header names
       },
-      body: rawBody,
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json();
     
+    // Log exactly what they replied
+    console.log('--- PAYBRIDGE REPLIED ---');
+    console.log(JSON.stringify(data, null, 2));
+
     if (!response.ok) {
-      throw new Error(data.message || data.error || 'STK Push failed');
+      // Force the exact PayBridge error to show
+      throw new Error(JSON.stringify(data));
     }
 
     return NextResponse.json({ success: true, data });
