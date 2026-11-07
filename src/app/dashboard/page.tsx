@@ -64,6 +64,8 @@ interface ActiveLoan {
   interestRate: number;
   interestAmount: number;
   totalRepay: number;
+  baseRepay?: number; // 🔥 Added to track base amount before penalty
+  penaltyAmount?: number; // 🔥 Added to track daily penalties
   amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
@@ -146,7 +148,7 @@ export default function DashboardPage() {
 
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isPushing, setIsPushing] = useState(false); // 🔥 NEW: Instant loading state for STK
+  const [isPushing, setIsPushing] = useState(false); 
 
   const [depositAmountInput, setDepositAmountInput] = useState('1000');
   const [phoneInput, setPhoneInput] = useState('');
@@ -491,7 +493,7 @@ export default function DashboardPage() {
         return rebuiltSubs;
       });
 
-      // LOAN SYNC LOGIC
+      // 🔥 UPDATED LOAN SYNC LOGIC WITH PENALTY CALCULATION 🔥
       const currentLoan = loanRef.current;
 
       if (!currentLoan) {
@@ -504,7 +506,7 @@ export default function DashboardPage() {
             const reqAmt = Number(latestLoan.amount);
             const fee = Math.round(reqAmt * 0.05);
             const gwf = calculateGWF(reqAmt);
-            const interest = Math.round(reqAmt * 0.10);
+            const baseRepay = reqAmt + Math.round(reqAmt * 0.10); // Default 10% for rebuilt
             const due = new Date(latestLoan.date);
             due.setDate(due.getDate() + 28);
 
@@ -516,8 +518,10 @@ export default function DashboardPage() {
               amountSent: reqAmt - fee - gwf,
               termWeeks: 4,
               interestRate: 0.10,
-              interestAmount: interest,
-              totalRepay: reqAmt + interest,
+              interestAmount: Math.round(reqAmt * 0.10),
+              totalRepay: baseRepay,
+              baseRepay: baseRepay,
+              penaltyAmount: 0,
               amountPaid: totalRepaid,
               status: 'ACTIVE',
               dueDate: due.toISOString().split('T')[0],
@@ -530,13 +534,32 @@ export default function DashboardPage() {
           }
         }
       } else {
-        if (currentLoan.status === 'ACTIVE') {
-          const today = new Date().toISOString().split('T')[0];
-          if (today > currentLoan.dueDate) {
-            const overdueLoan: ActiveLoan = { ...currentLoan, status: 'OVERDUE' };
-            setActiveLoan(overdueLoan);
-            loanRef.current = overdueLoan;
-            localStorage.setItem(`growpesa_loan_${currentUser.phone}`, JSON.stringify(overdueLoan));
+        
+        // Handle Late Penalties (0.5% per day)
+        if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE') {
+          const todayDateObj = new Date(new Date().toISOString().split('T')[0]);
+          const dueDateObj = new Date(currentLoan.dueDate);
+          
+          let newPenalty = 0;
+          if (todayDateObj > dueDateObj) {
+            const daysLate = Math.floor((todayDateObj.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+            newPenalty = Math.round(currentLoan.requestedAmount * 0.005 * daysLate); // 0.5% per day
+          }
+          
+          const baseAmount = currentLoan.baseRepay || (currentLoan.totalRepay - (currentLoan.penaltyAmount || 0));
+          const newTotalRepay = baseAmount + newPenalty;
+          
+          if (newTotalRepay !== currentLoan.totalRepay || (newPenalty > 0 && currentLoan.status !== 'OVERDUE')) {
+             const updated: ActiveLoan = {
+               ...currentLoan,
+               baseRepay: baseAmount,
+               penaltyAmount: newPenalty,
+               totalRepay: newTotalRepay,
+               status: newPenalty > 0 ? 'OVERDUE' : 'ACTIVE'
+             };
+             setActiveLoan(updated);
+             loanRef.current = updated;
+             localStorage.setItem(`growpesa_loan_${currentUser.phone}`, JSON.stringify(updated));
           }
         }
 
@@ -565,6 +588,7 @@ export default function DashboardPage() {
           
           const totalRepaidForThisLoan = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
+          // Check against the new totalRepay that includes penalties
           if (totalRepaidForThisLoan >= currentLoan.totalRepay) {
             setActiveLoan(null);
             loanRef.current = null;
@@ -775,6 +799,10 @@ export default function DashboardPage() {
     setActiveLoan(null);
     setMainPool(0);
     localStorage.removeItem('growpesa_auth_user');
+    
+    if (localStorage.getItem('growpesa_biometric_id')) {
+      setHasSavedBio(true);
+    }
   };
 
   const handleSweepSub = async (tierId: number) => {
@@ -897,7 +925,6 @@ export default function DashboardPage() {
     const targetPhone = phoneInput.trim() || user?.phone || '';
     if (targetPhone.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
-    // 🔥 INSTANT FEEDBACK
     setIsPushing(true);
     setMessage(`Sending STK push to ${targetPhone}...`);
 
@@ -971,7 +998,7 @@ export default function DashboardPage() {
         return updated;
       });
     } finally {
-      setIsPushing(false); // 🔥 STOP SPINNER
+      setIsPushing(false); 
     }
   };
 
@@ -1102,7 +1129,8 @@ export default function DashboardPage() {
   const totalFee = baseLoanFee + loanGwfFee;
   const amountSentToMpesa = Math.max(0, parsedLoanAmt - totalFee);
 
-  const loanInterestRate = loanTermWeeks === 1 ? 0.03 : loanTermWeeks === 2 ? 0.05 : 0.10;
+  // 🔥 NEW INTEREST RATES (5%, 10%, 20%)
+  const loanInterestRate = loanTermWeeks === 1 ? 0.05 : loanTermWeeks === 2 ? 0.10 : 0.20;
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
@@ -1139,6 +1167,8 @@ export default function DashboardPage() {
       interestRate: loanInterestRate,
       interestAmount: loanInterestAmount,
       totalRepay: totalLoanRepay,
+      baseRepay: totalLoanRepay,
+      penaltyAmount: 0,
       amountPaid: 0,
       status: 'PENDING ADMIN APPROVAL',
       dueDate: dueDateStr,
@@ -1155,9 +1185,10 @@ export default function DashboardPage() {
       reason: 'Member requested loan',
     });
 
+    // 🔥 MODIFIED TO HELP ADMIN SEE THE LOAN REFERENCE
     const item: LedgerItem = {
       id: Date.now().toString(),
-      type: `Loan Request (${loanTermWeeks}W)`,
+      type: `Loan Request (${loanTxnId})`,
       amount: parsedLoanAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1189,9 +1220,10 @@ export default function DashboardPage() {
     const txnId = Date.now().toString();
     const reqCode = 'REP-' + Math.floor(1000 + Math.random() * 9000);
 
+    // 🔥 MODIFIED TO HELP ADMIN SEE WHICH LOAN IS BEING PAID
     const newItem: LedgerItem = {
       id: txnId,
-      type: 'Loan Repayment',
+      type: `Loan Repayment (${activeLoan.id})`,
       amount: amt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1257,9 +1289,10 @@ export default function DashboardPage() {
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
 
+    // 🔥 MODIFIED TO HELP ADMIN SEE WHICH LOAN IS BEING PAID
     const newItem: LedgerItem = {
       id: Date.now().toString(),
-      type: 'Loan Repayment',
+      type: `Loan Repayment (${activeLoan.id})`,
       amount: amt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1518,7 +1551,6 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
-      {/* 🔥 INSTALL PROMPT MOVED TO TOP */}
       {!isReviewMode && <InstallPrompt />}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
@@ -1565,10 +1597,15 @@ export default function DashboardPage() {
                 onClick={async () => {
                   if (bioEnabled) {
                     disableBiometrics();
+                    setHasSavedBio(false);
                   } else {
                     const success = await enableBiometrics(user.phone);
-                    if (success) alert('Biometrics enabled! You will be prompted on next refresh.');
-                    else alert('Failed to enable biometrics. Your device may not support it.');
+                    if (success) {
+                      setHasSavedBio(true);
+                      alert('Biometrics enabled! You will be prompted on next login.');
+                    } else {
+                      alert('Failed to enable biometrics. Your device may not support it.');
+                    }
                   }
                 }} 
                 className="text-[9px] text-sky-400 font-bold hover:underline"
@@ -1752,7 +1789,7 @@ export default function DashboardPage() {
                 </div>
                 <button
                   onClick={handleDeposit}
-                  disabled={isPushing} // 🔥 DISABLE DURING PUSH
+                  disabled={isPushing} 
                   className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 hover:opacity-90 transition cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2"
                 >
                   {isPushing ? (
@@ -2150,6 +2187,21 @@ export default function DashboardPage() {
                     </span>
                   </div>
 
+                  {/* 🔥 DISPLAY PENALTIES IF OVERDUE */}
+                  {activeLoan.penaltyAmount && activeLoan.penaltyAmount > 0 ? (
+                    <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl mb-2">
+                       <p className="text-[10px] font-bold text-rose-400 mb-1">Late Payment Penalty (0.5%/day)</p>
+                       <div className="flex justify-between text-xs font-bold text-slate-300">
+                         <span>Base Repay:</span>
+                         <span>KES {(activeLoan.baseRepay || 0).toLocaleString()}</span>
+                       </div>
+                       <div className="flex justify-between text-xs font-bold text-rose-400">
+                         <span>Penalty:</span>
+                         <span>+ KES {activeLoan.penaltyAmount.toLocaleString()}</span>
+                       </div>
+                    </div>
+                  ) : null}
+
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[10px] font-bold text-slate-400">
                       <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
@@ -2337,9 +2389,9 @@ export default function DashboardPage() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repayment Term</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { weeks: 1, rate: '3%' },
-                          { weeks: 2, rate: '5%' },
-                          { weeks: 4, rate: '10%' },
+                          { weeks: 1 },
+                          { weeks: 2 },
+                          { weeks: 4 },
                         ].map((term) => (
                           <button
                             key={term.weeks}
@@ -2350,7 +2402,7 @@ export default function DashboardPage() {
                                 : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-300'
                             }`}
                           >
-                            {term.weeks}W <span className="opacity-70 text-[10px]">({term.rate})</span>
+                            {term.weeks}W
                           </button>
                         ))}
                       </div>
@@ -2376,7 +2428,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 🔥 NOTIFICATION PROMPT KEPT AT BOTTOM */}
       {!isReviewMode && (
         <PushNotificationManager userPhone={user.phone} />
       )}
