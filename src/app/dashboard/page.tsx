@@ -1861,9 +1861,9 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {!isReviewMode && (
+           {!isReviewMode && (
             <a
-              href="https://twitter.com/intent/follow?screen_name=growpesa"
+              href="https://twitter.com/intent/follow?screen_name=growpesax"
               target="_blank"
               rel="noopener noreferrer"
               className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
@@ -1875,7 +1875,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
-                    <h3 className="font-black text-sm text-white">@growpesa on X</h3>
+                    <h3 className="font-black text-sm text-white">@growpesax on X</h3>
                     <p className="text-[10px] text-slate-500">News, updates & community</p>
                   </div>
                 </div>
