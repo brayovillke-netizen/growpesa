@@ -2,23 +2,31 @@
 
 import { useState, useEffect } from 'react'
 import { X, Smartphone, CheckCircle2, AlertCircle, Send, Clock } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
+
+// Initialize Supabase client for polling
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 interface DepositModalProps {
   isOpen: boolean
   onClose: () => void
   onManualSubmit: (data: { phone: string; amount: number; reference: string }) => void
+  userId: string
 }
 
-export default function DepositModal({ isOpen, onClose, onManualSubmit }: DepositModalProps) {
+export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }: DepositModalProps) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [amount, setAmount] = useState('')
   const [mpesaMessage, setMpesaMessage] = useState('')
   
   const [status, setStatus] = useState<'idle' | 'prompting' | 'fallback_sms' | 'success'>('idle')
-  const [timer, setTimer] = useState(15)
+  const [timer, setTimer] = useState(20) // Changed to 20 seconds to give the user a bit more time
   const [error, setError] = useState<string | null>(null)
+  const [currentReference, setCurrentReference] = useState<string | null>(null)
 
-  // 15-Second Timer Effect
+  // Effect 1: Visual Countdown Timer
   useEffect(() => {
     let interval: NodeJS.Timeout
     if (status === 'prompting' && timer > 0) {
@@ -26,43 +34,87 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit }: Deposi
         setTimer((prev) => prev - 1)
       }, 1000)
     } else if (status === 'prompting' && timer === 0) {
-      // 15s timeout reached -> automatically switch to SMS fallback
+      // Timeout reached -> automatically switch to SMS fallback
       setStatus('fallback_sms')
     }
     return () => clearInterval(interval)
   }, [status, timer])
 
+  // Effect 2: Auto-Polling Supabase for Webhook Updates
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout
+
+    if (status === 'prompting' && currentReference) {
+      pollInterval = setInterval(async () => {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('status')
+          .eq('reference', currentReference)
+          .single()
+
+        if (data) {
+          if (data.status === 'completed') {
+            setStatus('success')
+          } else if (data.status === 'failed') {
+            setError('Transaction was cancelled or failed. If you were charged, please paste the SMS below.')
+            setStatus('fallback_sms')
+          }
+        }
+      }, 3000) // Check every 3 seconds
+    }
+
+    return () => clearInterval(pollInterval)
+  }, [status, currentReference])
+
   if (!isOpen) return null
 
   const resetModal = () => {
     setStatus('idle')
-    setTimer(15)
+    setTimer(20)
     setError(null)
     setMpesaMessage('')
+    setCurrentReference(null)
     onClose()
   }
 
-  // Handle Initiating STK Prompt & Starting 15s Timer
+  // Handle Initiating STK Prompt & Starting Timer
   const handleInitiatePayment = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!phoneNumber || !amount) return
 
     setError(null)
     setStatus('prompting')
-    setTimer(15)
+    setTimer(20)
 
     try {
-      await fetch('/api/tuma/stkpush', {
+      const response = await fetch('/api/paybridge/stkpush', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, amount: Number(amount) }),
+        body: JSON.stringify({ 
+          phone: phoneNumber, 
+          amount: Number(amount),
+          userId: userId 
+        }),
       })
-    } catch (err) {
-      // Timer will continue ticking down or user can click manual fallback
+      
+      const resData = await response.json()
+      
+      // 🔥 FIXED: The backend returns { success: true, data: {...}, reference: "GP-..." }
+      // We need to grab the reference correctly
+      const ref = resData.reference || resData.data?.reference;
+
+      if (resData.success && ref) {
+        setCurrentReference(ref)
+      } else {
+        throw new Error(resData.error || 'Failed to trigger prompt')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Network error. Please use the SMS fallback.')
+      setStatus('fallback_sms')
     }
   }
 
-  // Handle Manual Code / SMS Submission
+  // Handle Manual Code / SMS Submission (Fallback)
   const handleSMSSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!mpesaMessage) {
@@ -122,13 +174,19 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit }: Deposi
               <input
                 type="number"
                 required
-                min="10"
+                min="1"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="1000"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm"
               />
             </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-600 text-xs p-2.5 rounded-xl font-medium">
+                {error}
+              </div>
+            )}
 
             <button
               type="submit"
@@ -139,7 +197,7 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit }: Deposi
           </form>
         )}
 
-        {/* State 2: 15-Second Countdown Screen */}
+        {/* State 2: Countdown Screen (Also Polling Supabase in background) */}
         {status === 'prompting' && (
           <div className="text-center py-6 space-y-4">
             <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
@@ -207,13 +265,13 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit }: Deposi
           </form>
         )}
 
-        {/* State 4: Success View */}
+        {/* State 4: Success View (Triggered automatically by Webhook) */}
         {status === 'success' && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-            <h3 className="text-slate-900 font-bold text-lg">Contribution Submitted!</h3>
+            <h3 className="text-slate-900 font-bold text-lg">Deposit Successful!</h3>
             <p className="text-slate-600 text-xs leading-relaxed">
-              Your contribution and reference have been added to the Treasurer approval queue.
+              Your M-Pesa payment was confirmed and your balance has been updated automatically.
             </p>
             <button
               onClick={resetModal}
