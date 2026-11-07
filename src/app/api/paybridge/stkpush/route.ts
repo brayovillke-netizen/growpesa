@@ -7,7 +7,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
   try {
-    const { amount, phone, userId } = await req.json(); // Ensure frontend sends userId
+    const { amount, phone, userId } = await req.json();
 
     const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
     const PAYBRIDGE_ACCOUNT_ID = process.env.PAYBRIDGE_ACCOUNT_ID;
@@ -21,10 +21,11 @@ export async function POST(req: Request) {
     if (formattedPhone.startsWith('0')) formattedPhone = '254' + formattedPhone.slice(1);
     if (formattedPhone.startsWith('+')) formattedPhone = formattedPhone.slice(1);
 
+    // Generate the custom reference
     const reference = `GP-${Date.now()}`;
 
-    // 🔥 1. SAVE TO SUPABASE FIRST (Status: Pending)
-    await supabase.from('transactions').insert({
+    // 1. Save to Supabase FIRST as pending
+    const { error: dbError } = await supabase.from('transactions').insert({
       user_id: userId,
       reference: reference,
       amount: Number(amount),
@@ -32,14 +33,19 @@ export async function POST(req: Request) {
       type: 'deposit'
     });
 
-    // 🔥 2. SEND THE STK PUSH
+    if (dbError) {
+      console.error('Database Insert Error:', dbError);
+      throw new Error('Failed to create transaction record');
+    }
+
+    // 2. Send to PayBridge
     const payload = {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
       phone_number: formattedPhone,
       amount: Number(amount),
       channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", 
       account_number: "01103198794002", 
-      reference: reference, 
+      reference: reference, // Send our GP-... reference
     };
 
     const response = await fetch(PAYBRIDGE_URL, {
@@ -54,11 +60,12 @@ export async function POST(req: Request) {
     const data = await response.json();
     
     if (!response.ok) {
-      // If PayBridge fails immediately, mark the transaction as failed
+      // If PayBridge rejects it immediately, mark as failed
       await supabase.from('transactions').update({ status: 'failed' }).eq('reference', reference);
       throw new Error(JSON.stringify(data));
     }
 
+    // Return the reference to the frontend
     return NextResponse.json({ success: true, reference });
 
   } catch (error: any) {

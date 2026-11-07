@@ -13,7 +13,7 @@ interface DepositModalProps {
   isOpen: boolean
   onClose: () => void
   onManualSubmit: (data: { phone: string; amount: number; reference: string }) => void
-  userId: string
+  userId: string 
 }
 
 export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }: DepositModalProps) {
@@ -22,7 +22,7 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
   const [mpesaMessage, setMpesaMessage] = useState('')
   
   const [status, setStatus] = useState<'idle' | 'prompting' | 'fallback_sms' | 'success'>('idle')
-  const [timer, setTimer] = useState(20) // Changed to 20 seconds to give the user a bit more time
+  const [timer, setTimer] = useState(60) // 🔥 Increased to 60 seconds
   const [error, setError] = useState<string | null>(null)
   const [currentReference, setCurrentReference] = useState<string | null>(null)
 
@@ -34,7 +34,6 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
         setTimer((prev) => prev - 1)
       }, 1000)
     } else if (status === 'prompting' && timer === 0) {
-      // Timeout reached -> automatically switch to SMS fallback
       setStatus('fallback_sms')
     }
     return () => clearInterval(interval)
@@ -60,7 +59,7 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
             setStatus('fallback_sms')
           }
         }
-      }, 3000) // Check every 3 seconds
+      }, 3000)
     }
 
     return () => clearInterval(pollInterval)
@@ -70,21 +69,20 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
 
   const resetModal = () => {
     setStatus('idle')
-    setTimer(20)
+    setTimer(60) // 🔥 Reset to 60 seconds
     setError(null)
     setMpesaMessage('')
     setCurrentReference(null)
     onClose()
   }
 
-  // Handle Initiating STK Prompt & Starting Timer
   const handleInitiatePayment = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!phoneNumber || !amount) return
 
     setError(null)
     setStatus('prompting')
-    setTimer(20)
+    setTimer(60) // 🔥 Set to 60 seconds
 
     try {
       const response = await fetch('/api/paybridge/stkpush', { 
@@ -99,8 +97,7 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
       
       const resData = await response.json()
       
-      // 🔥 FIXED: The backend returns { success: true, data: {...}, reference: "GP-..." }
-      // We need to grab the reference correctly
+      // Properly extract reference based on our new backend response
       const ref = resData.reference || resData.data?.reference;
 
       if (resData.success && ref) {
@@ -114,7 +111,6 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
     }
   }
 
-  // Handle Manual Code / SMS Submission (Fallback)
   const handleSMSSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!mpesaMessage) {
@@ -192,12 +188,12 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
               type="submit"
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-600/20"
             >
-              Send STK Prompt & Start Timer
+              Send STK Prompt
             </button>
           </form>
         )}
 
-        {/* State 2: Countdown Screen (Also Polling Supabase in background) */}
+        {/* State 2: Countdown Screen */}
         {status === 'prompting' && (
           <div className="text-center py-6 space-y-4">
             <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
@@ -265,7 +261,7 @@ export default function DepositModal({ isOpen, onClose, onManualSubmit, userId }
           </form>
         )}
 
-        {/* State 4: Success View (Triggered automatically by Webhook) */}
+        {/* State 4: Success View */}
         {status === 'success' && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
