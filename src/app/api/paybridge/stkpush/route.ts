@@ -6,8 +6,6 @@ export async function POST(req: Request) {
 
     const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
     const PAYBRIDGE_ACCOUNT_ID = process.env.PAYBRIDGE_ACCOUNT_ID;
-    
-    // Ensure this URL is correct for your PayBridge setup
     const PAYBRIDGE_URL = 'https://paybridge.kingscreation.co.ke/api/v1/payments'; 
 
     if (!PAYBRIDGE_API_KEY || !PAYBRIDGE_ACCOUNT_ID) {
@@ -20,10 +18,14 @@ export async function POST(req: Request) {
 
     const payload = {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
-      phone_number: formattedPhone, // ✅ Fixed: API expects 'phone_number'
+      phone_number: formattedPhone,
       amount: Number(amount),
-      // ✅ Fixed: The exact hidden UUID for 400200 you found in the DOM
-      channel_id: "01a1b157-310b-714c-ac94-490029af1e9b", 
+      
+      // 👇 IMPORTANT: Paste the NEW UUID (starts with 01a1...) that you got from the dropdown here
+      channel_id: "PASTE_YOUR_NEW_UUID_HERE", 
+      
+      // 👇 This forces Safaricom to accept the Co-op format
+      account_number: "01103198794002", 
       reference: `GP-${Date.now()}`,
     };
 
@@ -39,7 +41,6 @@ export async function POST(req: Request) {
     const data = await response.json();
     
     if (!response.ok) {
-      // This ensures we see the exact PayBridge error in the UI if it fails again
       throw new Error(JSON.stringify(data));
     }
 
