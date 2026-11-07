@@ -21,11 +21,12 @@ export async function POST(req: Request) {
       phone_number: formattedPhone,
       amount: Number(amount),
       
-      // 👇 IMPORTANT: Paste the NEW UUID (starts with 01a1...) that you got from the dropdown here
-      channel_id: "PASTE_YOUR_NEW_UUID_HERE", 
+      // Using the bank code from your last screenshot
+      channel_id: "400200", 
       
-      // 👇 This forces Safaricom to accept the Co-op format
+      // Forcing your Co-op account number
       account_number: "01103198794002", 
+      
       reference: `GP-${Date.now()}`,
     };
 
