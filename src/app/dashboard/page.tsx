@@ -169,7 +169,6 @@ export default function DashboardPage() {
     loanRef.current = activeLoan;
   }, [activeLoan]);
 
-  // 🔥 BULLETPROOF BIOMETRIC CHECK
   useEffect(() => {
     const bioId = localStorage.getItem('growpesa_biometric_id');
     const bioPhone = localStorage.getItem('growpesa_bio_phone');
@@ -800,7 +799,6 @@ export default function DashboardPage() {
     setMainPool(0);
     localStorage.removeItem('growpesa_auth_user');
     
-    // Force check for biometrics on logout
     if (localStorage.getItem('growpesa_bio_phone') || localStorage.getItem('growpesa_biometric_id') || bioEnabled) {
       setHasSavedBio(true);
     }
@@ -926,7 +924,6 @@ export default function DashboardPage() {
     const targetPhone = phoneInput.trim() || user?.phone || '';
     if (targetPhone.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
-    // 🔥 INSTANT SPINNER
     setIsPushing(true);
     setMessage(`Sending STK push to ${targetPhone}...`);
 
@@ -1400,8 +1397,7 @@ export default function DashboardPage() {
                 {loading ? 'Authenticating...' : 'Log In'}
               </button>
 
-              {/* 🔥 FORCE BIOMETRIC BUTTON IF SUPPORTED */}
-              {bioSupported && (
+              {bioSupported && hasSavedBio && (
                 <button
                   type="button"
                   onClick={handleBiometricLogin}
@@ -1861,7 +1857,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-           {!isReviewMode && (
+          {!isReviewMode && (
             <a
               href="https://twitter.com/intent/follow?screen_name=growpesax"
               target="_blank"
