@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       amount: Number(amount),
       channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", // Your exact UUID
       account_number: "01103198794002", // Your Co-op account
-      reference: `GP-${Date.now()}`, 
+      reference: `STK-${Date.now()}`, 
     };
 
     const response = await fetch(PAYBRIDGE_URL, {
@@ -40,7 +40,6 @@ export async function POST(req: Request) {
       throw new Error(JSON.stringify(data));
     }
 
-    // Just return success. No database stuff.
     return NextResponse.json({ success: true, data });
 
   } catch (error: any) {
