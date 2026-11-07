@@ -146,6 +146,7 @@ export default function DashboardPage() {
 
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPushing, setIsPushing] = useState(false); // 🔥 NEW: Instant loading state for STK
 
   const [depositAmountInput, setDepositAmountInput] = useState('1000');
   const [phoneInput, setPhoneInput] = useState('');
@@ -896,7 +897,8 @@ export default function DashboardPage() {
     const targetPhone = phoneInput.trim() || user?.phone || '';
     if (targetPhone.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
-    setLoading(true);
+    // 🔥 INSTANT FEEDBACK
+    setIsPushing(true);
     setMessage(`Sending STK push to ${targetPhone}...`);
 
     const txnId = Date.now().toString();
@@ -923,7 +925,6 @@ export default function DashboardPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        // 🚨 THIS WILL NOW SHOW THE EXACT JSON ERROR
         throw new Error(JSON.stringify(data));
       }
 
@@ -970,7 +971,7 @@ export default function DashboardPage() {
         return updated;
       });
     } finally {
-      setLoading(false);
+      setIsPushing(false); // 🔥 STOP SPINNER
     }
   };
 
@@ -1209,7 +1210,6 @@ export default function DashboardPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        // 🚨 THIS WILL NOW SHOW THE EXACT JSON ERROR
         throw new Error(JSON.stringify(data));
       }
 
@@ -1518,6 +1518,9 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
+      {/* 🔥 INSTALL PROMPT MOVED TO TOP */}
+      {!isReviewMode && <InstallPrompt />}
+
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
@@ -1749,11 +1752,14 @@ export default function DashboardPage() {
                 </div>
                 <button
                   onClick={handleDeposit}
-                  disabled={loading}
+                  disabled={isPushing} // 🔥 DISABLE DURING PUSH
                   className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 hover:opacity-90 transition cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2"
                 >
-                  {loading ? (
-                    <>Processing...</>
+                  {isPushing ? (
+                    <>
+                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></span>
+                      Sending Prompt...
+                    </>
                   ) : (
                     <>{isReviewMode ? 'Sync M-Pesa' : '⚡ Push to Phone'}</>
                   )}
@@ -2370,11 +2376,9 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* 🔥 NOTIFICATION PROMPT KEPT AT BOTTOM */}
       {!isReviewMode && (
-        <>
-          <InstallPrompt />
-          <PushNotificationManager userPhone={user.phone} />
-        </>
+        <PushNotificationManager userPhone={user.phone} />
       )}
     </div>
   );
