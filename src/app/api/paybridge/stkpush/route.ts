@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; 
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
   try {
-    const { amount, phone, userId } = await req.json();
+    const { amount, phone, userId } = await req.json(); // Ensure frontend sends userId
 
     const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
     const PAYBRIDGE_ACCOUNT_ID = process.env.PAYBRIDGE_ACCOUNT_ID;
@@ -18,15 +23,22 @@ export async function POST(req: Request) {
 
     const reference = `GP-${Date.now()}`;
 
-    // 🔥 TODO: Insert this transaction into Supabase here with status 'pending'
-    // await supabase.from('transactions').insert({ reference, amount, status: 'pending', user_id: userId })
+    // 🔥 1. SAVE TO SUPABASE FIRST (Status: Pending)
+    await supabase.from('transactions').insert({
+      user_id: userId,
+      reference: reference,
+      amount: Number(amount),
+      status: 'pending',
+      type: 'deposit'
+    });
 
+    // 🔥 2. SEND THE STK PUSH
     const payload = {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
       phone_number: formattedPhone,
       amount: Number(amount),
-      channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", // Your exact UUID
-      account_number: "01103198794002", // Your Co-op account
+      channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", 
+      account_number: "01103198794002", 
       reference: reference, 
     };
 
@@ -42,11 +54,12 @@ export async function POST(req: Request) {
     const data = await response.json();
     
     if (!response.ok) {
+      // If PayBridge fails immediately, mark the transaction as failed
+      await supabase.from('transactions').update({ status: 'failed' }).eq('reference', reference);
       throw new Error(JSON.stringify(data));
     }
 
-    // Return the reference so the frontend can track it
-    return NextResponse.json({ success: true, data, reference });
+    return NextResponse.json({ success: true, reference });
 
   } catch (error: any) {
     console.error('Paybridge STK Error:', error.message);
