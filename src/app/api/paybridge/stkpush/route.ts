@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
       phone_number: formattedPhone, // 👈 FIXED: Must be phone_number, not phone
       amount: Number(amount),
-      channel_id: PAYBRIDGE_ACCOUNT_ID, // 👈 TESTING YOUR IDEA: Using Account ID here
+      channel_id: "400200", // 👈 TESTING YOUR IDEA: Using Account ID here
       reference: `GP-${Date.now()}`,
     };
 
