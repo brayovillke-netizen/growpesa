@@ -21,8 +21,8 @@ export async function POST(req: Request) {
       phone_number: formattedPhone,
       amount: Number(amount),
       
-      // Using the bank code from your last screenshot
-      channel_id: "400200", 
+      // 👇 THE EXACT UUID YOU FOUND IN THE SCREENSHOT
+      channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", 
       
       // Forcing your Co-op account number
       account_number: "01103198794002", 
