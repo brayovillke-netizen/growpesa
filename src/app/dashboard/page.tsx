@@ -169,12 +169,15 @@ export default function DashboardPage() {
     loanRef.current = activeLoan;
   }, [activeLoan]);
 
-  // 🔥 FIX: Check both the biometric ID and the fail-safe phone key on load
+  // 🔥 BULLETPROOF BIOMETRIC CHECK
   useEffect(() => {
-    if (localStorage.getItem('growpesa_biometric_id') || localStorage.getItem('growpesa_bio_phone')) {
+    const bioId = localStorage.getItem('growpesa_biometric_id');
+    const bioPhone = localStorage.getItem('growpesa_bio_phone');
+    
+    if (bioId || bioPhone || bioEnabled) {
       setHasSavedBio(true);
     }
-  }, []);
+  }, [bioEnabled]);
 
   const notifyAdmin = async (title: string, body: string) => {
     try {
@@ -797,8 +800,8 @@ export default function DashboardPage() {
     setMainPool(0);
     localStorage.removeItem('growpesa_auth_user');
     
-    // 🔥 FIX: Ensure biometrics remains active on the login screen
-    if (localStorage.getItem('growpesa_bio_phone') || localStorage.getItem('growpesa_biometric_id')) {
+    // Force check for biometrics on logout
+    if (localStorage.getItem('growpesa_bio_phone') || localStorage.getItem('growpesa_biometric_id') || bioEnabled) {
       setHasSavedBio(true);
     }
   };
@@ -923,6 +926,7 @@ export default function DashboardPage() {
     const targetPhone = phoneInput.trim() || user?.phone || '';
     if (targetPhone.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
+    // 🔥 INSTANT SPINNER
     setIsPushing(true);
     setMessage(`Sending STK push to ${targetPhone}...`);
 
@@ -1316,7 +1320,6 @@ export default function DashboardPage() {
     ? ledger.filter(item => !item.type.includes('Withdrawal') && !item.type.includes('Loan') && !item.type.includes('Sweep'))
     : ledger;
 
-  // 🔥 GREETING LOGIC
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -1397,7 +1400,8 @@ export default function DashboardPage() {
                 {loading ? 'Authenticating...' : 'Log In'}
               </button>
 
-              {bioSupported && hasSavedBio && (
+              {/* 🔥 FORCE BIOMETRIC BUTTON IF SUPPORTED */}
+              {bioSupported && (
                 <button
                   type="button"
                   onClick={handleBiometricLogin}
@@ -1607,7 +1611,6 @@ export default function DashboardPage() {
                   } else {
                     const success = await enableBiometrics(user.phone);
                     if (success) {
-                      // 🔥 Save a fail-safe phone key to ensure the login button shows up later
                       localStorage.setItem('growpesa_bio_phone', user.phone);
                       setHasSavedBio(true);
                       alert('Biometrics enabled! You will be prompted on next login.');

@@ -29,7 +29,8 @@ interface Member {
   account_status?: string;
 }
 
-type FilterTab = 'all' | 'deposits' | 'withdrawals' | 'loans';
+// 🔥 UPDATED FILTER TABS
+type FilterTab = 'all' | 'deposits' | 'withdrawals' | 'loan_requests' | 'loan_repayments';
 type AdminTab = 'queue' | 'members' | 'activity';
 
 function calculateGWF(amount: number): number {
@@ -47,7 +48,6 @@ function calculateGWF(amount: number): number {
   return Math.max(Math.ceil(amount * 0.0025), 125);
 }
 
-// AUTOMATION: Extract the first 10 uppercase alphanumeric characters (M-Pesa Code)
 const extractMpesaCode = (text: string) => {
   if (!text) return null;
   const match = text.match(/\b([A-Z0-9]{10})\b/);
@@ -64,16 +64,12 @@ export default function AdminPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<boolean>(false);
   
-  // Privacy Toggle
   const [hideBalances, setHideBalances] = useState<boolean>(false);
-
-  // Collapsible Queue State
   const [isQueueExpanded, setIsQueueExpanded] = useState<boolean>(false);
 
   const fetchQueue = useCallback(async () => {
     try {
       setSyncing(true);
-
       const { data: poolData, error: poolError } = await supabase
         .from('treasury_pool')
         .select('pool_balance')
@@ -82,7 +78,6 @@ export default function AdminPage() {
 
       if (poolError) throw poolError;
       
-      // ✅ DEEP COMPARE TO PREVENT FLICKER
       if (poolData) {
         const newPool = Math.round(Number(poolData.pool_balance));
         setMainPool(prev => prev === newPool ? prev : newPool);
@@ -106,7 +101,6 @@ export default function AdminPage() {
         smsMessage: row.sms_message,
       }));
 
-      // ✅ DEEP COMPARE TO PREVENT FLICKER
       setQueue(prev => JSON.stringify(prev) === JSON.stringify(mappedQueue) ? prev : mappedQueue);
     } catch (err: any) {
       console.error('Sync error:', err.message);
@@ -122,8 +116,6 @@ export default function AdminPage() {
         .select('*')
         .order('full_name');
       if (error) throw error;
-      
-      // ✅ DEEP COMPARE TO PREVENT FLICKER
       setMembers(prev => JSON.stringify(prev) === JSON.stringify(data || []) ? prev : (data || []));
     } catch (e: any) {
       console.error('Members fetch error:', e.message);
@@ -131,7 +123,6 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    // ✅ FIXED CAPITALIZATION: growpesa_auth_user (lowercase 'g')
     const savedUser = localStorage.getItem('growpesa_auth_user');
     if (savedUser) {
       try {
@@ -189,7 +180,6 @@ export default function AdminPage() {
         }
       }
 
-      // PREVENT PARALLEL LOANS (Check if they already owe)
       if (item.type.includes('Loan Request') && item.phone) {
         const { data: memberHistory } = await supabase
           .from('ledger_items')
@@ -217,7 +207,6 @@ export default function AdminPage() {
         poolUpdate = Math.max(0, Math.round(mainPool - netPayout));
         newMemberSavings = Math.max(0, currentSavings - amt);
       } else if (item.type.includes('Loan Request')) {
-        // 5% flat fee + GWF goes to treasury. The rest leaves the pool.
         const loanFee = Math.round(amt * 0.05);
         const gwfFee = calculateGWF(amt);
         const netDisbursed = Math.max(0, amt - loanFee - gwfFee);
@@ -296,7 +285,6 @@ export default function AdminPage() {
         }
       }
 
-      // TRIGGER PUSH NOTIFICATION TO MEMBER
       if (item.phone) {
         let pushTitle = '';
         let pushBody = '';
@@ -346,7 +334,6 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      // TRIGGER PUSH NOTIFICATION TO MEMBER
       if (item.phone) {
         try {
           await fetch('/api/push/send', {
@@ -414,10 +401,12 @@ export default function AdminPage() {
     (q) => q.status !== 'COMPLETED' && q.status !== 'REJECTED'
   );
 
+  // 🔥 UPDATED FILTER LOGIC FOR SEPARATED TABS
   const filteredQueue = pendingOnly.filter((item) => {
     if (activeFilter === 'deposits') return item.type.includes('Deposit');
     if (activeFilter === 'withdrawals') return item.type.includes('Withdrawal');
-    if (activeFilter === 'loans') return item.type.includes('Loan');
+    if (activeFilter === 'loan_requests') return item.type.includes('Loan Request');
+    if (activeFilter === 'loan_repayments') return item.type.includes('Loan Repayment');
     return true;
   });
 
@@ -503,7 +492,6 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => {
-              // ✅ FIXED CAPITALIZATION: growpesa_auth_user (lowercase 'g')
               localStorage.removeItem('growpesa_auth_user');
               window.location.replace('/dashboard');
             }}
@@ -567,7 +555,6 @@ export default function AdminPage() {
       {activeAdminTab === 'queue' && (
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 shadow-lg">
           
-          {/* HEADER WITH EXPAND/COLLAPSE TOGGLE */}
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsQueueExpanded(!isQueueExpanded)}>
               <h3 className="font-bold text-sm text-white">Review Queue {!isQueueExpanded && `(${pendingOnly.length})`}</h3>
@@ -592,7 +579,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* IF COLLAPSED: Show summary button */}
           {!isQueueExpanded ? (
             <div className="py-6 flex flex-col items-center justify-center space-y-3 bg-slate-950/50 rounded-xl border border-slate-800">
               <span className="text-3xl">📋</span>
@@ -607,14 +593,15 @@ export default function AdminPage() {
               </button>
             </div>
           ) : (
-            // IF EXPANDED: Show filters and items
             <>
-              <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[10px] font-bold text-center mt-2">
+              {/* 🔥 UPDATED TABS UI FOR LOAN SEPARATION */}
+              <div className="grid grid-cols-5 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[10px] font-bold text-center mt-2">
                 {[
                   { key: 'all', label: 'All' },
                   { key: 'deposits', label: 'Deposits' },
                   { key: 'withdrawals', label: 'Withdraw' },
-                  { key: 'loans', label: 'Loans' },
+                  { key: 'loan_requests', label: 'Req.' },
+                  { key: 'loan_repayments', label: 'Repay' },
                 ].map((tab) => (
                   <button
                     key={tab.key}
@@ -641,6 +628,7 @@ export default function AdminPage() {
                     const isDeposit = item.type.includes('Deposit');
                     const isWithdrawal = item.type.includes('Withdrawal');
                     const isLoan = item.type.includes('Loan Request');
+                    const isRepay = item.type.includes('Loan Repayment');
                     
                     const amt = Math.round(Number(item.amount));
                     
@@ -659,6 +647,7 @@ export default function AdminPage() {
                         className={`rounded-3xl bg-slate-950 border p-4 space-y-3 shadow-xl relative overflow-hidden ${
                           isDeposit ? 'border-emerald-500/30' : 
                           isWithdrawal ? 'border-amber-500/30' : 
+                          isRepay ? 'border-purple-500/30' :
                           'border-blue-500/30'
                         }`}
                       >
@@ -667,6 +656,7 @@ export default function AdminPage() {
                             <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                               isDeposit ? 'bg-emerald-500/20 text-emerald-300' : 
                               isWithdrawal ? 'bg-amber-500/20 text-amber-300' : 
+                              isRepay ? 'bg-purple-500/20 text-purple-300' :
                               'bg-blue-500/20 text-blue-300'
                             }`}>
                               {item.type}
@@ -703,6 +693,21 @@ export default function AdminPage() {
                               <span className="text-xl font-black text-emerald-400">{formatMoney(amt)}</span>
                             </div>
                           </div>
+                        ) : isRepay ? (
+                           <div className="space-y-2 mt-2">
+                             <div className="flex justify-between items-center bg-purple-500/10 p-3 rounded-xl border border-purple-500/20">
+                               <div>
+                                 <p className="text-[9px] text-purple-400 font-bold uppercase">Loan Ref</p>
+                                 <p className="text-xs font-bold text-white">{item.type.split('(')[1]?.replace(')', '') || item.code}</p>
+                               </div>
+                               <div className="text-right">
+                                 <p className="text-[9px] text-purple-400 font-bold uppercase tracking-wider">Amount Repaid</p>
+                                 <p className="text-2xl font-black text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.3)]">
+                                   {formatMoney(amt)}
+                                 </p>
+                               </div>
+                             </div>
+                           </div>
                         ) : (
                           <div className="space-y-2 mt-2">
                             <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
@@ -737,6 +742,7 @@ export default function AdminPage() {
                             className={`py-2.5 font-black rounded-xl text-xs transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed ${
                               isDeposit ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' :
                               isWithdrawal ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' :
+                              isRepay ? 'bg-purple-500 hover:bg-purple-400 text-white' :
                               'bg-blue-500 hover:bg-blue-400 text-white'
                             }`}
                           >
