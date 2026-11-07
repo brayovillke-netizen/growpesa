@@ -19,8 +19,9 @@ export async function POST(req: Request) {
 
     const payload = {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
-      phone: formattedPhone,
+      phone_number: formattedPhone, // 👈 FIXED: Changed from 'phone' to 'phone_number'
       amount: Number(amount),
+      channel_id: 400200, // 👈 FIXED: Added channel_id. Put your Till number here!
       reference: `GP-${Date.now()}`,
     };
 
