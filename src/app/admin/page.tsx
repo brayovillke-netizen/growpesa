@@ -29,7 +29,6 @@ interface Member {
   account_status?: string;
 }
 
-// 🔥 UPDATED FILTER TABS
 type FilterTab = 'all' | 'deposits' | 'withdrawals' | 'loan_requests' | 'loan_repayments';
 type AdminTab = 'queue' | 'members' | 'activity';
 
@@ -334,22 +333,8 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      if (item.phone) {
-        try {
-          await fetch('/api/push/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              phone: item.phone, 
-              title: 'Request Rejected ❌', 
-              body: `Your ${item.type} request was not approved.` 
-            }),
-          });
-        } catch (err) {
-          console.error('Failed to send push', err);
-        }
-      }
-
+      // 🚫 PUSH NOTIFICATION SPAM REMOVED
+      
       await fetchQueue();
       setMessage(`Rejected ${item.code}`);
     } catch (e: any) {
@@ -401,7 +386,6 @@ export default function AdminPage() {
     (q) => q.status !== 'COMPLETED' && q.status !== 'REJECTED'
   );
 
-  // 🔥 UPDATED FILTER LOGIC FOR SEPARATED TABS
   const filteredQueue = pendingOnly.filter((item) => {
     if (activeFilter === 'deposits') return item.type.includes('Deposit');
     if (activeFilter === 'withdrawals') return item.type.includes('Withdrawal');
@@ -594,7 +578,6 @@ export default function AdminPage() {
             </div>
           ) : (
             <>
-              {/* 🔥 UPDATED TABS UI FOR LOAN SEPARATION */}
               <div className="grid grid-cols-5 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[10px] font-bold text-center mt-2">
                 {[
                   { key: 'all', label: 'All' },
