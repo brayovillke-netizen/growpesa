@@ -64,8 +64,8 @@ interface ActiveLoan {
   interestRate: number;
   interestAmount: number;
   totalRepay: number;
-  baseRepay?: number; // 🔥 Added to track base amount before penalty
-  penaltyAmount?: number; // 🔥 Added to track daily penalties
+  baseRepay?: number; 
+  penaltyAmount?: number; 
   amountPaid: number;
   status: 'PENDING ADMIN APPROVAL' | 'DISBURSED' | 'APPROVED' | 'ACTIVE' | 'OVERDUE' | 'CLOSED' | 'REJECTED';
   dueDate: string;
@@ -169,8 +169,9 @@ export default function DashboardPage() {
     loanRef.current = activeLoan;
   }, [activeLoan]);
 
+  // 🔥 FIX: Check both the biometric ID and the fail-safe phone key on load
   useEffect(() => {
-    if (localStorage.getItem('growpesa_biometric_id')) {
+    if (localStorage.getItem('growpesa_biometric_id') || localStorage.getItem('growpesa_bio_phone')) {
       setHasSavedBio(true);
     }
   }, []);
@@ -449,7 +450,6 @@ export default function DashboardPage() {
         return mappedQueue;
       });
 
-      // REBUILD ACTIVE PACKAGES
       const rebuiltSubs: ActiveSubscription[] = [];
       const today = new Date().toISOString().split('T')[0];
 
@@ -493,7 +493,6 @@ export default function DashboardPage() {
         return rebuiltSubs;
       });
 
-      // 🔥 UPDATED LOAN SYNC LOGIC WITH PENALTY CALCULATION 🔥
       const currentLoan = loanRef.current;
 
       if (!currentLoan) {
@@ -506,7 +505,7 @@ export default function DashboardPage() {
             const reqAmt = Number(latestLoan.amount);
             const fee = Math.round(reqAmt * 0.05);
             const gwf = calculateGWF(reqAmt);
-            const baseRepay = reqAmt + Math.round(reqAmt * 0.10); // Default 10% for rebuilt
+            const baseRepay = reqAmt + Math.round(reqAmt * 0.10); 
             const due = new Date(latestLoan.date);
             due.setDate(due.getDate() + 28);
 
@@ -535,7 +534,6 @@ export default function DashboardPage() {
         }
       } else {
         
-        // Handle Late Penalties (0.5% per day)
         if (currentLoan.status === 'ACTIVE' || currentLoan.status === 'OVERDUE') {
           const todayDateObj = new Date(new Date().toISOString().split('T')[0]);
           const dueDateObj = new Date(currentLoan.dueDate);
@@ -543,7 +541,7 @@ export default function DashboardPage() {
           let newPenalty = 0;
           if (todayDateObj > dueDateObj) {
             const daysLate = Math.floor((todayDateObj.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
-            newPenalty = Math.round(currentLoan.requestedAmount * 0.005 * daysLate); // 0.5% per day
+            newPenalty = Math.round(currentLoan.requestedAmount * 0.005 * daysLate); 
           }
           
           const baseAmount = currentLoan.baseRepay || (currentLoan.totalRepay - (currentLoan.penaltyAmount || 0));
@@ -588,7 +586,6 @@ export default function DashboardPage() {
           
           const totalRepaidForThisLoan = approvedRepayments.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
 
-          // Check against the new totalRepay that includes penalties
           if (totalRepaidForThisLoan >= currentLoan.totalRepay) {
             setActiveLoan(null);
             loanRef.current = null;
@@ -800,7 +797,8 @@ export default function DashboardPage() {
     setMainPool(0);
     localStorage.removeItem('growpesa_auth_user');
     
-    if (localStorage.getItem('growpesa_biometric_id')) {
+    // 🔥 FIX: Ensure biometrics remains active on the login screen
+    if (localStorage.getItem('growpesa_bio_phone') || localStorage.getItem('growpesa_biometric_id')) {
       setHasSavedBio(true);
     }
   };
@@ -1129,7 +1127,6 @@ export default function DashboardPage() {
   const totalFee = baseLoanFee + loanGwfFee;
   const amountSentToMpesa = Math.max(0, parsedLoanAmt - totalFee);
 
-  // 🔥 NEW INTEREST RATES (5%, 10%, 20%)
   const loanInterestRate = loanTermWeeks === 1 ? 0.05 : loanTermWeeks === 2 ? 0.10 : 0.20;
   const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
@@ -1185,7 +1182,6 @@ export default function DashboardPage() {
       reason: 'Member requested loan',
     });
 
-    // 🔥 MODIFIED TO HELP ADMIN SEE THE LOAN REFERENCE
     const item: LedgerItem = {
       id: Date.now().toString(),
       type: `Loan Request (${loanTxnId})`,
@@ -1220,7 +1216,6 @@ export default function DashboardPage() {
     const txnId = Date.now().toString();
     const reqCode = 'REP-' + Math.floor(1000 + Math.random() * 9000);
 
-    // 🔥 MODIFIED TO HELP ADMIN SEE WHICH LOAN IS BEING PAID
     const newItem: LedgerItem = {
       id: txnId,
       type: `Loan Repayment (${activeLoan.id})`,
@@ -1289,7 +1284,6 @@ export default function DashboardPage() {
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
     if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
 
-    // 🔥 MODIFIED TO HELP ADMIN SEE WHICH LOAN IS BEING PAID
     const newItem: LedgerItem = {
       id: Date.now().toString(),
       type: `Loan Repayment (${activeLoan.id})`,
@@ -1321,6 +1315,15 @@ export default function DashboardPage() {
   const displayLedger = isReviewMode
     ? ledger.filter(item => !item.type.includes('Withdrawal') && !item.type.includes('Loan') && !item.type.includes('Sweep'))
     : ledger;
+
+  // 🔥 GREETING LOGIC
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+  const firstName = user?.name ? user.name.split(' ')[0] : 'Member';
 
   if (!user) {
     return (
@@ -1559,15 +1562,17 @@ export default function DashboardPage() {
             GP
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-base font-bold tracking-tight text-white">
-                Grow<span className="text-emerald-400">Pesa</span>
+            <div className="flex flex-col">
+              <h1 className="text-sm font-bold tracking-tight text-white">
+                {getGreeting()}, <span className="text-emerald-400">{firstName}</span>
               </h1>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-400 border border-emerald-500/20">
-                Member
-              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[10px] text-slate-400 font-medium">GrowPesa</span>
+                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-400 border border-emerald-500/20">
+                  Member
+                </span>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-400 truncate max-w-[150px]">{user.name}</p>
           </div>
         </div>
         <div className="flex flex-col gap-1 items-end">
@@ -1598,9 +1603,12 @@ export default function DashboardPage() {
                   if (bioEnabled) {
                     disableBiometrics();
                     setHasSavedBio(false);
+                    localStorage.removeItem('growpesa_bio_phone');
                   } else {
                     const success = await enableBiometrics(user.phone);
                     if (success) {
+                      // 🔥 Save a fail-safe phone key to ensure the login button shows up later
+                      localStorage.setItem('growpesa_bio_phone', user.phone);
                       setHasSavedBio(true);
                       alert('Biometrics enabled! You will be prompted on next login.');
                     } else {
@@ -2187,7 +2195,6 @@ export default function DashboardPage() {
                     </span>
                   </div>
 
-                  {/* 🔥 DISPLAY PENALTIES IF OVERDUE */}
                   {activeLoan.penaltyAmount && activeLoan.penaltyAmount > 0 ? (
                     <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl mb-2">
                        <p className="text-[10px] font-bold text-rose-400 mb-1">Late Payment Penalty (0.5%/day)</p>
