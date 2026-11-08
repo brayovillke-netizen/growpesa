@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const { amount, phone } = await req.json();
+    // Accept reference from the frontend
+    const { amount, phone, reference } = await req.json(); 
 
     const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
     const PAYBRIDGE_ACCOUNT_ID = process.env.PAYBRIDGE_ACCOUNT_ID;
@@ -20,30 +21,22 @@ export async function POST(req: Request) {
       account_id: PAYBRIDGE_ACCOUNT_ID, 
       phone_number: formattedPhone,
       amount: Number(amount),
-      channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", // Your exact UUID
-      account_number: "01103198794002", // Your Co-op account
-      reference: `STK-${Date.now()}`, 
+      channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", 
+      account_number: "01103198794002", 
+      reference: reference, // Pass reference to PayBridge
     };
 
     const response = await fetch(PAYBRIDGE_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${PAYBRIDGE_API_KEY}`, 
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PAYBRIDGE_API_KEY}` },
       body: JSON.stringify(payload),
     });
 
     const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(JSON.stringify(data));
-    }
+    if (!response.ok) throw new Error(JSON.stringify(data));
 
     return NextResponse.json({ success: true, data });
-
   } catch (error: any) {
-    console.error('Paybridge STK Error:', error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -2,61 +2,73 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; 
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('PayBridge Webhook Received:', JSON.stringify(body, null, 2));
+    console.log('🚨 WEBHOOK RECEIVED:', JSON.stringify(body, null, 2));
 
-    const payload = body.data || body;
-    
-    // 🔥 THE FIX: PayBridge sends our reference in 'external_reference'
-    const reference = payload.external_reference || payload.reference; 
-    const status = payload.status; 
+    // PayBridge may send the reference in different keys
+    const reference = body.reference || body.data?.reference || body.account_number;
+    const status = body.status || body.data?.status;
 
     if (!reference) {
       return NextResponse.json({ error: 'No reference found' }, { status: 400 });
     }
 
-    if (status === 'completed' || status === 'SUCCESS') {
-      console.log(`✅ Success for ref: ${reference}`);
+    if (status === 'SUCCESS' || status === 'COMPLETED' || status === 'success') {
       
-      const { data: transaction } = await supabase
-        .from('transactions')
+      // 1. Find the transaction in the database
+      const { data: ledgerItem } = await supabase
+        .from('ledger_items')
         .select('*')
-        .eq('reference', reference) // Finds GP-169...
+        .eq('code', reference)
         .single();
 
-      if (transaction) {
-        // 1. Mark as completed
+      if (ledgerItem) {
+        // 2. Mark it as COMPLETED
         await supabase
-          .from('transactions')
-          .update({ status: 'completed', receipt: payload.receipt })
-          .eq('reference', reference);
+          .from('ledger_items')
+          .update({ status: 'COMPLETED' })
+          .eq('code', reference);
 
-        // 2. Add to balance
-        const newBalance = Number(transaction.amount) + Number(transaction.balance || 0);
-        await supabase
-          .from('profiles')
-          .update({ balance: newBalance })
-          .eq('id', transaction.user_id);
-          
-        console.log(`💰 Balance updated for ${reference}`);
-      } else {
-        console.log(`⚠️ Transaction ${reference} not found in DB`);
+        // 3. Add the money to the user's balance
+        if (ledgerItem.phone) {
+          const { data: member } = await supabase
+            .from('members')
+            .select('savings_balance, total_deposited')
+            .eq('phone', ledgerItem.phone)
+            .single();
+
+          if (member) {
+            const newBalance = Number(member.savings_balance || 0) + Number(ledgerItem.amount);
+            const newTotalDeposited = Number(member.total_deposited || 0) + Number(ledgerItem.amount);
+            
+            await supabase
+              .from('members')
+              .update({ savings_balance: newBalance, total_deposited: newTotalDeposited })
+              .eq('phone', ledgerItem.phone);
+          }
+        }
+
+        // 4. Update the main treasury pool
+        const { data: pool } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
+        if (pool) {
+          await supabase.from('treasury_pool').update({ 
+            pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) 
+          }).eq('id', 1);
+        }
       }
     } else {
-      // Failed or expired
-      await supabase.from('transactions').update({ status: 'failed' }).eq('reference', reference);
-      console.log(`❌ Failed for ref: ${reference}`);
+      // Mark as failed
+      await supabase.from('ledger_items').update({ status: 'FAILED' }).eq('code', reference);
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
-
   } catch (error: any) {
     console.error('Webhook Error:', error.message);
-    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Webhook failed' }, { status: 500 });
   }
 }

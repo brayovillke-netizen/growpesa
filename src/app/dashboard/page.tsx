@@ -928,7 +928,7 @@ export default function DashboardPage() {
     setMessage(`Sending STK push to ${targetPhone}...`);
 
     const txnId = Date.now().toString();
-    const tempCode = 'STK-' + Math.floor(1000 + Math.random() * 9000);
+    const reference = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newItem: LedgerItem = {
       id: txnId,
@@ -936,7 +936,7 @@ export default function DashboardPage() {
       amount: amt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING PIN',
-      code: tempCode,
+      code: reference,
       phone: user?.phone,
     };
     await saveLedger([newItem, ...ledger], newItem);
@@ -946,7 +946,7 @@ export default function DashboardPage() {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, phone: targetPhone }),
+        body: JSON.stringify({ amount: amt, phone: targetPhone, reference }),
       });
       const data = await res.json();
 
@@ -954,30 +954,37 @@ export default function DashboardPage() {
         throw new Error(JSON.stringify(data));
       }
 
-      setMessage(
-        isReviewMode 
-          ? `STK push sent to ${targetPhone}. Enter your M-Pesa PIN to complete.` 
-          : `STK push sent to ${targetPhone}. Enter your M-Pesa PIN. Admin will verify code ${tempCode}.`
-      );
+      setMessage(`STK push sent to ${targetPhone}. Please enter your M-Pesa PIN.`);
 
-      setTimeout(() => {
-        let timeoutItem: LedgerItem | null = null;
-        setLedger((prev) => {
-          const updated = prev.map((i) => {
-            if (i.id === txnId && i.status === 'PENDING PIN') {
-              timeoutItem = { ...i, status: 'TIMEOUT / PASTE SMS' };
-              return timeoutItem;
-            }
-            return i;
-          });
-          if (user) localStorage.setItem(`growpesa_ledger_${user.phone}`, JSON.stringify(updated));
-          if (timeoutItem) submitToServerQueue(timeoutItem);
-          return updated;
-        });
-        setMessage('STK push pending. If M-Pesa deducted, paste your SMS below to log the transaction.');
-      }, 20000);
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        const { data: checkItem } = await supabase
+          .from('ledger_items')
+          .select('status')
+          .eq('code', reference)
+          .single();
+
+        if (checkItem?.status === 'COMPLETED') {
+          clearInterval(pollInterval);
+          setIsPushing(false);
+          setMessage('🎉 Deposit successful! Balance updated.');
+          syncFromServer(user!);
+        } else if (checkItem?.status === 'FAILED') {
+          clearInterval(pollInterval);
+          setIsPushing(false);
+          setMessage('❌ Transaction failed or cancelled.');
+        } else if (attempts > 20) {
+          clearInterval(pollInterval);
+          setIsPushing(false);
+          setMessage('STK push timed out. If money was deducted, paste SMS below.');
+          setShowManualDeposit(true);
+        }
+      }, 3000);
+
     } catch (err: any) {
-      setMessage(`STK Push error: ${err?.message || 'unknown'}. Paste your M-Pesa SMS below if you paid manually.`);
+      setMessage(`STK Push error: ${err?.message || 'unknown'}.`);
+      setIsPushing(false);
       setShowManualDeposit(true);
       let errItem: LedgerItem | null = null;
       setLedger((prev) => {
@@ -996,8 +1003,6 @@ export default function DashboardPage() {
         if (errItem) submitToServerQueue(errItem);
         return updated;
       });
-    } finally {
-      setIsPushing(false); 
     }
   };
 
@@ -1759,12 +1764,6 @@ export default function DashboardPage() {
               <h3 className="font-black text-base text-white flex items-center gap-2">
                 <span className="text-emerald-400">💵</span> {isReviewMode ? 'Log Transaction' : 'Deposit Funds'}
               </h3>
-              <button
-                onClick={() => setShowManualDeposit(!showManualDeposit)}
-                className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition cursor-pointer"
-              >
-                {showManualDeposit ? 'Use STK Push' : 'Paste SMS'}
-              </button>
             </div>
 
             {!showManualDeposit ? (
@@ -1778,6 +1777,7 @@ export default function DashboardPage() {
                       onChange={(e) => setPhoneInput(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
                       placeholder="0712345678"
+                      disabled={isPushing}
                     />
                   </div>
                   <div>
@@ -1790,27 +1790,48 @@ export default function DashboardPage() {
                         onChange={(e) => setDepositAmountInput(e.target.value)}
                         className="w-full bg-transparent px-4 py-1.5 text-lg text-white font-black focus:outline-none"
                         placeholder="0"
+                        disabled={isPushing}
                       />
                     </div>
                   </div>
                 </div>
+                
                 <button
                   onClick={handleDeposit}
                   disabled={isPushing} 
-                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 hover:opacity-90 transition cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2"
+                  className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isPushing ? (
                     <>
                       <span className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></span>
-                      Sending Prompt...
+                      Waiting for PIN...
                     </>
                   ) : (
                     <>{isReviewMode ? 'Sync M-Pesa' : '⚡ Push to Phone'}</>
                   )}
                 </button>
+
+                <div className="text-center pt-2">
+                  <button 
+                    onClick={() => setShowManualDeposit(true)}
+                    disabled={isPushing}
+                    className="text-[10px] text-slate-500 hover:text-slate-300 font-bold underline transition cursor-pointer disabled:opacity-50"
+                  >
+                    STK push failed? Paste M-Pesa SMS manually
+                  </button>
+                </div>
               </>
             ) : (
               <div className="space-y-3">
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-[11px] text-amber-400 font-bold">Manual Entry Mode</p>
+                  <button 
+                    onClick={() => setShowManualDeposit(false)}
+                    className="text-[10px] text-emerald-400 font-bold hover:underline"
+                  >
+                    ← Back to Auto STK
+                  </button>
+                </div>
                 <p className="text-[11px] text-slate-400 font-medium">
                   {isReviewMode ? 'Paste your M-Pesa SMS to log the transaction:' : 'Paste the M-Pesa SMS to submit for Treasurer approval:'}
                 </p>
