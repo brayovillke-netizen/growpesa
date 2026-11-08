@@ -332,7 +332,7 @@ export default function AdminPage() {
         .eq('id', String(item.id));
 
       if (error) throw error;
-
+      
       await fetchQueue();
       setMessage(`Rejected ${item.code}`);
     } catch (e: any) {
@@ -380,11 +380,13 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
-  // 🔥 FIX: Filter out Lock Savings so they don't show up here
+  // 🔥 FIX: HIDE "PENDING PIN" AND "LOCK SAVINGS" FROM ADMIN QUEUE
   const pendingOnly = queue.filter(
-    (q) => q.status !== 'COMPLETED' && 
-           q.status !== 'REJECTED' && 
-           !q.type.includes('Lock Savings')
+    (q) => 
+      q.status !== 'COMPLETED' && 
+      q.status !== 'REJECTED' && 
+      q.status !== 'PENDING PIN' && 
+      q.type !== 'Lock Savings'
   );
 
   const filteredQueue = pendingOnly.filter((item) => {
@@ -608,7 +610,6 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   filteredQueue.map((item) => {
-                    const awaitingPin = item.status === 'PENDING PIN';
                     const isDeposit = item.type.includes('Deposit');
                     const isWithdrawal = item.type.includes('Withdrawal');
                     const isLoan = item.type.includes('Loan Request');
@@ -722,15 +723,14 @@ export default function AdminPage() {
                         <div className="grid grid-cols-2 gap-2 pt-2">
                           <button
                             onClick={() => handleApprove(item)}
-                            disabled={awaitingPin}
-                            className={`py-2.5 font-black rounded-xl text-xs transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed ${
+                            className={`py-2.5 font-black rounded-xl text-xs transition shadow-md ${
                               isDeposit ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' :
                               isWithdrawal ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' :
                               isRepay ? 'bg-purple-500 hover:bg-purple-400 text-white' :
                               'bg-blue-500 hover:bg-blue-400 text-white'
                             }`}
                           >
-                            {awaitingPin ? 'Awaiting PIN' : 'Approve'}
+                            Approve
                           </button>
                           <button
                             onClick={() => handleReject(item)}

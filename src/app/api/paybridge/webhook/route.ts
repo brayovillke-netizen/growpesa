@@ -8,59 +8,56 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // 🔥 CRITICAL: Log the exact payload so you can see it in Vercel Logs
+    
+    // 🔥 THIS IS THE MOST IMPORTANT LINE. WE NEED TO SEE THIS IN VERCEL LOGS.
     console.log('🚨 PAYBRIDGE WEBHOOK RECEIVED:', JSON.stringify(body, null, 2));
 
-    // PayBridge might send reference at the root, inside 'data', or as 'account_number'
-    const reference = body.reference || body.data?.reference || body.account_number || body.externalReference;
+    // PayBridge might use 'reference', 'tx_ref', or 'account_number'
+    const reference = body.reference || body.tx_ref || body.data?.reference || body.account_number;
     const status = body.status || body.data?.status || body.event_type;
 
     if (!reference) {
-      console.error('❌ Webhook missing reference. Payload:', body);
+      console.log('❌ Webhook failed: No reference found in payload.');
       return NextResponse.json({ error: 'No reference found' }, { status: 400 });
     }
 
-    // Check for success (different providers use different terms)
+    // Accept various success keywords
     const isSuccess = status === 'SUCCESS' || status === 'COMPLETED' || status === 'success' || status === 'charge.completed';
 
     if (isSuccess) {
-      const { data: ledgerItem, error: fetchError } = await supabase
+      console.log(`✅ Webhook Success for Ref: ${reference}`);
+
+      const { data: ledgerItem } = await supabase
         .from('ledger_items')
         .select('*')
         .eq('code', reference)
         .single();
 
-      if (fetchError || !ledgerItem) {
-        console.error(`❌ Transaction ${reference} not found in DB`);
-        return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
-      }
+      if (ledgerItem) {
+        // 1. Update Ledger
+        await supabase.from('ledger_items').update({ status: 'COMPLETED' }).eq('code', reference);
 
-      // 1. Mark as COMPLETED
-      await supabase.from('ledger_items').update({ status: 'COMPLETED' }).eq('code', reference);
-
-      // 2. Add funds to member balance
-      if (ledgerItem.phone) {
-        const { data: member } = await supabase
-          .from('members')
-          .select('savings_balance, total_deposited')
-          .eq('phone', ledgerItem.phone)
-          .single();
-
-        if (member) {
-          await supabase.from('members').update({ 
-            savings_balance: Number(member.savings_balance || 0) + Number(ledgerItem.amount),
-            total_deposited: Number(member.total_deposited || 0) + Number(ledgerItem.amount)
-          }).eq('phone', ledgerItem.phone);
+        // 2. Update Member Balance
+        if (ledgerItem.phone) {
+          const { data: member } = await supabase.from('members').select('savings_balance, total_deposited').eq('phone', ledgerItem.phone).single();
+          if (member) {
+            await supabase.from('members').update({ 
+              savings_balance: Number(member.savings_balance || 0) + Number(ledgerItem.amount),
+              total_deposited: Number(member.total_deposited || 0) + Number(ledgerItem.amount)
+            }).eq('phone', ledgerItem.phone);
+          }
         }
-      }
 
-      // 3. Update Treasury Pool
-      const { data: pool } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
-      if (pool) {
-        await supabase.from('treasury_pool').update({ pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) }).eq('id', 1);
+        // 3. Update Treasury Pool
+        const { data: pool } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
+        if (pool) {
+          await supabase.from('treasury_pool').update({ pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) }).eq('id', 1);
+        }
+      } else {
+        console.log(`⚠️ Transaction ${reference} not found in database.`);
       }
     } else {
-      // Mark as FAILED if it wasn't a success
+      console.log(`❌ Webhook Failed/Cancelled for Ref: ${reference}. Status was: ${status}`);
       await supabase.from('ledger_items').update({ status: 'FAILED' }).eq('code', reference);
     }
 
