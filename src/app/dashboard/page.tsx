@@ -922,7 +922,7 @@ export default function DashboardPage() {
     setMessage(`Subscribed to ${tier.name}. Active for ${tier.lockDays} days.`);
   };
 
-  // LOCK SAVINGS LOGIC
+  // 🔥 FIXED LOCK LOGIC 🔥
   const handleCreateLock = async () => {
     const amt = Math.round(parseFloat(lockAmountInput));
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount to lock.');
@@ -944,9 +944,9 @@ export default function DashboardPage() {
       type: 'Lock Savings',
       amount: amt,
       date: today.toISOString().split('T')[0],
-      status: 'COMPLETED',
+      status: 'COMPLETED', // Keeps it active in the UI
       code: 'LCK-' + Math.floor(10000 + Math.random() * 90000),
-      smsMessage: JSON.stringify({ unlockDate: lockDateInput }), // Store date in JSON
+      smsMessage: JSON.stringify({ unlockDate: lockDateInput }), 
       phone: user?.phone,
     };
 
@@ -980,7 +980,8 @@ export default function DashboardPage() {
     let updatedItem: LedgerItem | null = null;
     const updated = ledger.map((l) => {
       if (l.id === lockItem.id) {
-        updatedItem = { ...l, status: 'COMPLETED' }; // Mark original lock as completed/closed
+        // 🔥 FIX: Change status to UNLOCKED so it disappears
+        updatedItem = { ...l, status: 'UNLOCKED' }; 
         return updatedItem;
       }
       return l;
@@ -1003,7 +1004,6 @@ export default function DashboardPage() {
   const handleClaimMaturedLock = async (lockItem: LedgerItem) => {
     const principal = lockItem.amount;
     const start = new Date(lockItem.date);
-    const end = new Date(lockItem.created_at || lockItem.date); 
     
     let meta: any = {};
     try { meta = JSON.parse(lockItem.smsMessage || lockItem.sms_message || '{}'); } catch(e){}
@@ -1019,7 +1019,8 @@ export default function DashboardPage() {
     let updatedItem: LedgerItem | null = null;
     const updated = ledger.map((l) => {
       if (l.id === lockItem.id) {
-        updatedItem = { ...l, status: 'COMPLETED' };
+        // 🔥 FIX: Change status to UNLOCKED so it disappears
+        updatedItem = { ...l, status: 'UNLOCKED' }; 
         return updatedItem;
       }
       return l;
@@ -1678,7 +1679,8 @@ export default function DashboardPage() {
     ? (['overview'] as const)
     : (['overview', 'packages', 'lock', 'withdraw', 'loans'] as const);
 
-  // Filter active locks
+  // 🔥 FILTERING ACTIVE LOCKS 🔥
+  // Only show items that are still active (status === 'COMPLETED')
   const activeLocks = ledger.filter(item => 
     item.type === 'Lock Savings' && item.status === 'COMPLETED'
   );
@@ -1794,7 +1796,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 🔥 NEW TAB NAVIGATION 🔥 */}
       <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-5'} gap-1 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-[11px] font-semibold`}>
         {availableTabs.map((tab) => (
           <button
@@ -1846,7 +1847,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* TOGGLE DEPOSIT SECTION */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
             <button
               onClick={() => setIsDepositOpen(!isDepositOpen)}
@@ -1948,7 +1948,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* LOCK SAVINGS PROMO */}
           <div className="rounded-3xl bg-gradient-to-r from-blue-900/40 to-slate-900 border border-blue-500/30 p-4 shadow-xl relative overflow-hidden">
              <div className="flex justify-between items-start mb-1">
                 <div>
@@ -2239,7 +2238,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 🔥 NEW VAULT / LOCK TAB 🔥 */}
       {activeTab === 'lock' && (
         <div className="space-y-4">
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
