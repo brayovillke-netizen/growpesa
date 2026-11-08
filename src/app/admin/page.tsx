@@ -333,8 +333,6 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      // 🚫 PUSH NOTIFICATION SPAM REMOVED
-      
       await fetchQueue();
       setMessage(`Rejected ${item.code}`);
     } catch (e: any) {
@@ -382,8 +380,11 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
+  // 🔥 FIX: Filter out Lock Savings so they don't show up here
   const pendingOnly = queue.filter(
-    (q) => q.status !== 'COMPLETED' && q.status !== 'REJECTED'
+    (q) => q.status !== 'COMPLETED' && 
+           q.status !== 'REJECTED' && 
+           !q.type.includes('Lock Savings')
   );
 
   const filteredQueue = pendingOnly.filter((item) => {

@@ -943,7 +943,7 @@ export default function DashboardPage() {
       type: 'Lock Savings',
       amount: amt,
       date: today.toISOString().split('T')[0],
-      status: 'COMPLETED',
+      status: 'COMPLETED', // 🔥 Locks are COMPLETED instantly, no admin approval needed
       code: 'LCK-' + Math.floor(10000 + Math.random() * 90000),
       smsMessage: JSON.stringify({ unlockDate: lockDateInput }), 
       phone: user?.phone,
@@ -1691,7 +1691,6 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
-      {/* INSTALL PROMPT AT THE TOP */}
       {!isReviewMode && <InstallPrompt />}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
@@ -2675,7 +2674,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* NOTIFICATION MANAGER AT THE BOTTOM */}
       {!isReviewMode && (
         <PushNotificationManager userPhone={user.phone} />
       )}
