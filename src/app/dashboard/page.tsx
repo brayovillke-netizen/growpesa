@@ -922,7 +922,6 @@ export default function DashboardPage() {
     setMessage(`Subscribed to ${tier.name}. Active for ${tier.lockDays} days.`);
   };
 
-  // 🔥 FIXED LOCK LOGIC 🔥
   const handleCreateLock = async () => {
     const amt = Math.round(parseFloat(lockAmountInput));
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount to lock.');
@@ -944,7 +943,7 @@ export default function DashboardPage() {
       type: 'Lock Savings',
       amount: amt,
       date: today.toISOString().split('T')[0],
-      status: 'COMPLETED', // Keeps it active in the UI
+      status: 'COMPLETED',
       code: 'LCK-' + Math.floor(10000 + Math.random() * 90000),
       smsMessage: JSON.stringify({ unlockDate: lockDateInput }), 
       phone: user?.phone,
@@ -980,7 +979,6 @@ export default function DashboardPage() {
     let updatedItem: LedgerItem | null = null;
     const updated = ledger.map((l) => {
       if (l.id === lockItem.id) {
-        // 🔥 FIX: Change status to UNLOCKED so it disappears
         updatedItem = { ...l, status: 'UNLOCKED' }; 
         return updatedItem;
       }
@@ -997,6 +995,11 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
 
+    // 🔥 FIX: Sync the updated lock status to Supabase BEFORE saving the ledger
+    if (updatedItem) {
+      await submitToServerQueue(updatedItem);
+    }
+
     await saveLedger([recordItem, ...updated], recordItem);
     setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned (2% penalty applied).`);
   };
@@ -1010,7 +1013,7 @@ export default function DashboardPage() {
     const unlockDate = new Date(meta.unlockDate || lockItem.date);
     
     const daysLocked = Math.max(30, Math.floor((unlockDate.getTime() - start.getTime()) / (1000 * 3600 * 24)));
-    const interest = Math.round(principal * 0.05 * (daysLocked / 365)); // 5% p.a.
+    const interest = Math.round(principal * 0.05 * (daysLocked / 365)); 
     const total = principal + interest;
 
     const saved = await updateMainPool(mainPool + total);
@@ -1019,7 +1022,6 @@ export default function DashboardPage() {
     let updatedItem: LedgerItem | null = null;
     const updated = ledger.map((l) => {
       if (l.id === lockItem.id) {
-        // 🔥 FIX: Change status to UNLOCKED so it disappears
         updatedItem = { ...l, status: 'UNLOCKED' }; 
         return updatedItem;
       }
@@ -1035,6 +1037,11 @@ export default function DashboardPage() {
       code: 'MAT-' + Math.floor(10000 + Math.random() * 90000),
       phone: user?.phone,
     };
+
+    // 🔥 FIX: Sync the updated lock status to Supabase BEFORE saving the ledger
+    if (updatedItem) {
+      await submitToServerQueue(updatedItem);
+    }
 
     await saveLedger([recordItem, ...updated], recordItem);
     setMessage(`Matured lock claimed! Received KES ${total.toLocaleString()} (incl. KES ${interest} interest).`);
@@ -1679,8 +1686,6 @@ export default function DashboardPage() {
     ? (['overview'] as const)
     : (['overview', 'packages', 'lock', 'withdraw', 'loans'] as const);
 
-  // 🔥 FILTERING ACTIVE LOCKS 🔥
-  // Only show items that are still active (status === 'COMPLETED')
   const activeLocks = ledger.filter(item => 
     item.type === 'Lock Savings' && item.status === 'COMPLETED'
   );
