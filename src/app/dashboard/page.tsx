@@ -150,9 +150,13 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [isPushing, setIsPushing] = useState(false); 
 
-  const [depositAmountInput, setDepositAmountInput] = useState('1000');
+  // 🔥 CHANGED: Empty default amount
+  const [depositAmountInput, setDepositAmountInput] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [withdrawAmountInput, setWithdrawAmountInput] = useState('1000');
+
+  // 🔥 NEW: Toggle state for deposit form
+  const [isDepositOpen, setIsDepositOpen] = useState(false);
 
   const [activeSmsInputId, setActiveSmsInputId] = useState<string | null>(null);
   const [pastedSmsText, setPastedSmsText] = useState('');
@@ -1718,135 +1722,104 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {(() => {
-            const weeksActive = Math.floor(daysActive / 7);
-            if (weeksActive === 0) return null;
-
-            const expected = weeksActive * 100;
-            const actual = user?.total_deposited || 0;
-            const deficit = expected - actual;
-            const progressPercent = Math.min(100, (actual / expected) * 100);
-
-            return (
-              <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-black text-sm text-white flex items-center gap-2">
-                    <span className="text-emerald-400">🎯</span> Weekly Savings Goal
-                  </h3>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${deficit <= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                    {deficit <= 0 ? 'On Track' : 'Behind'}
-                  </span>
-                </div>
-                
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                    <span>Saved: <span className="text-white">KES {actual.toLocaleString()}</span></span>
-                    <span>Target: <span className="text-emerald-400">KES {expected.toLocaleString()}</span></span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className={`h-2 rounded-full transition-all duration-500 ${deficit <= 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
-                      style={{ width: `${progressPercent}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  {deficit <= 0 
-                    ? "Amazing! You're ahead of your KES 100/week goal." 
-                    : `You need KES ${deficit.toLocaleString()} more to catch up on your ${weeksActive}-week target.`}
-                </p>
-              </div>
-            );
-          })()}
-
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 space-y-4 shadow-xl">
-            <div className="flex justify-between items-center">
+          {/* 💵 NEW TOGGLE DEPOSIT SECTION 💵 */}
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
+            <button
+              onClick={() => setIsDepositOpen(!isDepositOpen)}
+              disabled={isPushing}
+              className="w-full flex justify-between items-center"
+            >
               <h3 className="font-black text-base text-white flex items-center gap-2">
                 <span className="text-emerald-400">💵</span> {isReviewMode ? 'Log Transaction' : 'Deposit Funds'}
               </h3>
-            </div>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold">
+                {isDepositOpen ? 'Close' : 'Open Form'}
+              </span>
+            </button>
 
-            {!showManualDeposit ? (
-              <>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Phone Number</label>
-                    <input
-                      type="text"
-                      value={phoneInput}
-                      onChange={(e) => setPhoneInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
-                      placeholder="0712345678"
-                      disabled={isPushing}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Amount</label>
-                    <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
-                      <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700/50">KES</span>
+            {isDepositOpen && (
+              <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+                {!showManualDeposit ? (
+                  <>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Phone Number</label>
                       <input
-                        type="number"
-                        value={depositAmountInput}
-                        onChange={(e) => setDepositAmountInput(e.target.value)}
-                        className="w-full bg-transparent px-4 py-1.5 text-lg text-white font-black focus:outline-none"
-                        placeholder="0"
+                        type="text"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+                        placeholder="0712345678"
                         disabled={isPushing}
                       />
                     </div>
-                  </div>
-                </div>
-                
-                <button
-                  onClick={handleDeposit}
-                  disabled={isPushing} 
-                  className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isPushing ? (
-                    <>
-                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></span>
-                      Waiting for PIN...
-                    </>
-                  ) : (
-                    <>{isReviewMode ? 'Sync M-Pesa' : '⚡ Push to Phone'}</>
-                  )}
-                </button>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Amount (KES)</label>
+                      <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700/50">KES</span>
+                        <input
+                          type="number"
+                          value={depositAmountInput}
+                          onChange={(e) => setDepositAmountInput(e.target.value)}
+                          className="w-full bg-transparent px-4 py-1.5 text-lg text-white font-black focus:outline-none"
+                          placeholder="Enter amount"
+                          disabled={isPushing}
+                        />
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={handleDeposit}
+                      disabled={isPushing || !depositAmountInput} 
+                      className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isPushing ? (
+                        <>
+                          <span className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></span>
+                          Waiting for PIN...
+                        </>
+                      ) : (
+                        <>{isReviewMode ? 'Sync M-Pesa' : '⚡ Push to Phone'}</>
+                      )}
+                    </button>
 
-                <div className="text-center pt-2">
-                  <button 
-                    onClick={() => setShowManualDeposit(true)}
-                    disabled={isPushing}
-                    className="text-[10px] text-slate-500 hover:text-slate-300 font-bold underline transition cursor-pointer disabled:opacity-50"
-                  >
-                    STK push failed? Paste M-Pesa SMS manually
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center mb-1">
-                  <p className="text-[11px] text-amber-400 font-bold">Manual Entry Mode</p>
-                  <button 
-                    onClick={() => setShowManualDeposit(false)}
-                    className="text-[10px] text-emerald-400 font-bold hover:underline"
-                  >
-                    ← Back to Auto STK
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  {isReviewMode ? 'Paste your M-Pesa SMS to log the transaction:' : 'Paste the M-Pesa SMS to submit for Treasurer approval:'}
-                </p>
-                <textarea
-                  value={manualSmsText}
-                  onChange={(e) => setManualSmsText(e.target.value)}
-                  placeholder="Paste full SMS here..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-24 resize-none transition"
-                />
-                <button
-                  onClick={handleDirectSmsSubmit}
-                  className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
-                >
-                  {isReviewMode ? 'Log Transaction' : 'Submit Confirmation'}
-                </button>
+                    <div className="text-center pt-2">
+                      <button 
+                        onClick={() => setShowManualDeposit(true)}
+                        disabled={isPushing}
+                        className="text-[10px] text-slate-500 hover:text-slate-300 font-bold underline transition cursor-pointer disabled:opacity-50"
+                      >
+                        STK push failed? Paste M-Pesa SMS manually
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="text-[11px] text-amber-400 font-bold">Manual Entry Mode</p>
+                      <button 
+                        onClick={() => setShowManualDeposit(false)}
+                        className="text-[10px] text-emerald-400 font-bold hover:underline"
+                      >
+                        ← Back to Auto STK
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      {isReviewMode ? 'Paste your M-Pesa SMS to log the transaction:' : 'Paste the M-Pesa SMS to submit for Treasurer approval:'}
+                    </p>
+                    <textarea
+                      value={manualSmsText}
+                      onChange={(e) => setManualSmsText(e.target.value)}
+                      placeholder="Paste full SMS here..."
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 h-24 resize-none transition"
+                    />
+                    <button
+                      onClick={handleDirectSmsSubmit}
+                      className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
+                    >
+                      {isReviewMode ? 'Log Transaction' : 'Submit Confirmation'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
