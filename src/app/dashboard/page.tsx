@@ -133,10 +133,14 @@ export default function DashboardPage() {
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'packages' | 'withdraw' | 'loans' | 'lock'>('overview');
   const [mainPool, setMainPool] = useState<number>(0);
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
+
+  // Lock Savings States
+  const [lockAmountInput, setLockAmountInput] = useState('');
+  const [lockDateInput, setLockDateInput] = useState('');
 
   const [loanAmountInput, setLoanAmountInput] = useState('1000');
   const [loanTermWeeks, setLoanTermWeeks] = useState(4);
@@ -150,12 +154,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [isPushing, setIsPushing] = useState(false); 
 
-  // 🔥 CHANGED: Empty default amount
   const [depositAmountInput, setDepositAmountInput] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [withdrawAmountInput, setWithdrawAmountInput] = useState('1000');
 
-  // 🔥 NEW: Toggle state for deposit form
   const [isDepositOpen, setIsDepositOpen] = useState(false);
 
   const [activeSmsInputId, setActiveSmsInputId] = useState<string | null>(null);
@@ -413,7 +415,6 @@ export default function DashboardPage() {
 
       if (memberData) {
         const savings = Math.round(Number(memberData.savings_balance)) || 0;
-        
         setMainPool(prev => prev === savings ? prev : savings);
 
         setUser(prev => {
@@ -919,6 +920,123 @@ export default function DashboardPage() {
     
     await saveLedger([item, ...ledger], item);
     setMessage(`Subscribed to ${tier.name}. Active for ${tier.lockDays} days.`);
+  };
+
+  // LOCK SAVINGS LOGIC
+  const handleCreateLock = async () => {
+    const amt = Math.round(parseFloat(lockAmountInput));
+    if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount to lock.');
+    if (amt > mainPool) return setMessage(`Insufficient funds. Balance: KES ${mainPool.toLocaleString()}.`);
+    if (!lockDateInput) return setMessage('Select an unlock date.');
+
+    const unlockDateObj = new Date(lockDateInput);
+    const today = new Date();
+    const diffTime = Math.abs(unlockDateObj.getTime() - today.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+    if (diffDays < 30) return setMessage('Minimum lock period is 30 days.');
+
+    const deducted = await updateMainPool(mainPool - amt);
+    if (!deducted) return setMessage('Could not lock funds. Please try again.');
+
+    const item: LedgerItem = {
+      id: Date.now().toString(),
+      type: 'Lock Savings',
+      amount: amt,
+      date: today.toISOString().split('T')[0],
+      status: 'COMPLETED',
+      code: 'LCK-' + Math.floor(10000 + Math.random() * 90000),
+      smsMessage: JSON.stringify({ unlockDate: lockDateInput }), // Store date in JSON
+      phone: user?.phone,
+    };
+
+    await saveLedger([item, ...ledger], item);
+    setLockAmountInput('');
+    setLockDateInput('');
+    setMessage(`Successfully locked KES ${amt.toLocaleString()} until ${lockDateInput}.`);
+  };
+
+  const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
+    const confirm = window.confirm("Are you sure? You will lose all earned interest and be charged a 2% penalty on your principal.");
+    if (!confirm) return;
+
+    const principal = lockItem.amount;
+    const penalty = Math.round(principal * 0.02);
+    const amountReturned = principal - penalty;
+
+    const saved = await updateMainPool(mainPool + amountReturned);
+    if (!saved) return setMessage('Failed to process unlock.');
+
+    if (penalty > 0) {
+       try {
+        const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
+        if (poolData) {
+          const newPoolBal = Math.round(Number(poolData.pool_balance) + penalty);
+          await supabase.from('treasury_pool').update({ pool_balance: newPoolBal, updated_at: new Date().toISOString() }).eq('id', 1);
+        }
+      } catch (e) { console.error('Treasury credit failed:', e); }
+    }
+
+    let updatedItem: LedgerItem | null = null;
+    const updated = ledger.map((l) => {
+      if (l.id === lockItem.id) {
+        updatedItem = { ...l, status: 'COMPLETED' }; // Mark original lock as completed/closed
+        return updatedItem;
+      }
+      return l;
+    });
+
+    const recordItem: LedgerItem = {
+      id: Date.now().toString(),
+      type: 'Lock Emergency Withdraw',
+      amount: amountReturned,
+      date: new Date().toISOString().split('T')[0],
+      status: 'COMPLETED',
+      code: 'EMG-' + Math.floor(10000 + Math.random() * 90000),
+      phone: user?.phone,
+    };
+
+    await saveLedger([recordItem, ...updated], recordItem);
+    setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned (2% penalty applied).`);
+  };
+
+  const handleClaimMaturedLock = async (lockItem: LedgerItem) => {
+    const principal = lockItem.amount;
+    const start = new Date(lockItem.date);
+    const end = new Date(lockItem.created_at || lockItem.date); 
+    
+    let meta: any = {};
+    try { meta = JSON.parse(lockItem.smsMessage || lockItem.sms_message || '{}'); } catch(e){}
+    const unlockDate = new Date(meta.unlockDate || lockItem.date);
+    
+    const daysLocked = Math.max(30, Math.floor((unlockDate.getTime() - start.getTime()) / (1000 * 3600 * 24)));
+    const interest = Math.round(principal * 0.05 * (daysLocked / 365)); // 5% p.a.
+    const total = principal + interest;
+
+    const saved = await updateMainPool(mainPool + total);
+    if (!saved) return setMessage('Failed to claim matured lock.');
+
+    let updatedItem: LedgerItem | null = null;
+    const updated = ledger.map((l) => {
+      if (l.id === lockItem.id) {
+        updatedItem = { ...l, status: 'COMPLETED' };
+        return updatedItem;
+      }
+      return l;
+    });
+
+    const recordItem: LedgerItem = {
+      id: Date.now().toString(),
+      type: 'Lock Matured Claim',
+      amount: total,
+      date: new Date().toISOString().split('T')[0],
+      status: 'COMPLETED',
+      code: 'MAT-' + Math.floor(10000 + Math.random() * 90000),
+      phone: user?.phone,
+    };
+
+    await saveLedger([recordItem, ...updated], recordItem);
+    setMessage(`Matured lock claimed! Received KES ${total.toLocaleString()} (incl. KES ${interest} interest).`);
   };
 
   const handleDeposit = async () => {
@@ -1558,7 +1676,12 @@ export default function DashboardPage() {
 
   const availableTabs = isReviewMode 
     ? (['overview'] as const)
-    : (['overview', 'packages', 'withdraw', 'loans'] as const);
+    : (['overview', 'packages', 'lock', 'withdraw', 'loans'] as const);
+
+  // Filter active locks
+  const activeLocks = ledger.filter(item => 
+    item.type === 'Lock Savings' && item.status === 'COMPLETED'
+  );
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
@@ -1671,18 +1794,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-4'} gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold`}>
+      {/* 🔥 NEW TAB NAVIGATION 🔥 */}
+      <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-5'} gap-1 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-[11px] font-semibold`}>
         {availableTabs.map((tab) => (
           <button
             key={tab}
             onClick={() => { setActiveTab(tab); setMessage(null); }}
-            className={`py-2.5 rounded-xl capitalize transition cursor-pointer ${
+            className={`py-2 rounded-xl capitalize transition cursor-pointer ${
               activeTab === tab
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
             }`}
           >
-            {tab === 'packages' && isReviewMode ? 'Goals' : tab}
+            {tab === 'packages' && isReviewMode ? 'Goals' : tab === 'lock' ? 'Vault' : tab}
           </button>
         ))}
       </div>
@@ -1722,7 +1846,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* 💵 NEW TOGGLE DEPOSIT SECTION 💵 */}
+          {/* TOGGLE DEPOSIT SECTION */}
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
             <button
               onClick={() => setIsDepositOpen(!isDepositOpen)}
@@ -1822,6 +1946,26 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* LOCK SAVINGS PROMO */}
+          <div className="rounded-3xl bg-gradient-to-r from-blue-900/40 to-slate-900 border border-blue-500/30 p-4 shadow-xl relative overflow-hidden">
+             <div className="flex justify-between items-start mb-1">
+                <div>
+                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">New Feature</span>
+                  <h3 className="font-black text-base text-white">Lock & Grow</h3>
+                </div>
+                <div className="text-2xl drop-shadow-md">🔒</div>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-3 font-medium">
+                Lock your savings to earn up to 20%. Watch your money grow effortlessly in the background.
+              </p>
+              <button
+                onClick={() => setActiveTab('lock')}
+                className="w-full py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-xl text-xs transition cursor-pointer"
+              >
+                Go to Vault
+              </button>
           </div>
 
           {!isReviewMode && (
@@ -2091,6 +2235,107 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 NEW VAULT / LOCK TAB 🔥 */}
+      {activeTab === 'lock' && (
+        <div className="space-y-4">
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-2xl backdrop-blur-sm">
+            <h3 className="font-black text-lg text-white flex items-center gap-2">
+              <span className="text-blue-400">🔒</span> Lock Savings
+            </h3>
+            <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl">
+              <p className="text-xs text-blue-300 font-bold mb-1">Earn up to 20% APY! 🚀</p>
+              <p className="text-[10px] text-slate-400">Lock your funds for a specific period. The longer you lock, the more you grow. Emergency unlocks are available (2% penalty applies).</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Lock (KES)</label>
+              <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
+                <input
+                  type="number"
+                  value={lockAmountInput}
+                  onChange={(e) => setLockAmountInput(e.target.value)}
+                  className="w-full bg-transparent px-4 py-2 text-lg text-white font-black focus:outline-none"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unlock Date (Min 30 days)</label>
+              <input
+                type="date"
+                value={lockDateInput}
+                min={new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]}
+                onChange={(e) => setLockDateInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={handleCreateLock}
+              disabled={!lockAmountInput || !lockDateInput || mainPool < Number(lockAmountInput)}
+              className="w-full py-3.5 mt-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black rounded-xl text-sm transition shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:grayscale"
+            >
+              Lock Funds
+            </button>
+            <p className="text-center text-[10px] text-slate-400 mt-1">
+              Available to lock: <span className="font-bold text-white">KES {mainPool.toLocaleString()}</span>
+            </p>
+          </div>
+
+          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
+            <h3 className="font-bold text-sm text-white mb-3">Your Active Locks</h3>
+            {activeLocks.length === 0 ? (
+              <p className="text-center text-xs text-slate-500 py-4">No locked funds yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {activeLocks.map(lock => {
+                  let meta: any = {};
+                  try { meta = JSON.parse(lock.smsMessage || lock.sms_message || '{}'); } catch(e){}
+                  const unlockDateStr = meta.unlockDate || lock.date;
+                  const unlockDate = new Date(unlockDateStr);
+                  const today = new Date();
+                  const isMatured = today >= unlockDate;
+                  
+                  const start = new Date(lock.date);
+                  const totalDays = Math.max(1, Math.floor((unlockDate.getTime() - start.getTime()) / (1000 * 3600 * 24)));
+                  const daysPassed = Math.max(0, Math.floor((today.getTime() - start.getTime()) / (1000 * 3600 * 24)));
+                  const progress = Math.min(100, (daysPassed / totalDays) * 100);
+
+                  return (
+                    <div key={lock.id} className={`p-3 rounded-xl border ${isMatured ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
+                      <div className="flex justify-between items-center mb-2">
+                        <div>
+                          <p className="font-black text-white">KES {lock.amount.toLocaleString()}</p>
+                          <p className="text-[9px] text-slate-400">Unlocks: {unlockDateStr}</p>
+                        </div>
+                        {isMatured ? (
+                           <button onClick={() => handleClaimMaturedLock(lock)} className="px-3 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs animate-pulse">Claim</button>
+                        ) : (
+                          <button onClick={() => handleEmergencyUnlock(lock)} className="px-3 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold rounded-lg text-[10px]">Emergency Unlock</button>
+                        )}
+                      </div>
+                      {!isMatured && (
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[8px] text-slate-400">
+                            <span>Growing...</span>
+                            <span>{Math.floor(progress)}% time elapsed</span>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-1.5">
+                            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
