@@ -1,17 +1,20 @@
-﻿self.addEventListener('push', function(event) {
-  if (event.data) {
-    const data = event.data.json();
-    const options = {
-      body: data.body,
-      icon: '/favicon.ico',
-      vibrate: [100, 50, 100],
-      data: { url: data.url || '/' }
-    };
-    event.waitUntil(self.registration.showNotification(data.title, options));
-  }
+﻿const CACHE_NAME = 'growpesa-v1';
+
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
 });
 
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
-  event.waitUntil(clients.openWindow(event.notification.data.url));
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+
+// Crucial for installability: handle fetch events
+self.addEventListener('fetch', (event) => {
+  // A pass-through fetch handler satisfies Chrome's installability check
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      // Optional: fallback to cached assets if needed
+      return new Response('Offline', { status: 503 });
+    })
+  );
 });
