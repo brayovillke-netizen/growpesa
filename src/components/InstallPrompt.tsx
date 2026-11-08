@@ -10,52 +10,50 @@ export default function InstallPrompt() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // 1. Check if device is iOS
+    // 1. Check device
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIOS(ios);
     
-    // 2. Check if app is already installed
+    // 2. Check if already installed
     const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
     setIsStandalone(standalone);
 
     if (standalone) return;
 
-    // 3. Capture the native prompt event (Android)
+    // 3. Catch the native prompt
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setIsVisible(true); // ONLY show the banner when the event is successfully caught
     };
 
     window.addEventListener('beforeinstallprompt', handler);
 
-    // 4. iOS Fallback (Show the banner after 3 seconds, as iOS doesn't have the event)
-    if (ios && !standalone) {
-      setTimeout(() => setIsVisible(true), 3000);
-    }
+    // 🔥 FORCE SHOW: Show the banner after 3 seconds regardless of browser permission
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 3000);
 
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleInstallClick = async () => {
-    // If Android and event is captured
+    // If Chrome gave us the native prompt, trigger it
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      
-      if (outcome === 'accepted') {
-        setIsVisible(false);
-      }
+      if (outcome === 'accepted') setIsVisible(false);
       setDeferredPrompt(null);
       return;
     }
 
-    // If iOS, show instructions
+    // If Chrome blocked it, show manual instructions
     if (isIOS) {
-      alert('To install: Tap the Share icon at the bottom of Safari and select "Add to Home Screen".');
+      alert('To install: Tap the Share icon at the bottom and select "Add to Home Screen".');
     } else {
-      // If Android but event hasn't fired yet, tell them to wait or use menu
-      alert('Please use your browser menu (three dots) and select "Install App" or "Add to Home Screen".');
+      alert('Please click the 3 dots (⋮) at the top right of your browser and select "Install app" or "Add to Home screen".');
     }
   };
 
@@ -77,7 +75,7 @@ export default function InstallPrompt() {
           <X className="w-4 h-4" />
         </button>
         <button onClick={handleInstallClick} className="bg-white text-blue-600 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shadow-sm">
-          {isIOS ? 'How to Install' : 'Install'}
+          Install
         </button>
       </div>
     </div>
