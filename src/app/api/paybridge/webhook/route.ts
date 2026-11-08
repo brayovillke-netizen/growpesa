@@ -10,62 +10,42 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log('🚨 WEBHOOK RECEIVED:', JSON.stringify(body, null, 2));
 
-    // PayBridge may send the reference in different keys
+    // Look for reference in various possible payload structures
     const reference = body.reference || body.data?.reference || body.account_number;
     const status = body.status || body.data?.status;
 
     if (!reference) {
-      return NextResponse.json({ error: 'No reference found' }, { status: 400 });
+      console.log('❌ No reference found in payload');
+      return NextResponse.json({ error: 'No reference' }, { status: 400 });
     }
 
     if (status === 'SUCCESS' || status === 'COMPLETED' || status === 'success') {
-      
-      // 1. Find the transaction in the database
-      const { data: ledgerItem } = await supabase
-        .from('ledger_items')
-        .select('*')
-        .eq('code', reference)
-        .single();
+      const { data: ledgerItem } = await supabase.from('ledger_items').select('*').eq('code', reference).single();
 
       if (ledgerItem) {
-        // 2. Mark it as COMPLETED
-        await supabase
-          .from('ledger_items')
-          .update({ status: 'COMPLETED' })
-          .eq('code', reference);
+        // 1. Mark transaction completed
+        await supabase.from('ledger_items').update({ status: 'COMPLETED' }).eq('code', reference);
 
-        // 3. Add the money to the user's balance
+        // 2. Add money to user balance
         if (ledgerItem.phone) {
-          const { data: member } = await supabase
-            .from('members')
-            .select('savings_balance, total_deposited')
-            .eq('phone', ledgerItem.phone)
-            .single();
-
+          const { data: member } = await supabase.from('members').select('savings_balance, total_deposited').eq('phone', ledgerItem.phone).single();
           if (member) {
-            const newBalance = Number(member.savings_balance || 0) + Number(ledgerItem.amount);
-            const newTotalDeposited = Number(member.total_deposited || 0) + Number(ledgerItem.amount);
-            
-            await supabase
-              .from('members')
-              .update({ savings_balance: newBalance, total_deposited: newTotalDeposited })
-              .eq('phone', ledgerItem.phone);
+            await supabase.from('members').update({ 
+              savings_balance: Number(member.savings_balance || 0) + Number(ledgerItem.amount),
+              total_deposited: Number(member.total_deposited || 0) + Number(ledgerItem.amount)
+            }).eq('phone', ledgerItem.phone);
           }
         }
 
-        // 4. Update the main treasury pool
+        // 3. Update treasury pool
         const { data: pool } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
         if (pool) {
-          await supabase.from('treasury_pool').update({ 
-            pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) 
-          }).eq('id', 1);
+          await supabase.from('treasury_pool').update({ pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) }).eq('id', 1);
         }
       }
     } else {
-      // Mark as failed
       await supabase.from('ledger_items').update({ status: 'FAILED' }).eq('code', reference);
     }
-
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (error: any) {
     console.error('Webhook Error:', error.message);

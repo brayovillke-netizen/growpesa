@@ -2,13 +2,11 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    // Accept reference from the frontend
     const { amount, phone, reference } = await req.json(); 
 
     const PAYBRIDGE_API_KEY = process.env.PAYBRIDGE_API_KEY;
     const PAYBRIDGE_ACCOUNT_ID = process.env.PAYBRIDGE_ACCOUNT_ID;
-    const PAYBRIDGE_URL = 'https://paybridge.kingscreation.co.ke/api/v1/payments'; 
-
+    
     if (!PAYBRIDGE_API_KEY || !PAYBRIDGE_ACCOUNT_ID) {
       return NextResponse.json({ success: false, error: 'Credentials missing' }, { status: 500 });
     }
@@ -23,10 +21,10 @@ export async function POST(req: Request) {
       amount: Number(amount),
       channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", 
       account_number: "01103198794002", 
-      reference: reference, // Pass reference to PayBridge
+      reference: reference, 
     };
 
-    const response = await fetch(PAYBRIDGE_URL, {
+    const response = await fetch('https://paybridge.kingscreation.co.ke/api/v1/payments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PAYBRIDGE_API_KEY}` },
       body: JSON.stringify(payload),
