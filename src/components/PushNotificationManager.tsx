@@ -1,115 +1,101 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
 
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+import { useState, useEffect } from 'react';
+import { Bell, X } from 'lucide-react';
 
 export function PushNotificationManager({ userPhone }: { userPhone: string }) {
-  const [isSupported, setIsSupported] = useState(true);
+  const [isSupported, setIsSupported] = useState(false);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const syncSubscriptionToDB = async (sub: PushSubscription) => {
-    try {
-      const { error } = await supabase.from('push_subscriptions').upsert({
-        phone: userPhone,
-        subscription: sub.toJSON(),
-      }, { onConflict: 'phone' });
-      if (error) throw error;
-    } catch (err) {
-      console.error("Failed to sync to DB:", err);
-    }
-  };
+  const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setIsSupported(false);
-      return;
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      setIsSupported(true);
+      registerServiceWorker();
     }
 
-    navigator.serviceWorker.register('/sw.js').then((reg) => {
-      reg.pushManager.getSubscription().then((sub) => {
-        if (sub) {
-          setSubscription(sub);
-          syncSubscriptionToDB(sub); 
-        }
-      });
-    });
-  }, [userPhone]);
+    // Check if previously dismissed
+    if (localStorage.getItem('growpesa_notif_dismissed') === 'true') {
+      setShowPrompt(false);
+    } else {
+      // Delay showing the prompt slightly so it doesn't pop up instantly
+      const timer = setTimeout(() => setShowPrompt(true), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
-  const subscribeToPush = async () => {
-    setLoading(true);
+  async function registerServiceWorker() {
     try {
-      // 1. Check browser permission first
-      const permission = await Notification.requestPermission();
-      if (permission === 'denied') {
-        throw new Error("Browser blocked notifications. Please tap the 'Lock' icon in the URL bar and allow notifications.");
-      }
-
-      const reg = await navigator.serviceWorker.ready;
-      
-      if (subscription) {
-        await subscription.unsubscribe();
-      }
-
-      if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) {
-        throw new Error("VAPID Public Key is missing.");
-      }
-
-      // 2. Request subscription
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
+        updateViaCache: 'none',
       });
-      
+      const sub = await registration.pushManager.getSubscription();
       setSubscription(sub);
-      await syncSubscriptionToDB(sub);
-
-      alert('Notifications enabled successfully!');
-
-    } catch (error: any) {
-      console.error('Failed to subscribe:', error);
-      alert(`Failed: ${error.message}\n\nIf on iPhone, you MUST tap "Share" -> "Add to Home Screen".`);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Service Worker registration failed:', error);
     }
-  };
+  }
 
-  // Hide if not supported, or if successfully subscribed
-  if (!isSupported || subscription) return null;
+  async function subscribeToPush() {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('You need to allow notifications in your browser settings.');
+        setShowPrompt(false);
+        localStorage.setItem('growpesa_notif_dismissed', 'true');
+        return;
+      }
 
-  // The banner will now show on every refresh until they successfully subscribe
+      // Note: You need a VAPID public key from your backend to fully implement this
+      // For now, we just request permission and let the backend handle the rest if configured
+      setShowPrompt(false);
+      localStorage.setItem('growpesa_notif_dismissed', 'true');
+      
+      // You can optionally send the subscription object to your backend here
+      // await fetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ phone: userPhone, sub }) });
+
+    } catch (error) {
+      console.error('Failed to subscribe to push:', error);
+      alert('Failed to enable notifications. Please check your browser settings.');
+    }
+  }
+
+  if (!isSupported || !showPrompt) return null;
+
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-slate-900 border border-slate-700 p-4 rounded-2xl shadow-2xl flex flex-col gap-3">
-      <div className="flex justify-between items-start">
-        <div className="flex gap-3 items-center">
-          <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400 text-xl">🔔</div>
+    <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent pointer-events-none"></div>
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="bg-emerald-500/20 p-2.5 rounded-full">
+            <Bell className="w-5 h-5 text-emerald-400" />
+          </div>
           <div>
-            <h3 className="font-bold text-sm text-white">Enable Notifications</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5">Get instant alerts for deposits & loans.</p>
+            <h4 className="text-sm font-bold text-white">Enable Notifications</h4>
+            <p className="text-xs text-slate-400">Get instant alerts for deposits & loans.</p>
           </div>
         </div>
-        {/* We keep the X to hide it for the current page view, but it will reappear on refresh */}
-        <button onClick={() => setSubscription({} as PushSubscription)} className="text-slate-500 hover:text-white font-bold text-lg leading-none">
-          ✕
-        </button>
+        <div className="flex gap-2 relative z-10 items-center">
+          <button 
+            onClick={() => {
+              setShowPrompt(false);
+              localStorage.setItem('growpesa_notif_dismissed', 'true');
+            }} 
+            className="text-slate-500 hover:text-white p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={subscribeToPush} 
+            className="bg-emerald-500 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg whitespace-nowrap shadow-md"
+          >
+            Allow
+          </button>
+        </div>
       </div>
-      <button 
-        onClick={subscribeToPush}
-        disabled={loading}
-        className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs shadow-lg hover:opacity-90 transition disabled:opacity-50"
-      >
-        {loading ? 'Enabling...' : 'Allow Notifications'}
-      </button>
     </div>
   );
 }

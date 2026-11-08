@@ -995,7 +995,6 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
 
-    // 🔥 FIX: Sync the updated lock status to Supabase BEFORE saving the ledger
     if (updatedItem) {
       await submitToServerQueue(updatedItem);
     }
@@ -1038,7 +1037,6 @@ export default function DashboardPage() {
       phone: user?.phone,
     };
 
-    // 🔥 FIX: Sync the updated lock status to Supabase BEFORE saving the ledger
     if (updatedItem) {
       await submitToServerQueue(updatedItem);
     }
@@ -1693,6 +1691,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
+      {/* INSTALL PROMPT AT THE TOP */}
       {!isReviewMode && <InstallPrompt />}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
@@ -2676,6 +2675,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* NOTIFICATION MANAGER AT THE BOTTOM */}
       {!isReviewMode && (
         <PushNotificationManager userPhone={user.phone} />
       )}
