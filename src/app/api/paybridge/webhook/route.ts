@@ -9,11 +9,11 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     
-    // 🔥 THIS IS THE MOST IMPORTANT LINE. WE NEED TO SEE THIS IN VERCEL LOGS.
-    console.log('🚨 PAYBRIDGE WEBHOOK RECEIVED:', JSON.stringify(body, null, 2));
+    // 🚨 WE MUST SEE THIS IN VERCEL LOGS
+    console.log('🚨 PAYBRIDGE WEBHOOK HIT:', JSON.stringify(body, null, 2));
 
-    // PayBridge might use 'reference', 'tx_ref', or 'account_number'
-    const reference = body.reference || body.tx_ref || body.data?.reference || body.account_number;
+    // PayBridge might use any of these fields for the reference
+    const reference = body.reference || body.tx_ref || body.data?.reference || body.account_number || body.external_reference;
     const status = body.status || body.data?.status || body.event_type;
 
     if (!reference) {
@@ -21,43 +21,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No reference found' }, { status: 400 });
     }
 
-    // Accept various success keywords
     const isSuccess = status === 'SUCCESS' || status === 'COMPLETED' || status === 'success' || status === 'charge.completed';
 
     if (isSuccess) {
-      console.log(`✅ Webhook Success for Ref: ${reference}`);
+      console.log(`✅ Success detected for Ref: ${reference}`);
 
-      const { data: ledgerItem } = await supabase
+      const { data: ledgerItem, error: fetchErr } = await supabase
         .from('ledger_items')
         .select('*')
         .eq('code', reference)
         .single();
 
-      if (ledgerItem) {
-        // 1. Update Ledger
-        await supabase.from('ledger_items').update({ status: 'COMPLETED' }).eq('code', reference);
+      if (fetchErr || !ledgerItem) {
+        console.log(`⚠️ Transaction ${reference} not found in DB.`);
+        return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+      }
 
-        // 2. Update Member Balance
-        if (ledgerItem.phone) {
-          const { data: member } = await supabase.from('members').select('savings_balance, total_deposited').eq('phone', ledgerItem.phone).single();
-          if (member) {
-            await supabase.from('members').update({ 
-              savings_balance: Number(member.savings_balance || 0) + Number(ledgerItem.amount),
-              total_deposited: Number(member.total_deposited || 0) + Number(ledgerItem.amount)
-            }).eq('phone', ledgerItem.phone);
-          }
-        }
+      // 1. Update Ledger to COMPLETED
+      await supabase.from('ledger_items').update({ status: 'COMPLETED' }).eq('code', reference);
 
-        // 3. Update Treasury Pool
-        const { data: pool } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
-        if (pool) {
-          await supabase.from('treasury_pool').update({ pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) }).eq('id', 1);
+      // 2. Update Member Balance
+      if (ledgerItem.phone) {
+        const { data: member } = await supabase.from('members').select('savings_balance, total_deposited').eq('phone', ledgerItem.phone).single();
+        if (member) {
+          await supabase.from('members').update({ 
+            savings_balance: Number(member.savings_balance || 0) + Number(ledgerItem.amount),
+            total_deposited: Number(member.total_deposited || 0) + Number(ledgerItem.amount)
+          }).eq('phone', ledgerItem.phone);
         }
-      } else {
-        console.log(`⚠️ Transaction ${reference} not found in database.`);
+      }
+
+      // 3. Update Treasury Pool
+      const { data: pool } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
+      if (pool) {
+        await supabase.from('treasury_pool').update({ pool_balance: Number(pool.pool_balance) + Number(ledgerItem.amount) }).eq('id', 1);
       }
     } else {
-      console.log(`❌ Webhook Failed/Cancelled for Ref: ${reference}. Status was: ${status}`);
+      console.log(`❌ Failed/Cancelled for Ref: ${reference}. Status was: ${status}`);
       await supabase.from('ledger_items').update({ status: 'FAILED' }).eq('code', reference);
     }
 

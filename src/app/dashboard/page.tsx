@@ -943,7 +943,7 @@ export default function DashboardPage() {
       type: 'Lock Savings',
       amount: amt,
       date: today.toISOString().split('T')[0],
-      status: 'COMPLETED', // 🔥 Locks are COMPLETED instantly, no admin approval needed
+      status: 'COMPLETED',
       code: 'LCK-' + Math.floor(10000 + Math.random() * 90000),
       smsMessage: JSON.stringify({ unlockDate: lockDateInput }), 
       phone: user?.phone,
@@ -1105,6 +1105,10 @@ export default function DashboardPage() {
         } else if (attempts > 20) {
           clearInterval(pollInterval);
           setIsPushing(false);
+          
+          const timeoutItem: LedgerItem = { ...newItem, status: 'TIMEOUT / PASTE SMS' };
+          await submitToServerQueue(timeoutItem);
+          
           setMessage('STK push timed out. If money was deducted, paste SMS below.');
           setShowManualDeposit(true);
         }
