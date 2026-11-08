@@ -10,42 +10,53 @@ export default function InstallPrompt() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Check if device is iOS
-    setIsIOS(/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream);
+    // 1. Check if device is iOS
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(ios);
     
-    // Check if app is already installed/standalone
-    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    // 2. Check if app is already installed
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    setIsStandalone(standalone);
 
+    if (standalone) return;
+
+    // 3. Capture the native prompt event (Android)
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setIsVisible(true);
+      setIsVisible(true); // ONLY show the banner when the event is successfully caught
     };
 
     window.addEventListener('beforeinstallprompt', handler);
 
-    // For Android/Chrome, show the prompt after a slight delay if not already installed
-    if (!window.matchMedia('(display-mode: standalone)').matches && !/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-       setTimeout(() => setIsVisible(true), 3000); // Show after 3s on Android
+    // 4. iOS Fallback (Show the banner after 3 seconds, as iOS doesn't have the event)
+    if (ios && !standalone) {
+      setTimeout(() => setIsVisible(true), 3000);
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) {
-      // If on iOS or browser doesn't support prompt, show manual instructions
-      alert(isIOS ? 'Tap the Share icon at the bottom and select "Add to Home Screen".' : 'Please use your browser menu to install this app.');
+    // If Android and event is captured
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+        setIsVisible(false);
+      }
+      setDeferredPrompt(null);
       return;
     }
-    
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      setIsVisible(false);
+
+    // If iOS, show instructions
+    if (isIOS) {
+      alert('To install: Tap the Share icon at the bottom of Safari and select "Add to Home Screen".');
+    } else {
+      // If Android but event hasn't fired yet, tell them to wait or use menu
+      alert('Please use your browser menu (three dots) and select "Install App" or "Add to Home Screen".');
     }
-    setDeferredPrompt(null);
   };
 
   if (isStandalone || !isVisible) return null;
