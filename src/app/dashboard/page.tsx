@@ -1299,7 +1299,7 @@ export default function DashboardPage() {
 
     const item: LedgerItem = {
       id: Date.now().toString(),
-      type: 'Withdrawal',
+      type: `Withdrawal (Net: KES ${netPayout.toLocaleString()})`,
       amount: grossAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1542,10 +1542,10 @@ export default function DashboardPage() {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
 
-  // 🔥 FILTER OUT FAILED AND REJECTED TRANSACTIONS
+  // Filter out failed transactions from the overview
   const displayLedger = ledger.filter(item => {
     if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
-    if (item.status === 'FAILED' || item.status === 'REJECTED') return false;
+    if (item.status === 'FAILED') return false;
     return true;
   });
 
@@ -2005,11 +2005,12 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+                  <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30 relative">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Growth</p>
                     <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
-                    {activeSubscriptions.length > 0 && packageEarnings === 0 && (
-                      <p className="text-[9px] text-emerald-300 font-bold mt-0.5">Starts tomorrow ✨</p>
+                    {/* 🔥 ADDED: Visual cue so users know why it's 0 */}
+                    {packageEarnings === 0 && activeSubscriptions.length > 0 && (
+                      <p className="text-[9px] text-violet-200 mt-1 font-medium italic">Starts tomorrow ✨</p>
                     )}
                   </div>
                   
@@ -2153,7 +2154,8 @@ export default function DashboardPage() {
             <div className="rounded-2xl bg-gradient-to-br from-indigo-900/30 to-slate-900 border border-indigo-500/20 p-3 shadow-lg flex items-center justify-between">
               <div>
                 <h3 className="font-black text-sm text-white">Refer & Earn</h3>
-                <p className="text-[10px] text-slate-400 font-medium">Invite friends & get KES 5</p>
+                {/* 🔥 CHANGED: "earn up to KES 50" */}
+                <p className="text-[10px] text-slate-400 font-medium">Invite friends & earn up to KES 50</p>
               </div>
               <button
                 onClick={handleShareReferral}
