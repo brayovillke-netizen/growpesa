@@ -948,14 +948,14 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`);
+    setMessage(`Swept ${formatMoney(totalNetSweep)} to Main Savings!`);
   };
 
   const handleSubscribeTier = async (tierId: number) => {
     const tier = PACKAGE_TIERS.find((t) => t.id === tierId);
     if (!tier) return;
     if (mainPool < tier.entry) {
-      setMessage(`Insufficient funds: need KES ${tier.entry.toLocaleString()}. Savings: KES ${mainPool.toLocaleString()}.`);
+      setMessage(`Insufficient funds: need ${formatMoney(tier.entry)}. Savings: ${formatMoney(mainPool)}.`);
       return;
     }
 
@@ -1000,7 +1000,7 @@ export default function DashboardPage() {
   const handleCreateLock = async () => {
     const amt = Math.round(parseFloat(lockAmountInput));
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount to lock.');
-    if (amt > mainPool) return setMessage(`Insufficient funds. Balance: KES ${mainPool.toLocaleString()}.`);
+    if (amt > mainPool) return setMessage(`Insufficient funds. Balance: ${formatMoney(mainPool)}.`);
     if (!lockDateInput) return setMessage('Select an unlock date.');
 
     const unlockDateObj = new Date(lockDateInput);
@@ -1027,7 +1027,7 @@ export default function DashboardPage() {
     await saveLedger([item, ...ledger], item);
     setLockAmountInput('');
     setLockDateInput('');
-    setMessage(`Successfully locked KES ${amt.toLocaleString()} until ${lockDateInput}.`);
+    setMessage(`Successfully locked ${formatMoney(amt)} until ${lockDateInput}.`);
   };
 
   const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
@@ -1037,8 +1037,8 @@ export default function DashboardPage() {
 
     const confirm = window.confirm(
       `Are you sure you want to break this lock?\n\n` +
-      `A 2% penalty of KES ${penalty.toLocaleString()} will be applied.\n` +
-      `You will receive KES ${amountReturned.toLocaleString()} back into your Main Wallet.`
+      `A 2% penalty of ${formatMoney(penalty)} will be applied.\n` +
+      `You will receive ${formatMoney(amountReturned)} back into your Main Wallet.`
     );
     if (!confirm) return;
 
@@ -1080,7 +1080,7 @@ export default function DashboardPage() {
 
     await saveLedger([recordItem, ...updated], recordItem);
     
-    setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned to your wallet.`);
+    setMessage(`Emergency unlock successful. ${formatMoney(amountReturned)} returned to your wallet.`);
   };
 
   const handleClaimMaturedLock = async (lockItem: LedgerItem) => {
@@ -1122,7 +1122,7 @@ export default function DashboardPage() {
     }
 
     await saveLedger([recordItem, ...updated], recordItem);
-    setMessage(`Matured lock claimed! Received KES ${total.toLocaleString()} (incl. KES ${interest} interest).`);
+    setMessage(`Matured lock claimed! Received ${formatMoney(total)} (incl. ${formatMoney(interest)} interest).`);
   };
 
   const handleDeposit = async () => {
@@ -1229,6 +1229,7 @@ export default function DashboardPage() {
     }
     const extractedCode = codeMatch[1];
 
+    // 🔥 FIX: Extract amount from SMS instead of defaulting to 1000
     let amt = Math.round(parseFloat(depositAmountInput));
     const amountMatch = manualSmsText.match(/(?:Ksh|KES|Kshs)\s*([\d,]+(?:\.\d{2})?)/i);
     
@@ -1255,7 +1256,7 @@ export default function DashboardPage() {
     setShowManualDeposit(false);
     setMessage(isReviewMode ? 'Transaction logged successfully.' : 'Confirmation submitted to Treasurer queue.');
     
-    await notifyAdmin('New Deposit 📥', `Manual deposit from ${user?.phone} for KES ${item.amount}`);
+    await notifyAdmin('New Deposit 📥', `Manual deposit from ${user?.phone} for ${formatMoney(item.amount)}`);
   };
 
   const handleSubmitSmsForApproval = async (txnId: string) => {
@@ -1281,7 +1282,7 @@ export default function DashboardPage() {
     setMessage(isReviewMode ? 'Transaction logged successfully.' : 'Submitted to Treasurer queue.');
     
     if (updatedItem) {
-      await notifyAdmin('New STK Deposit 📥', `STK deposit from ${user?.phone} for KES ${(updatedItem as LedgerItem).amount}`);
+      await notifyAdmin('New STK Deposit 📥', `STK deposit from ${user?.phone} for ${formatMoney((updatedItem as LedgerItem).amount)}`);
     }
   };
 
@@ -1292,7 +1293,7 @@ export default function DashboardPage() {
 
     const grossAmt = Math.round(parseFloat(withdrawAmountInput));
     if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
-    if (grossAmt > mainPool) return setMessage(`Insufficient savings. Balance: KES ${mainPool.toLocaleString()}.`);
+    if (grossAmt > mainPool) return setMessage(`Insufficient savings. Balance: ${formatMoney(mainPool)}.`);
 
     const gwfFee = calculateGWF(grossAmt);
     const netPayout = Math.round(grossAmt - gwfFee);
@@ -1308,9 +1309,9 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    triggerNotification('Withdrawal Submitted ⏳', `Your request for KES ${netPayout.toLocaleString()} is pending approval.`);
+    triggerNotification('Withdrawal Submitted ⏳', `Your request for ${formatMoney(netPayout)} is pending approval.`);
     
-    await notifyAdmin('New Withdrawal 💸', `Withdrawal request from ${user?.phone} for KES ${grossAmt}`);
+    await notifyAdmin('New Withdrawal 💸', `Withdrawal request from ${user?.phone} for ${formatMoney(grossAmt)}`);
   };
 
   const totalBorrowed = ledger
@@ -1376,7 +1377,7 @@ export default function DashboardPage() {
 
     if (parsedLoanAmt <= 0) return setMessage('Enter a valid loan amount.');
     if (parsedLoanAmt > calculatedMaxLimit) {
-      return setMessage(`Exceeds your locked limit of KES ${calculatedMaxLimit.toLocaleString()}.`);
+      return setMessage(`Exceeds your locked limit of ${formatMoney(calculatedMaxLimit)}.`);
     }
 
     const due = new Date();
@@ -1423,10 +1424,10 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    triggerNotification('Loan Requested 🏦', `Your loan of KES ${parsedLoanAmt.toLocaleString()} is pending approval.`);
+    triggerNotification('Loan Requested 🏦', `Your loan of ${formatMoney(parsedLoanAmt)} is pending approval.`);
     setRepayAmountInput('');
     
-    await notifyAdmin('New Loan Request 🏦', `Loan request from ${user?.phone} for KES ${parsedLoanAmt}`);
+    await notifyAdmin('New Loan Request 🏦', `Loan request from ${user?.phone} for ${formatMoney(parsedLoanAmt)}`);
   };
 
   const handleRepaySTK = async () => {
@@ -1438,10 +1439,10 @@ export default function DashboardPage() {
 
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
-    if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
+    if (amt > remaining) return setMessage(`Amount exceeds remaining balance of ${formatMoney(remaining)}.`);
 
     setLoading(true);
-    setMessage(`Sending STK push to ${repayPhoneInput} for KES ${amt}...`);
+    setMessage(`Sending STK push to ${repayPhoneInput} for ${formatMoney(amt)}...`);
 
     const txnId = Date.now().toString();
     const reqCode = 'REP-' + Math.floor(1000 + Math.random() * 9000);
@@ -1512,7 +1513,7 @@ export default function DashboardPage() {
 
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount.');
-    if (amt > remaining) return setMessage(`Amount exceeds remaining balance of KES ${remaining}.`);
+    if (amt > remaining) return setMessage(`Amount exceeds remaining balance of ${formatMoney(remaining)}.`);
 
     const newItem: LedgerItem = {
       id: Date.now().toString(),
@@ -1527,9 +1528,9 @@ export default function DashboardPage() {
     await saveLedger([newItem, ...ledger], newItem);
     setRepaySmsText('');
     setRepayAmountInput('');
-    setMessage(`Repayment of KES ${amt} submitted to Treasurer queue.`);
+    setMessage(`Repayment of ${formatMoney(amt)} submitted to Treasurer queue.`);
     
-    await notifyAdmin('New Repayment 💰', `Loan repayment from ${user?.phone} for KES ${amt}`);
+    await notifyAdmin('New Repayment 💰', `Loan repayment from ${user?.phone} for ${formatMoney(amt)}`);
   };
 
   const parsedWithdrawAmt = Math.round(parseFloat(withdrawAmountInput) || 0);
@@ -1539,13 +1540,15 @@ export default function DashboardPage() {
   const packageEarnings = activeSubscriptions.reduce((sum, s) => sum + s.accumulatedBalance, 0);
 
   const formatMoney = (amount: number) => {
-    return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
+    if (hideBalances) return 'KES ****';
+    const num = Number(amount) || 0;
+    return `KES ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Filter out failed transactions from the overview
+  // 🔥 FILTER OUT FAILED AND REJECTED TRANSACTIONS FROM OVERVIEW
   const displayLedger = ledger.filter(item => {
     if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
-    if (item.status === 'FAILED') return false;
+    if (item.status === 'FAILED' || item.status === 'REJECTED') return false;
     return true;
   });
 
@@ -2008,9 +2011,8 @@ export default function DashboardPage() {
                   <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30 relative">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Growth</p>
                     <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
-                    {/* 🔥 ADDED: Visual cue so users know why it's 0 */}
                     {packageEarnings === 0 && activeSubscriptions.length > 0 && (
-                      <p className="text-[9px] text-violet-200 mt-1 font-medium italic">Starts tomorrow ✨</p>
+                      <p className="text-[9px] text-violet-200 italic mt-0.5 absolute bottom-2 right-3">Starts tomorrow ✨</p>
                     )}
                   </div>
                   
@@ -2154,8 +2156,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl bg-gradient-to-br from-indigo-900/30 to-slate-900 border border-indigo-500/20 p-3 shadow-lg flex items-center justify-between">
               <div>
                 <h3 className="font-black text-sm text-white">Refer & Earn</h3>
-                {/* 🔥 CHANGED: "earn up to KES 50" */}
-                <p className="text-[10px] text-slate-400 font-medium">Invite friends & earn up to KES 50</p>
+                <p className="text-[10px] text-slate-400 font-medium">Invite friends & get KES 5.00</p>
               </div>
               <button
                 onClick={handleShareReferral}
@@ -2429,7 +2430,7 @@ export default function DashboardPage() {
               Lock Funds
             </button>
             <p className="text-center text-[10px] text-slate-400 mt-1">
-              Available to lock: <span className="font-bold text-white">KES {mainPool.toLocaleString()}</span>
+              Available to lock: <span className="font-bold text-white">{formatMoney(mainPool)}</span>
             </p>
           </div>
 
@@ -2456,7 +2457,7 @@ export default function DashboardPage() {
                     <div key={lock.id} className={`p-3 rounded-xl border ${isMatured ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
                       <div className="flex justify-between items-center mb-2">
                         <div>
-                          <p className="font-black text-white">KES {lock.amount.toLocaleString()}</p>
+                          <p className="font-black text-white">{formatMoney(lock.amount)}</p>
                           <p className="text-[9px] text-slate-400">Unlocks: {unlockDateStr}</p>
                         </div>
                         {isMatured ? (
@@ -2499,7 +2500,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Withdraw (Min KES 50)</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount to Withdraw (Min KES 50.00)</label>
               <div className="flex items-center bg-slate-950 rounded-xl border border-slate-700 p-1 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
                 <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-2.5 rounded-lg border border-slate-700/50">KES</span>
                 <input
@@ -2553,7 +2554,7 @@ export default function DashboardPage() {
                   ? 'text-sky-300 bg-sky-500/10 border-sky-500/30'
                   : 'text-rose-300 bg-rose-500/10 border-rose-500/30'
               }`}>
-                Limit: {calculatedMaxLimit > 0 ? `KES ${calculatedMaxLimit.toLocaleString()}` : 'Locked'}
+                Limit: {calculatedMaxLimit > 0 ? formatMoney(calculatedMaxLimit) : 'Locked'}
               </span>
             </div>
 
@@ -2590,19 +2591,19 @@ export default function DashboardPage() {
                        <p className="text-[10px] font-bold text-rose-400 mb-1">Late Payment Penalty (0.5%/day)</p>
                        <div className="flex justify-between text-xs font-bold text-slate-300">
                          <span>Base Repay:</span>
-                         <span>KES {(activeLoan.baseRepay || 0).toLocaleString()}</span>
+                         <span>{formatMoney(activeLoan.baseRepay || 0)}</span>
                        </div>
                        <div className="flex justify-between text-xs font-bold text-rose-400">
                          <span>Penalty:</span>
-                         <span>+ KES {activeLoan.penaltyAmount.toLocaleString()}</span>
+                         <span>+ {formatMoney(activeLoan.penaltyAmount)}</span>
                        </div>
                     </div>
                   ) : null}
 
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                      <span>Paid: <span className="text-emerald-400">KES {activeLoan.amountPaid.toLocaleString()}</span></span>
-                      <span>Total: <span className="text-white">KES {activeLoan.totalRepay.toLocaleString()}</span></span>
+                      <span>Paid: <span className="text-emerald-400">{formatMoney(activeLoan.amountPaid)}</span></span>
+                      <span>Total: <span className="text-white">{formatMoney(activeLoan.totalRepay)}</span></span>
                     </div>
                     <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                       <div 
@@ -2615,11 +2616,11 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3 text-center">
                     <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
                       <p className="text-[9px] text-slate-500 uppercase font-bold">Requested</p>
-                      <p className="font-bold text-white text-sm mt-0.5">KES {activeLoan.requestedAmount.toLocaleString()}</p>
+                      <p className="font-bold text-white text-sm mt-0.5">{formatMoney(activeLoan.requestedAmount)}</p>
                     </div>
                     <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
                       <p className="text-[9px] text-slate-500 uppercase font-bold">Remaining</p>
-                      <p className="font-black text-rose-400 text-sm mt-0.5">KES {(activeLoan.totalRepay - activeLoan.amountPaid).toLocaleString()}</p>
+                      <p className="font-black text-rose-400 text-sm mt-0.5">{formatMoney(activeLoan.totalRepay - activeLoan.amountPaid)}</p>
                     </div>
                   </div>
                 </div>
@@ -2807,7 +2808,7 @@ export default function DashboardPage() {
 
                     <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex justify-between items-center mt-2">
                       <span className="text-xs font-bold text-slate-400">Total Repay:</span>
-                      <span className="text-sm font-black text-emerald-400">KES {totalLoanRepay.toLocaleString()}</span>
+                      <span className="text-sm font-black text-emerald-400">{formatMoney(totalLoanRepay)}</span>
                     </div>
 
                     <button
