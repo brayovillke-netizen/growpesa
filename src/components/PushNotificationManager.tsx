@@ -12,8 +12,18 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIos(isIOSDevice);
 
+    // Developer override to force show for testing
+    const forceShow = window.location.search.includes('test_notif=true');
+    if (forceShow) {
+      setShowPrompt(true);
+      return;
+    }
+
     // If the browser doesn't support notifications, exit
-    if (!('Notification' in window)) return;
+    if (!('Notification' in window)) {
+      console.log('Notifications not supported in this browser.');
+      return;
+    }
 
     // If they already granted or denied, exit
     if (Notification.permission === 'granted' || Notification.permission === 'denied') {
@@ -37,16 +47,16 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
       const permission = await Notification.requestPermission();
       
       if (permission === 'granted') {
-        // Here you would normally fetch a VAPID key and subscribe
-        // await fetch('/api/push/subscribe', { ... })
         localStorage.setItem('growpesa_notif_dismissed', 'true');
         setShowPrompt(false);
+        // You can add your backend fetch here to save the subscription later
       } else {
         localStorage.setItem('growpesa_notif_dismissed', 'true');
         setShowPrompt(false);
       }
     } catch (error) {
       console.error('Error requesting notification permission', error);
+      alert("This browser does not allow notifications. Please open in Chrome or install the app.");
     }
   };
 
