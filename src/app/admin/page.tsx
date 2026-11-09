@@ -66,6 +66,9 @@ export default function AdminPage() {
   const [hideBalances, setHideBalances] = useState<boolean>(false);
   const [isQueueExpanded, setIsQueueExpanded] = useState<boolean>(false);
 
+  // 🔥 NEW: State to hold the item waiting for manual bank payout
+  const [payoutItem, setPayoutItem] = useState<LedgerItem | null>(null);
+
   const fetchQueue = useCallback(async () => {
     try {
       setSyncing(true);
@@ -154,7 +157,17 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [adminUser, activeAdminTab, fetchMembers]);
 
-  const handleApprove = async (item: LedgerItem) => {
+  // 🔥 NEW: This intercepts the Approve click.
+  // If it's a payout (Withdrawal/Loan), it opens the modal instead of instantly approving.
+  const handleApproveClick = (item: LedgerItem) => {
+    if (item.type.includes('Withdrawal') || item.type.includes('Loan Request')) {
+      setPayoutItem(item);
+    } else {
+      executeApproval(item);
+    }
+  };
+
+  const executeApproval = async (item: LedgerItem) => {
     try {
       let poolUpdate: number | undefined = undefined;
       const amt = Math.round(Number(item.amount));
@@ -333,7 +346,6 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      // Notify user of rejection
       if (item.phone) {
         fetch('/api/push/send', {
           method: 'POST',
@@ -457,7 +469,72 @@ export default function AdminPage() {
   if (!adminUser) return null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24">
+    <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
+      
+      {/* 🔥 MODAL FOR MANUAL PAYOUTS */}
+      {payoutItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm space-y-5 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-emerald-500"></div>
+            
+            <div className="text-center">
+              <span className="text-3xl mb-2 block">🏦</span>
+              <h3 className="text-lg font-black text-white">Manual Payout Required</h3>
+              <p className="text-xs text-slate-400 mt-1">Open your Co-op Bank app to send this money.</p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Phone Number</p>
+                <div className="flex justify-between items-center">
+                  <p className="font-mono text-xl font-black text-white">{payoutItem.phone}</p>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(payoutItem.phone || '');
+                      alert('Phone number copied!');
+                    }}
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 text-[10px] font-bold rounded-lg border border-slate-700 transition"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800/50 pt-3">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Amount to Send</p>
+                <p className="font-mono text-2xl font-black text-emerald-400">
+                  KES {payoutItem.type.includes('Withdrawal') 
+                    ? (payoutItem.amount - calculateGWF(payoutItem.amount)).toLocaleString()
+                    : (payoutItem.amount - (Math.round(payoutItem.amount * 0.05) + calculateGWF(payoutItem.amount))).toLocaleString()
+                  }
+                </p>
+                <p className="text-[9px] text-slate-400 mt-1">
+                  (Net amount after fees)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => {
+                  executeApproval(payoutItem);
+                  setPayoutItem(null);
+                }}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-sm transition shadow-lg shadow-emerald-500/20"
+              >
+                ✅ I have sent the money
+              </button>
+              <button 
+                onClick={() => setPayoutItem(null)}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-sm transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 font-black text-slate-950 text-lg shadow-md shadow-amber-500/20">
@@ -476,7 +553,6 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* 🔥 NEW TEST PUSH BUTTON */}
           <button
             onClick={async () => {
               setMessage("Sending test push...");
@@ -754,7 +830,7 @@ export default function AdminPage() {
 
                         <div className="grid grid-cols-2 gap-2 pt-2">
                           <button
-                            onClick={() => handleApprove(item)}
+                            onClick={() => handleApproveClick(item)}
                             className={`py-2.5 font-black rounded-xl text-xs transition shadow-md ${
                               isDeposit ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' :
                               isWithdrawal ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' :
