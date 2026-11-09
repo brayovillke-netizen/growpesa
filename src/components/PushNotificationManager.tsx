@@ -7,8 +7,13 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
-    // If browser doesn't support or user already decided, exit
-    if (!('Notification' in window) || Notification.permission !== 'default') return;
+    // 1. If browser doesn't support, exit
+    if (!('Notification' in window)) return;
+    
+    // 2. If they already granted or denied, exit
+    if (Notification.permission === 'granted' || Notification.permission === 'denied') return;
+    
+    // 3. If they previously dismissed, exit
     if (localStorage.getItem('growpesa_notif_dismissed') === 'true') return;
 
     // Show prompt after 3 seconds
@@ -16,16 +21,34 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
     return () => clearTimeout(timer);
   }, []);
 
-  const subscribeToPush = async () => {
-    try {
+  const handleAllow = async () => {
+    // Save immediately so it never pops up again
+    localStorage.setItem('growpesa_notif_dismissed', 'true'); 
+    setShowPrompt(false);
+    
+    if ('Notification' in window) {
       const permission = await Notification.requestPermission();
-      if (permission === 'granted' || permission === 'denied') {
-        localStorage.setItem('growpesa_notif_dismissed', 'true');
-        setShowPrompt(false);
+      if (permission === 'granted') {
+        try {
+          // Fire a test notification immediately
+          const registration = await navigator.serviceWorker.ready;
+          registration.showNotification('GrowPesa Alerts Enabled 🚀', {
+            body: 'You will now receive system notifications for deposits and loans.',
+            icon: '/icon-192x192.png',
+            vibrate: [200, 100, 200]
+          });
+        } catch (e) {
+          console.error('Test notification failed', e);
+        }
+      } else {
+        alert('Notifications were blocked. You will only see in-app banners.');
       }
-    } catch (error) {
-      console.error('Error requesting permission', error);
     }
+  };
+
+  const handleDismiss = () => {
+    localStorage.setItem('growpesa_notif_dismissed', 'true'); 
+    setShowPrompt(false);
   };
 
   if (!showPrompt) return null;
@@ -44,19 +67,10 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
           </div>
         </div>
         <div className="flex gap-2 relative z-10 items-center">
-          <button 
-            onClick={() => { 
-              setShowPrompt(false); 
-              localStorage.setItem('growpesa_notif_dismissed', 'true'); 
-            }} 
-            className="text-slate-500 hover:text-white p-1"
-          >
+          <button onClick={handleDismiss} className="text-slate-500 hover:text-white p-1">
             <X className="w-4 h-4" />
           </button>
-          <button 
-            onClick={subscribeToPush} 
-            className="bg-emerald-500 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-md"
-          >
+          <button onClick={handleAllow} className="bg-emerald-500 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-md">
             Allow
           </button>
         </div>
