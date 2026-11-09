@@ -1221,7 +1221,6 @@ export default function DashboardPage() {
   };
 
   const handleDirectSmsSubmit = async () => {
-    const amt = Math.round(parseFloat(depositAmountInput));
     if (!manualSmsText || manualSmsText.length < 10) return setMessage('Paste a valid M-Pesa SMS.');
 
     const codeMatch = manualSmsText.match(/\b([A-Z0-9]{10})\b/);
@@ -1230,10 +1229,22 @@ export default function DashboardPage() {
     }
     const extractedCode = codeMatch[1];
 
+    // 🔥 FIX: Extract amount from SMS instead of defaulting to 1000
+    let amt = Math.round(parseFloat(depositAmountInput));
+    const amountMatch = manualSmsText.match(/(?:Ksh|KES|Kshs)\s*([\d,]+(?:\.\d{2})?)/i);
+    
+    if (amountMatch && amountMatch[1]) {
+      amt = Math.round(parseFloat(amountMatch[1].replace(/,/g, '')));
+    }
+
+    if (isNaN(amt) || amt <= 0) {
+      return setMessage('Could not detect the amount. Please type the amount in the box above.');
+    }
+
     const item: LedgerItem = {
       id: Date.now().toString(),
       type: 'Deposit (Manual)',
-      amount: isNaN(amt) ? 1000 : amt,
+      amount: amt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
       code: extractedCode,
@@ -1532,9 +1543,12 @@ export default function DashboardPage() {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
 
-  const displayLedger = isReviewMode
-    ? ledger.filter(item => !item.type.includes('Withdrawal') && !item.type.includes('Loan') && !item.type.includes('Sweep'))
-    : ledger;
+  // 🔥 FILTER OUT FAILED TRANSACTIONS FROM OVERVIEW
+  const displayLedger = ledger.filter(item => {
+    if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
+    if (item.status === 'FAILED') return false;
+    return true;
+  });
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -1781,7 +1795,6 @@ export default function DashboardPage() {
       
       {!isReviewMode && <InstallPrompt />}
 
-      {/* 🔥 CLEAN HEADER */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
@@ -1810,7 +1823,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 🔥 SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
@@ -1823,7 +1835,6 @@ export default function DashboardPage() {
             
             <div className="p-4 space-y-5 max-h-[70vh] overflow-y-auto">
               
-              {/* Profile */}
               <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
                 <div className="h-10 w-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 font-bold">
                   {firstName[0]}
@@ -1834,7 +1845,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Notifications */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Notifications</p>
                 <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
@@ -1851,7 +1861,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Security */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Security</p>
                 
@@ -1906,7 +1915,21 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Sign Out */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Community</p>
+                <a
+                  href="https://twitter.com/intent/follow?screen_name=growpesax"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 hover:border-slate-600 transition"
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
+                    𝕏 Follow @growpesax
+                  </div>
+                  <span className="text-[10px] text-slate-500">→</span>
+                </a>
+              </div>
+
               <button onClick={handleLogout} className="w-full py-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-rose-500/20 transition">
                 <LogOut className="w-4 h-4"/> Sign Out
               </button>
@@ -1941,7 +1964,6 @@ export default function DashboardPage() {
       {activeTab === 'overview' && (
         <div className="space-y-4">
           
-          {/* 🔥 GETTING STARTED CHECKLIST (Only shows for empty accounts) */}
           {showGettingStarted && (
             <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-5 shadow-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -1970,38 +1992,40 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-2'} gap-2.5`}>
-            <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Tracked Balance</p>
-              <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
-            </div>
-            
-            {isReviewMode ? (
-              <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Days Active</p>
-                <p className="text-xl font-black mt-1">{daysActive} Days</p>
+          {!showGettingStarted && (
+            <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-2'} gap-2.5`}>
+              <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Tracked Balance</p>
+                <p className="text-xl font-black mt-1">{formatMoney(mainPool)}</p>
               </div>
-            ) : (
-              <>
-                <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Package Earns</p>
-                  <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
-                </div>
-                
-                <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
-                  <p className="text-xl font-black mt-1">
-                    {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
-                  </p>
-                </div>
-                
+              
+              {isReviewMode ? (
                 <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
-                  <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Days Active</p>
+                  <p className="text-xl font-black mt-1">{daysActive} Days</p>
                 </div>
-              </>
-            )}
-          </div>
+              ) : (
+                <>
+                  <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Growth</p>
+                    <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-sky-100">Active Subs</p>
+                    <p className="text-xl font-black mt-1">
+                      {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'Tier' : 'Tiers'}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
+                    <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
             <button
@@ -2124,55 +2148,18 @@ export default function DashboardPage() {
           </div>
 
           {!isReviewMode && (
-            <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden">
-              <div className="flex justify-between items-start mb-1">
-                <div>
-                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
-                  <h3 className="font-black text-base text-white">Earn up to KES 50</h3>
-                </div>
-                <div className="text-2xl drop-shadow-md">🎁</div>
+            <div className="rounded-2xl bg-gradient-to-br from-indigo-900/30 to-slate-900 border border-indigo-500/20 p-3 shadow-lg flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-sm text-white">Refer & Earn</h3>
+                <p className="text-[10px] text-slate-400 font-medium">Invite friends & get KES 5</p>
               </div>
-              <p className="text-[11px] text-slate-400 mb-4 font-medium">
-                Share your invite link. Get rewarded instantly when your friends make their first deposit.
-              </p>
-
               <button
                 onClick={handleShareReferral}
-                className="w-full py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center gap-1"
               >
-                <span>↗️ Share Invite</span>
+                <span>↗️ Share</span>
               </button>
-
-              <div className="mt-3 text-center">
-                <span className="text-[10px] text-slate-500 font-bold">Code: </span>
-                <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{user.referral_code || user.phone}</span>
-              </div>
             </div>
-          )}
-
-          {!isReviewMode && (
-            <a
-              href="https://twitter.com/intent/follow?screen_name=growpesax"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/50 p-4 shadow-xl hover:border-slate-500 transition cursor-pointer"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black border border-slate-700 font-black text-white text-xl">
-                    𝕏
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Follow Us</span>
-                    <h3 className="font-black text-sm text-white">@growpesax on X</h3>
-                    <p className="text-[10px] text-slate-500">News, updates & community</p>
-                  </div>
-                </div>
-                <div className="px-3 py-1.5 bg-white text-slate-950 font-bold rounded-lg text-[10px] shrink-0">
-                  Follow →
-                </div>
-              </div>
-            </a>
           )}
 
           {!isReviewMode && (
