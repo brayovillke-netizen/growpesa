@@ -333,7 +333,7 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      // 🔥 NEW: Notify user of rejection
+      // Notify user of rejection
       if (item.phone) {
         fetch('/api/push/send', {
           method: 'POST',
@@ -476,6 +476,32 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* 🔥 NEW TEST PUSH BUTTON */}
+          <button
+            onClick={async () => {
+              setMessage("Sending test push...");
+              try {
+                const res = await fetch('/api/push/send', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    phone: adminUser.phone, 
+                    title: 'Admin Test 🚀', 
+                    body: 'This is a test notification from the Treasurer dashboard!' 
+                  })
+                });
+                const data = await res.json();
+                if (data.success) setMessage("Test push sent successfully!");
+                else setMessage(`Error: ${data.error || 'Failed'}`);
+              } catch (err: any) {
+                setMessage(`Fetch error: ${err.message}`);
+              }
+            }}
+            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-[10px] transition cursor-pointer"
+          >
+            🔔 Test Push
+          </button>
+          
           <button
             onClick={() => setHideBalances(!hideBalances)}
             className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
