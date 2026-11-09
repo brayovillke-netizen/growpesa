@@ -5,6 +5,7 @@ import InstallPrompt from '@/components/InstallPrompt';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
 import { useBiometrics } from '@/components/BiometricLock';
 import { supabase } from '@/lib/supabase/client';
+import { Settings, X, Bell, Shield, LogOut, Fingerprint } from 'lucide-react';
 
 interface LedgerItem {
   id: string;
@@ -135,14 +136,13 @@ export default function DashboardPage() {
   const [showLoginPin, setShowLoginPin] = useState(false);
   const [showRegPin, setShowRegPin] = useState(false);
   const [showConfirmPin, setShowConfirmPin] = useState(false);
-  const [showChangePin, setShowChangePin] = useState(false);
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
-  // 🔥 NEW: State for notification status
+  const [showSettings, setShowSettings] = useState(false);
   const [notifGranted, setNotifGranted] = useState(false);
-
   const [hideBalances, setHideBalances] = useState(false);
+  
   const lastActivityRef = useRef(0);
   const [todayStr, setTodayStr] = useState('');
   const [daysActive, setDaysActive] = useState(0);
@@ -259,13 +259,12 @@ export default function DashboardPage() {
           });
           
           if (error) {
-            // 🔥 THIS WILL SHOW US EXACTLY WHAT SUPABASE IS COMPLAINING ABOUT
             console.error("Supabase Save Error:", error);
             alert(`Database Error: ${error.message}\nDid you disable RLS?`);
             return;
           }
         }
-        alert('Push Notifications Enabled! 🚀 You will now get alerts even when the app is closed.');
+        alert('Push Notifications Enabled! 🚀');
         triggerNotification('Alerts Enabled 🚀', 'You will now receive system notifications.');
       } catch (e: any) {
         console.error('Subscription save failed', e);
@@ -870,8 +869,8 @@ export default function DashboardPage() {
     if (error) return alert('Failed to update PIN.');
 
     alert('PIN updated successfully!');
-    setShowChangePin(false);
     setNewPin('');
+    setShowSettings(false);
   };
 
   const handleLogout = () => {
@@ -949,9 +948,7 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    setMessage(
-      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`
-    );
+    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`);
   };
 
   const handleSubscribeTier = async (tierId: number) => {
@@ -1777,122 +1774,143 @@ export default function DashboardPage() {
     item.type === 'Lock Savings' && item.status === 'COMPLETED'
   );
 
+  const showGettingStarted = mainPool === 0 && activeSubscriptions.length === 0;
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
       {!isReviewMode && <InstallPrompt />}
 
+      {/* 🔥 CLEAN HEADER */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
             GP
           </div>
           <div>
-            <div className="flex flex-col">
-              <h1 className="text-sm font-bold tracking-tight text-white">
-                {getGreeting()}, <span className="text-emerald-400">{firstName}</span>
-              </h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-slate-400 font-medium">GrowPesa</span>
-                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-400 border border-emerald-500/20">
-                  Member
-                </span>
-              </div>
-            </div>
+            <h1 className="text-sm font-bold tracking-tight text-white">
+              {getGreeting()}, <span className="text-emerald-400">{firstName}</span>
+            </h1>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5">GrowPesa Member</p>
           </div>
         </div>
-        <div className="flex flex-col gap-1 items-end">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setHideBalances(!hideBalances)}
-              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
-              title={hideBalances ? "Reveal Balances" : "Hide Balances"}
-            >
-              {hideBalances ? '🙈' : '👁️'}
-            </button>
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
-            >
-              Sign Out
-            </button>
-          </div>
-          
-          <div className="flex gap-2 mt-1 justify-end items-center">
-            <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
-              Change PIN
-            </button>
-            
-            {/* 🔥 NOTIFICATION TOGGLE: Completely hidden if notifGranted is true */}
-            {!notifGranted && (
-              <>
-                <span className="text-slate-600 text-[9px]">•</span>
-                <button 
-                  onClick={handleEnableNotifications} 
-                  className="text-[9px] text-amber-400 font-bold hover:underline"
-                >
-                  🔕 Enable Alerts
-                </button>
-              </>
-            )}
-
-            {bioSupported && (
-              <>
-                <span className="text-slate-600 text-[9px]">•</span>
-                <button 
-                  onClick={async () => {
-                    if (bioEnabled) {
-                      disableBiometrics();
-                      setHasSavedBio(false);
-                      localStorage.removeItem('growpesa_bio_phone');
-                    } else {
-                      const success = await enableBiometrics(user.phone);
-                      if (success) {
-                        localStorage.setItem('growpesa_bio_phone', user.phone);
-                        setHasSavedBio(true);
-                        alert('Biometrics enabled! You will be prompted on next login.');
-                      } else {
-                        alert('Failed to enable biometrics. Your device may not support it.');
-                      }
-                    }
-                  }} 
-                  className="text-[9px] text-sky-400 font-bold hover:underline"
-                >
-                  {bioEnabled ? 'Disable Bio' : 'Enable Bio'}
-                </button>
-              </>
-            )}
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHideBalances(!hideBalances)}
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
+          >
+            {hideBalances ? '🙈' : '👁️'}
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {showChangePin && (
-        <div className="p-4 bg-slate-900 border border-slate-700 rounded-xl space-y-3">
-          <h3 className="text-xs font-bold text-white">Change Your PIN</h3>
-          <div className="relative">
-            <input
-              type={showNewPin ? "text" : "password"}
-              maxLength={4}
-              value={newPin}
-              onChange={(e) => setNewPin(e.target.value)}
-              placeholder="Enter new 4-digit PIN"
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
-            />
-            <button
-              type="button"
-              onClick={() => setShowNewPin(!showNewPin)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-            >
-              {showNewPin ? '👁️' : '🙈'}
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleChangePin} className="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
-              Update PIN
-            </button>
-            <button onClick={() => setShowChangePin(false)} className="px-3 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">
-              Cancel
-            </button>
+      {/* 🔥 SETTINGS MODAL */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <h3 className="font-bold text-white flex items-center gap-2"><Settings className="w-4 h-4"/> Account Settings</h3>
+              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-5 max-h-[70vh] overflow-y-auto">
+              
+              {/* Profile */}
+              <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div className="h-10 w-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 font-bold">
+                  {firstName[0]}
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-white">{user.name}</p>
+                  <p className="text-[10px] text-slate-400">{user.phone}</p>
+                </div>
+              </div>
+
+              {/* Notifications */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Notifications</p>
+                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
+                    <Bell className="w-4 h-4 text-emerald-400"/> Push Alerts
+                  </div>
+                  {notifGranted ? (
+                    <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">Active</span>
+                  ) : (
+                    <button onClick={handleEnableNotifications} className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-1 rounded hover:bg-amber-500/20">
+                      Enable
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Security */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Security</p>
+                
+                {bioSupported && (
+                  <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
+                      <Fingerprint className="w-4 h-4 text-sky-400"/> Biometric Login
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        if (bioEnabled) {
+                          disableBiometrics();
+                          setHasSavedBio(false);
+                          localStorage.removeItem('growpesa_bio_phone');
+                        } else {
+                          const success = await enableBiometrics(user.phone);
+                          if (success) {
+                            localStorage.setItem('growpesa_bio_phone', user.phone);
+                            setHasSavedBio(true);
+                            alert('Biometrics enabled!');
+                          } else {
+                            alert('Failed to enable biometrics.');
+                          }
+                        }
+                      }} 
+                      className={`text-[10px] font-bold px-2 py-1 rounded ${bioEnabled ? 'text-emerald-500 bg-emerald-500/10' : 'text-sky-400 bg-sky-500/10'}`}
+                    >
+                      {bioEnabled ? 'Active' : 'Setup'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
+                    <Shield className="w-4 h-4 text-amber-400"/> Change Security PIN
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showNewPin ? "text" : "password"}
+                        maxLength={4}
+                        value={newPin}
+                        onChange={(e) => setNewPin(e.target.value)}
+                        placeholder="New 4-digit PIN"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white tracking-widest text-center"
+                      />
+                    </div>
+                    <button onClick={handleChangePin} className="px-3 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sign Out */}
+              <button onClick={handleLogout} className="w-full py-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-rose-500/20 transition">
+                <LogOut className="w-4 h-4"/> Sign Out
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1922,6 +1940,36 @@ export default function DashboardPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          
+          {/* 🔥 GETTING STARTED CHECKLIST (Only shows for empty accounts) */}
+          {showGettingStarted && (
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-5 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <span className="text-6xl">🚀</span>
+              </div>
+              <h3 className="font-black text-lg text-white mb-1">Welcome to GrowPesa!</h3>
+              <p className="text-xs text-slate-400 mb-4">Let's get your vault started. Follow these steps:</p>
+              
+              <div className="space-y-3 relative z-10">
+                <div className="flex items-center gap-3 bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                  <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">1</div>
+                  <p className="text-xs font-bold text-white flex-1">Make your first deposit</p>
+                  <button onClick={() => setIsDepositOpen(true)} className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">Deposit</button>
+                </div>
+                <div className="flex items-center gap-3 bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                  <div className="h-6 w-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs">2</div>
+                  <p className="text-xs font-bold text-white flex-1">Lock funds to earn interest</p>
+                  <button onClick={() => setActiveTab('lock')} className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-1 rounded">Go to Vault</button>
+                </div>
+                <div className="flex items-center gap-3 bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                  <div className="h-6 w-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center font-bold text-xs">3</div>
+                  <p className="text-xs font-bold text-white flex-1">Invite friends to earn</p>
+                  <button onClick={handleShareReferral} className="text-[10px] font-bold text-violet-400 bg-violet-500/10 px-2 py-1 rounded">Share</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className={`grid ${isReviewMode ? 'grid-cols-2' : 'grid-cols-2'} gap-2.5`}>
             <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-3.5 rounded-2xl text-white shadow-lg shadow-emerald-900/30">
               <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Tracked Balance</p>
@@ -2473,6 +2521,11 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase">Service Fee</span>
+              <span className="text-xs font-bold text-slate-300">{formatMoney(currentGWFFee)}</span>
+            </div>
+
             <button
               onClick={handleWithdraw}
               disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || parsedWithdrawAmt > mainPool || hasUnpaidLoan}
@@ -2487,9 +2540,11 @@ export default function DashboardPage() {
               )}
             </button>
             
-            <p className="text-center text-[9px] text-slate-500 font-medium">
-              Funds are typically disbursed within 24 hours.
-            </p>
+            <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl text-center">
+              <p className="text-[10px] text-blue-300 font-medium">
+                ⏱️ <strong>Payout Schedule:</strong> Requests are processed daily at 10:00 AM, 2:00 PM, and 8:00 PM.
+              </p>
+            </div>
           </div>
         </div>
       )}
