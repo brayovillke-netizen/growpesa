@@ -138,7 +138,6 @@ export default function DashboardPage() {
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
 
-  // Lock Savings States
   const [lockAmountInput, setLockAmountInput] = useState('');
   const [lockDateInput, setLockDateInput] = useState('');
 
@@ -957,11 +956,9 @@ export default function DashboardPage() {
 
   const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
     const principal = lockItem.amount;
-    // 🔥 FIX: Use Math.ceil so 2% of small amounts (like 20) is applied as at least 1 KES
     const penalty = Math.ceil(principal * 0.02); 
     const amountReturned = principal - penalty;
 
-    // 🔥 FIX: Hide the math in the background and only show clear instructions to the user
     const confirm = window.confirm(
       `Are you sure you want to break this lock?\n\n` +
       `A 2% penalty of KES ${penalty.toLocaleString()} will be applied.\n` +
@@ -1007,7 +1004,6 @@ export default function DashboardPage() {
 
     await saveLedger([recordItem, ...updated], recordItem);
     
-    // Simple success message
     setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned to your wallet.`);
   };
 

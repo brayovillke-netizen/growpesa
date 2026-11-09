@@ -22,8 +22,7 @@ export async function POST(req: Request) {
       channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", 
       account_number: "01103198794002", 
       reference: reference, 
-      
-      // 🔥 THE MISSING PIECE: Force the webhook URL in the payload
+      // Force webhook URLs in payload just in case PayBridge ignores the dashboard setting
       callback_url: "https://growpesa.co.ke/api/paybridge/webhook",
       webhook_url: "https://growpesa.co.ke/api/paybridge/webhook"
     };
