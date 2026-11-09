@@ -8,17 +8,35 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
   const [showPrompt, setShowPrompt] = useState(true);
 
   const subscribeToPush = async () => {
-    // 1. Check if the browser supports it
     if (!('Notification' in window)) {
-      alert("❌ Your browser (or this in-app browser) does NOT support push notifications. Please open this link in Google Chrome or Safari.");
+      alert("❌ Your browser does NOT support push notifications.");
       return;
     }
     
     try {
-      // 2. Request permission
       const permission = await Notification.requestPermission();
-      alert(`✅ Permission status: ${permission}`);
-      setShowPrompt(false);
+      
+      if (permission === 'granted') {
+        setShowPrompt(false);
+        
+        // 🔥 FIRE A TEST NOTIFICATION
+        try {
+          // Using the Service Worker to show the notification (Best for Android)
+          const registration = await navigator.serviceWorker.ready;
+          registration.showNotification('GrowPesa Test 🚀', {
+            body: 'Notifications are working perfectly!',
+            icon: '/icon-192x192.png',
+            vibrate: [200, 100, 200],
+            tag: 'test-notification'
+          });
+        } catch (err) {
+          // Fallback if Service Worker isn't ready (Works on Desktop/iOS)
+          new Notification('GrowPesa Test 🚀', {
+            body: 'Notifications are working perfectly!',
+            icon: '/icon-192x192.png'
+          });
+        }
+      }
     } catch (error) {
       alert(`⚠️ Error requesting permission: ${error}`);
     }
