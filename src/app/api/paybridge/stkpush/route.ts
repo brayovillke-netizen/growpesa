@@ -25,10 +25,8 @@ export async function POST(req: Request) {
       phone_number: formattedPhone,
       amount: Number(amount),
       channel_id: "01a1b1b0-8dd5-70c5-9be0-3cbdfc67d9fc", // Your exact channel UUID
-      account_number: "01103198794002", // Your Co-op account
+      account_number: "01103198794002", 
       reference: reference, 
-      
-      // 🔥 FIXED: Using the non-www domain to prevent Vercel 308 redirects
       callback_url: "https://growpesa.co.ke/api/paybridge/webhook",
       webhook_url: "https://growpesa.co.ke/api/paybridge/webhook"
     };
@@ -40,27 +38,17 @@ export async function POST(req: Request) {
     });
 
     const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(JSON.stringify(data));
-    }
+    if (!response.ok) throw new Error(JSON.stringify(data));
 
-    // 🔥 CRITICAL FIX: PayBridge ignores our reference and creates its own UUID.
-    // We must save their UUID in our database so the webhook knows which transaction to update.
+    // 🔥 CRITICAL: Catch PayBridge's UUID and save it to our DB
     const paybridgeReference = data.data?.reference;
 
     if (paybridgeReference && reference) {
-      await supabase
-        .from('ledger_items')
-        .update({ code: paybridgeReference })
-        .eq('code', reference);
+      await supabase.from('ledger_items').update({ code: paybridgeReference }).eq('code', reference);
     }
 
-    // Return the new UUID to the frontend so it polls the correct code
     return NextResponse.json({ success: true, data, finalReference: paybridgeReference || reference });
-
   } catch (error: any) {
-    console.error('Paybridge STK Error:', error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

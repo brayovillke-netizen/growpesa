@@ -956,9 +956,11 @@ export default function DashboardPage() {
 
   const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
     const principal = lockItem.amount;
+    // 🔥 FIX: Use Math.ceil so 2% of small amounts (like 20) is applied as at least 1 KES
     const penalty = Math.ceil(principal * 0.02); 
     const amountReturned = principal - penalty;
 
+    // 🔥 FIX: Hide the math in the background and only show clear instructions to the user
     const confirm = window.confirm(
       `Are you sure you want to break this lock?\n\n` +
       `A 2% penalty of KES ${penalty.toLocaleString()} will be applied.\n` +
@@ -1004,6 +1006,7 @@ export default function DashboardPage() {
 
     await saveLedger([recordItem, ...updated], recordItem);
     
+    // Simple success message
     setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned to your wallet.`);
   };
 
@@ -1060,7 +1063,7 @@ export default function DashboardPage() {
     setMessage(`Sending STK push to ${targetPhone}...`);
 
     const txnId = Date.now().toString();
-    const reference = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
+    const tempReference = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newItem: LedgerItem = {
       id: txnId,
@@ -1068,7 +1071,7 @@ export default function DashboardPage() {
       amount: amt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING PIN',
-      code: reference,
+      code: tempReference,
       phone: user?.phone,
     };
     await saveLedger([newItem, ...ledger], newItem);
@@ -1078,13 +1081,16 @@ export default function DashboardPage() {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, phone: targetPhone, reference }),
+        body: JSON.stringify({ amount: amt, phone: targetPhone, reference: tempReference }),
       });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
         throw new Error(JSON.stringify(data));
       }
+
+      // 🔥 Use the PayBridge UUID returned from the backend
+      const activeReference = data.finalReference || tempReference;
 
       setMessage(`STK push sent to ${targetPhone}. Please enter your M-Pesa PIN.`);
 
@@ -1094,7 +1100,7 @@ export default function DashboardPage() {
         const { data: checkItem } = await supabase
           .from('ledger_items')
           .select('status')
-          .eq('code', reference)
+          .eq('code', activeReference)
           .single();
 
         if (checkItem?.status === 'COMPLETED') {
@@ -1110,7 +1116,7 @@ export default function DashboardPage() {
           clearInterval(pollInterval);
           setIsPushing(false);
           
-          const timeoutItem: LedgerItem = { ...newItem, status: 'TIMEOUT / PASTE SMS' };
+          const timeoutItem: LedgerItem = { ...newItem, code: activeReference, status: 'TIMEOUT / PASTE SMS' };
           await submitToServerQueue(timeoutItem);
           
           setMessage('STK push timed out. If money was deducted, paste SMS below.');
@@ -1374,7 +1380,7 @@ export default function DashboardPage() {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, phone: repayPhoneInput }),
+        body: JSON.stringify({ amount: amt, phone: repayPhoneInput, reference: reqCode }), // Pass reference to backend
       });
       const data = await res.json();
 

@@ -380,14 +380,9 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
-  // 🔥 FIX: HIDE "PENDING PIN" AND "LOCK SAVINGS" FROM ADMIN QUEUE
-  const pendingOnly = queue.filter(
-    (q) => 
-      q.status !== 'COMPLETED' && 
-      q.status !== 'REJECTED' && 
-      q.status !== 'PENDING PIN' && 
-      q.type !== 'Lock Savings'
-  );
+  // 🔥 STRICT FILTER: Admin ONLY sees items waiting for manual approval.
+  // Automated STK pushes (PENDING PIN, TIMEOUT) and Lock Savings will NEVER show here.
+  const pendingOnly = queue.filter((q) => q.status === 'PENDING ADMIN APPROVAL');
 
   const filteredQueue = pendingOnly.filter((item) => {
     if (activeFilter === 'deposits') return item.type.includes('Deposit');
