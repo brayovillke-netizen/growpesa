@@ -195,20 +195,18 @@ export default function DashboardPage() {
     }
   };
 
-  // 🔥 NEW: Helper to trigger both in-app and system notifications
+  // 🔥 Helper to trigger both in-app and system notifications
   const triggerNotification = async (title: string, body: string) => {
-    // 1. Always show in-app banner
+    // 1. Always show in-app banner instantly
     setMessage(body);
 
-    // 2. Try OS system notification
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    // 2. Send request to backend to trigger phone OS notification
+    if (user?.phone) {
       try {
-        const registration = await navigator.serviceWorker.ready;
-        registration.showNotification(title, {
-          body: body,
-          icon: '/icon-192x192.png',
-          vibrate: [200, 100, 200],
-          tag: 'growpesa-alert',
+        await fetch('/api/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: user.phone, title, body })
         });
       } catch (err) {
         console.error('System notification failed', err);
@@ -891,9 +889,7 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    setMessage(
-      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`
-    );
+    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`);
   };
 
   const handleSubscribeTier = async (tierId: number) => {

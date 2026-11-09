@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
   try {
-    // ✅ Initialize inside the function so it only runs at runtime, not build time
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -19,40 +18,36 @@ export async function POST(req: Request) {
 
     if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
 
-    const { data: subData, error } = await supabase
+    const { data: subs, error } = await supabase
       .from('push_subscriptions')
-      .select('subscription')
-      .eq('phone', phone)
-      .single();
+      .select('id, subscription')
+      .eq('phone', phone);
 
-    if (error || !subData) {
+    if (error || !subs || subs.length === 0) {
       return NextResponse.json({ error: 'No subscription found for this phone' }, { status: 404 });
     }
 
     const payload = JSON.stringify({
-      title: title,
+      title: title || 'GrowPesa Alert',
       body: body,
       url: '/dashboard',
     });
 
-    try {
-      await webpush.sendNotification(subData.subscription, payload);
-      return NextResponse.json({ success: true });
-    } catch (webPushError: any) {
-      console.error('WebPush Error:', webPushError);
-      
-      // If subscription is dead, delete it
-      if (webPushError.statusCode === 410 || webPushError.statusCode === 404) {
-        await supabase.from('push_subscriptions').delete().eq('phone', phone);
-        return NextResponse.json({ error: 'Subscription expired. Please re-enable notifications.' }, { status: 410 });
-      }
+    const results = await Promise.allSettled(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification(sub.subscription, payload);
+          return { success: true, id: sub.id };
+        } catch (err: any) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+          }
+          throw err;
+        }
+      })
+    );
 
-      return NextResponse.json({ 
-        error: webPushError.message, 
-        statusCode: webPushError.statusCode 
-      }, { status: 500 });
-    }
-
+    return NextResponse.json({ success: true, results });
   } catch (error: any) {
     console.error('Push API Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

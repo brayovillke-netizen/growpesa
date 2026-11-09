@@ -332,6 +332,19 @@ export default function AdminPage() {
         .eq('id', String(item.id));
 
       if (error) throw error;
+
+      // 🔥 NEW: Notify user of rejection
+      if (item.phone) {
+        fetch('/api/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: item.phone,
+            title: 'Transaction Rejected ❌',
+            body: `Your ${item.type} request of KES ${item.amount} was rejected. Please contact support.`
+          })
+        }).catch(console.error);
+      }
       
       await fetchQueue();
       setMessage(`Rejected ${item.code}`);
@@ -380,8 +393,6 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
-  // 🔥 STRICT FILTER: Admin ONLY sees items waiting for manual approval.
-  // Automated STK pushes (PENDING PIN, TIMEOUT) and Lock Savings will NEVER show here.
   const pendingOnly = queue.filter((q) => q.status === 'PENDING ADMIN APPROVAL');
 
   const filteredQueue = pendingOnly.filter((item) => {
