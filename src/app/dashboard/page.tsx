@@ -956,12 +956,18 @@ export default function DashboardPage() {
   };
 
   const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
-    const confirm = window.confirm("Are you sure? You will lose all earned interest and be charged a 2% penalty on your principal.");
-    if (!confirm) return;
-
     const principal = lockItem.amount;
-    const penalty = Math.round(principal * 0.02);
+    // 🔥 FIX: Use Math.ceil so 2% of small amounts (like 20) is applied as at least 1 KES
+    const penalty = Math.ceil(principal * 0.02); 
     const amountReturned = principal - penalty;
+
+    // 🔥 FIX: Hide the math in the background and only show clear instructions to the user
+    const confirm = window.confirm(
+      `Are you sure you want to break this lock?\n\n` +
+      `A 2% penalty of KES ${penalty.toLocaleString()} will be applied.\n` +
+      `You will receive KES ${amountReturned.toLocaleString()} back into your Main Wallet.`
+    );
+    if (!confirm) return;
 
     const saved = await updateMainPool(mainPool + amountReturned);
     if (!saved) return setMessage('Failed to process unlock.');
@@ -1000,7 +1006,9 @@ export default function DashboardPage() {
     }
 
     await saveLedger([recordItem, ...updated], recordItem);
-    setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned (2% penalty applied).`);
+    
+    // Simple success message
+    setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned to your wallet.`);
   };
 
   const handleClaimMaturedLock = async (lockItem: LedgerItem) => {
