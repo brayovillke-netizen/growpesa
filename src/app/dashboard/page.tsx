@@ -1229,7 +1229,6 @@ export default function DashboardPage() {
     }
     const extractedCode = codeMatch[1];
 
-    // 🔥 FIX: Extract amount from SMS instead of defaulting to 1000
     let amt = Math.round(parseFloat(depositAmountInput));
     const amountMatch = manualSmsText.match(/(?:Ksh|KES|Kshs)\s*([\d,]+(?:\.\d{2})?)/i);
     
@@ -1300,7 +1299,7 @@ export default function DashboardPage() {
 
     const item: LedgerItem = {
       id: Date.now().toString(),
-      type: `Withdrawal (Net: KES ${netPayout.toLocaleString()})`,
+      type: 'Withdrawal',
       amount: grossAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1543,10 +1542,10 @@ export default function DashboardPage() {
     return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
   };
 
-  // 🔥 FILTER OUT FAILED TRANSACTIONS FROM OVERVIEW
+  // 🔥 FILTER OUT FAILED AND REJECTED TRANSACTIONS
   const displayLedger = ledger.filter(item => {
     if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
-    if (item.status === 'FAILED') return false;
+    if (item.status === 'FAILED' || item.status === 'REJECTED') return false;
     return true;
   });
 
@@ -2009,6 +2008,9 @@ export default function DashboardPage() {
                   <div className="bg-gradient-to-br from-violet-600 to-purple-800 p-3.5 rounded-2xl text-white shadow-lg shadow-violet-900/30">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Growth</p>
                     <p className="text-xl font-black mt-1">{formatMoney(packageEarnings)}</p>
+                    {activeSubscriptions.length > 0 && packageEarnings === 0 && (
+                      <p className="text-[9px] text-emerald-300 font-bold mt-0.5">Starts tomorrow ✨</p>
+                    )}
                   </div>
                   
                   <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-900/30">
