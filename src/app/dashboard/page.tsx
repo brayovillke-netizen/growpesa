@@ -105,6 +105,17 @@ function generateReferralCode(name: string) {
   return `${numPart}-${namePart}`;
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export default function DashboardPage() {
   const isReviewMode = process.env.NEXT_PUBLIC_TUMA_REVIEW_MODE === 'true';
 
@@ -127,6 +138,9 @@ export default function DashboardPage() {
   const [showChangePin, setShowChangePin] = useState(false);
   const [showNewPin, setShowNewPin] = useState(false);
   const [newPin, setNewPin] = useState('');
+
+  // 🔥 NEW: State for notification status
+  const [notifGranted, setNotifGranted] = useState(false);
 
   const [hideBalances, setHideBalances] = useState(false);
   const lastActivityRef = useRef(0);
@@ -181,6 +195,11 @@ export default function DashboardPage() {
     if (bioId || bioPhone || bioEnabled) {
       setHasSavedBio(true);
     }
+
+    // 🔥 Check initial notification status
+    if ('Notification' in window && Notification.permission === 'granted') {
+      setNotifGranted(true);
+    }
   }, [bioEnabled]);
 
   const notifyAdmin = async (title: string, body: string) => {
@@ -195,12 +214,8 @@ export default function DashboardPage() {
     }
   };
 
-  // 🔥 Helper to trigger both in-app and system notifications
   const triggerNotification = async (title: string, body: string) => {
-    // 1. Always show in-app banner instantly
     setMessage(body);
-
-    // 2. Send request to backend to trigger phone OS notification
     if (user?.phone) {
       try {
         await fetch('/api/push/send', {
@@ -211,6 +226,45 @@ export default function DashboardPage() {
       } catch (err) {
         console.error('System notification failed', err);
       }
+    }
+  };
+
+  // 🔥 NEW: Function to handle the header notification button
+  const handleEnableNotifications = async () => {
+    if (!('Notification' in window)) {
+      alert('Your browser does not support notifications.');
+      return;
+    }
+    
+    if (Notification.permission === 'granted') {
+      setNotifGranted(true);
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      setNotifGranted(true);
+      localStorage.setItem('growpesa_notif_dismissed', 'true'); // Stop the popup
+      
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!)
+        });
+
+        if (user?.phone) {
+          await supabase.from('push_subscriptions').delete().eq('phone', user.phone);
+          await supabase.from('push_subscriptions').insert({
+            phone: user.phone,
+            subscription: subscription
+          });
+        }
+      } catch (e) {
+        console.error('Subscription save failed', e);
+      }
+      
+      triggerNotification('Alerts Enabled 🚀', 'You will now receive system notifications.');
     }
   };
 
@@ -889,7 +943,9 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    setMessage(`Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`);
+    setMessage(
+      `Swept KES ${totalNetSweep.toLocaleString()} to Main Savings!`
+    );
   };
 
   const handleSubscribeTier = async (tierId: number) => {
@@ -1756,33 +1812,45 @@ export default function DashboardPage() {
             </button>
           </div>
           
-          <div className="flex gap-2 mt-1 justify-end">
+          <div className="flex gap-2 mt-1 justify-end items-center">
             <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
               Change PIN
             </button>
+            <span className="text-slate-600 text-[9px]">•</span>
             
+            {/* 🔥 NOTIFICATION TOGGLE */}
+            <button 
+              onClick={handleEnableNotifications} 
+              className={`text-[9px] font-bold transition ${notifGranted ? 'text-emerald-400 cursor-default' : 'text-amber-400 hover:underline'}`}
+            >
+              {notifGranted ? '🔔 Alerts Active' : '🔕 Enable Alerts'}
+            </button>
+
             {bioSupported && (
-              <button 
-                onClick={async () => {
-                  if (bioEnabled) {
-                    disableBiometrics();
-                    setHasSavedBio(false);
-                    localStorage.removeItem('growpesa_bio_phone');
-                  } else {
-                    const success = await enableBiometrics(user.phone);
-                    if (success) {
-                      localStorage.setItem('growpesa_bio_phone', user.phone);
-                      setHasSavedBio(true);
-                      alert('Biometrics enabled! You will be prompted on next login.');
+              <>
+                <span className="text-slate-600 text-[9px]">•</span>
+                <button 
+                  onClick={async () => {
+                    if (bioEnabled) {
+                      disableBiometrics();
+                      setHasSavedBio(false);
+                      localStorage.removeItem('growpesa_bio_phone');
                     } else {
-                      alert('Failed to enable biometrics. Your device may not support it.');
+                      const success = await enableBiometrics(user.phone);
+                      if (success) {
+                        localStorage.setItem('growpesa_bio_phone', user.phone);
+                        setHasSavedBio(true);
+                        alert('Biometrics enabled! You will be prompted on next login.');
+                      } else {
+                        alert('Failed to enable biometrics. Your device may not support it.');
+                      }
                     }
-                  }
-                }} 
-                className="text-[9px] text-sky-400 font-bold hover:underline"
-              >
-                {bioEnabled ? 'Disable Biometrics' : 'Enable Biometrics'}
-              </button>
+                  }} 
+                  className="text-[9px] text-sky-400 font-bold hover:underline"
+                >
+                  {bioEnabled ? 'Disable Bio' : 'Enable Bio'}
+                </button>
+              </>
             )}
           </div>
         </div>
