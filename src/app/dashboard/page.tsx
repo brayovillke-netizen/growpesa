@@ -361,7 +361,7 @@ export default function DashboardPage() {
       try { setLedger(JSON.parse(savedLedger)); } catch {}
     }
     const savedSavings = localStorage.getItem(`growpesa_savings_${u.phone}`);
-    if (savedSavings) setMainPool(Math.round(Number(savedSavings)) || 0);
+    if (savedSavings) setMainPool(Number(savedSavings) || 0);
 
     const savedSubs = localStorage.getItem(`growpesa_subs_${u.phone}`);
     if (savedSubs) {
@@ -402,7 +402,7 @@ export default function DashboardPage() {
         id: String(item.id),
         phone: item.phone || '0700000000',
         type: item.type,
-        amount: Math.round(Number(item.amount)),
+        amount: Number(item.amount), // 🔥 NO ROUNDING
         date: item.date,
         status: item.status,
         code: item.code,
@@ -426,7 +426,7 @@ export default function DashboardPage() {
 
   const updateMainPool = async (newPoolAmount: number): Promise<boolean> => {
     if (!user) return false;
-    const rounded = Math.round(newPoolAmount);
+    const rounded = Number(newPoolAmount); // 🔥 NO ROUNDING
     const delta = rounded - mainPool;
     if (delta === 0) return true;
 
@@ -454,7 +454,7 @@ export default function DashboardPage() {
           return false;
         }
       } else if (typeof data === 'number') {
-        const dbBal = Math.round(data);
+        const dbBal = Number(data);
         setMainPool(dbBal);
         localStorage.setItem(`growpesa_savings_${user.phone}`, String(dbBal));
       }
@@ -491,7 +491,7 @@ export default function DashboardPage() {
         .single();
 
       if (memberData) {
-        const savings = Math.round(Number(memberData.savings_balance)) || 0;
+        const savings = Number(memberData.savings_balance) || 0;
         setMainPool(prev => prev === savings ? prev : savings);
 
         setUser(prev => {
@@ -520,7 +520,7 @@ export default function DashboardPage() {
         id: String(row.id),
         phone: row.phone,
         type: String(row.type || ''),
-        amount: Math.round(Number(row.amount)) || 0,
+        amount: Number(row.amount) || 0,
         date: String(row.date || ''),
         created_at: String(row.created_at || row.date || ''),
         status: String(row.status || '').replace(/_/g, ' '),
@@ -587,9 +587,9 @@ export default function DashboardPage() {
           const latestLoan = serverQueue.find((i: any) => i.type.includes('Loan Request') && i.status === 'COMPLETED');
           if (latestLoan) {
             const reqAmt = Number(latestLoan.amount);
-            const fee = Math.round(reqAmt * 0.05);
+            const fee = Number(reqAmt * 0.05);
             const gwf = calculateGWF(reqAmt);
-            const baseRepay = reqAmt + Math.round(reqAmt * 0.10); 
+            const baseRepay = reqAmt + Number(reqAmt * 0.10); 
             const due = new Date(latestLoan.date);
             due.setDate(due.getDate() + 28);
 
@@ -601,7 +601,7 @@ export default function DashboardPage() {
               amountSent: reqAmt - fee - gwf,
               termWeeks: 4,
               interestRate: 0.10,
-              interestAmount: Math.round(reqAmt * 0.10),
+              interestAmount: Number(reqAmt * 0.10),
               totalRepay: baseRepay,
               baseRepay: baseRepay,
               penaltyAmount: 0,
@@ -625,7 +625,7 @@ export default function DashboardPage() {
           let newPenalty = 0;
           if (todayDateObj > dueDateObj) {
             const daysLate = Math.floor((todayDateObj.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
-            newPenalty = Math.round(currentLoan.requestedAmount * 0.005 * daysLate); 
+            newPenalty = Number(currentLoan.requestedAmount * 0.005 * daysLate); 
           }
           
           const baseAmount = currentLoan.baseRepay || (currentLoan.totalRepay - (currentLoan.penaltyAmount || 0));
@@ -894,8 +894,8 @@ export default function DashboardPage() {
       return;
     }
 
-    const totalGroupCut = Math.round(sub.accumulatedBalance * 0.1);
-    const totalNetSweep = Math.round(sub.accumulatedBalance * 0.9);
+    const totalGroupCut = Number(sub.accumulatedBalance * 0.1);
+    const totalNetSweep = Number(sub.accumulatedBalance * 0.9);
 
     const saved = await updateMainPool(mainPool + totalNetSweep);
     if (!saved) {
@@ -911,7 +911,7 @@ export default function DashboardPage() {
           .eq('id', 1)
           .single();
         if (poolData) {
-          const newPoolBal = Math.round(Number(poolData.pool_balance) + totalGroupCut);
+          const newPoolBal = Number(poolData.pool_balance) + totalGroupCut;
           await supabase
             .from('treasury_pool')
             .update({ pool_balance: newPoolBal, updated_at: new Date().toISOString() })
@@ -998,7 +998,7 @@ export default function DashboardPage() {
   };
 
   const handleCreateLock = async () => {
-    const amt = Math.round(parseFloat(lockAmountInput));
+    const amt = parseFloat(lockAmountInput); // 🔥 NO ROUNDING
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid amount to lock.');
     if (amt > mainPool) return setMessage(`Insufficient funds. Balance: ${formatMoney(mainPool)}.`);
     if (!lockDateInput) return setMessage('Select an unlock date.');
@@ -1032,7 +1032,7 @@ export default function DashboardPage() {
 
   const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
     const principal = lockItem.amount;
-    const penalty = Math.ceil(principal * 0.02); 
+    const penalty = Number(principal * 0.02); // 🔥 NO ROUNDING
     const amountReturned = principal - penalty;
 
     const confirm = window.confirm(
@@ -1049,7 +1049,7 @@ export default function DashboardPage() {
        try {
         const { data: poolData } = await supabase.from('treasury_pool').select('pool_balance').eq('id', 1).single();
         if (poolData) {
-          const newPoolBal = Math.round(Number(poolData.pool_balance) + penalty);
+          const newPoolBal = Number(poolData.pool_balance) + penalty;
           await supabase.from('treasury_pool').update({ pool_balance: newPoolBal, updated_at: new Date().toISOString() }).eq('id', 1);
         }
       } catch (e) { console.error('Treasury credit failed:', e); }
@@ -1092,7 +1092,7 @@ export default function DashboardPage() {
     const unlockDate = new Date(meta.unlockDate || lockItem.date);
     
     const daysLocked = Math.max(30, Math.floor((unlockDate.getTime() - start.getTime()) / (1000 * 3600 * 24)));
-    const interest = Math.round(principal * 0.05 * (daysLocked / 365)); 
+    const interest = Number(principal * 0.05 * (daysLocked / 365)); // 🔥 NO ROUNDING
     const total = principal + interest;
 
     const saved = await updateMainPool(mainPool + total);
@@ -1126,7 +1126,7 @@ export default function DashboardPage() {
   };
 
   const handleDeposit = async () => {
-    const amt = Math.round(parseFloat(depositAmountInput));
+    const amt = parseFloat(depositAmountInput); // 🔥 NO ROUNDING
     if (isNaN(amt) || amt <= 0) return setMessage('Enter a valid deposit amount.');
 
     const targetPhone = phoneInput.trim() || user?.phone || '';
@@ -1229,14 +1229,15 @@ export default function DashboardPage() {
     }
     const extractedCode = codeMatch[1];
 
-    // 🔥 FIX: Extract amount from SMS instead of defaulting to 1000
-    let amt = Math.round(parseFloat(depositAmountInput));
+    // 🔥 FIX: Uses the REAL amount typed in the box or extracted. NO ROUNDING.
+    let amt = parseFloat(depositAmountInput);
     const amountMatch = manualSmsText.match(/(?:Ksh|KES|Kshs)\s*([\d,]+(?:\.\d{2})?)/i);
     
     if (amountMatch && amountMatch[1]) {
-      amt = Math.round(parseFloat(amountMatch[1].replace(/,/g, '')));
+      amt = parseFloat(amountMatch[1].replace(/,/g, ''));
     }
 
+    // If they didn't type it AND it's not in the SMS, block the submission.
     if (isNaN(amt) || amt <= 0) {
       return setMessage('Could not detect the amount. Please type the amount in the box above.');
     }
@@ -1291,16 +1292,16 @@ export default function DashboardPage() {
       return setMessage('You cannot withdraw savings while you have an active loan.');
     }
 
-    const grossAmt = Math.round(parseFloat(withdrawAmountInput));
+    const grossAmt = parseFloat(withdrawAmountInput); // 🔥 NO ROUNDING
     if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
     if (grossAmt > mainPool) return setMessage(`Insufficient savings. Balance: ${formatMoney(mainPool)}.`);
 
     const gwfFee = calculateGWF(grossAmt);
-    const netPayout = Math.round(grossAmt - gwfFee);
+    const netPayout = grossAmt - gwfFee;
 
     const item: LedgerItem = {
       id: Date.now().toString(),
-      type: `Withdrawal (Net: KES ${netPayout.toLocaleString()})`,
+      type: `Withdrawal (Net: ${formatMoney(netPayout)})`,
       amount: grossAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1351,15 +1352,15 @@ export default function DashboardPage() {
   const calculatedMaxLimit = user?.loan_limit || 0;
   const isEligibleForNewLoan = meetsBaseEligibility;
 
-  const parsedLoanAmt = Math.round(parseFloat(loanAmountInput) || 0);
+  const parsedLoanAmt = parseFloat(loanAmountInput) || 0; // 🔥 NO ROUNDING
 
-  const baseLoanFee = Math.round(parsedLoanAmt * 0.05);
+  const baseLoanFee = Number(parsedLoanAmt * 0.05);
   const loanGwfFee = calculateGWF(parsedLoanAmt);
   const totalFee = baseLoanFee + loanGwfFee;
   const amountSentToMpesa = Math.max(0, parsedLoanAmt - totalFee);
 
   const loanInterestRate = loanTermWeeks === 1 ? 0.05 : loanTermWeeks === 2 ? 0.10 : 0.20;
-  const loanInterestAmount = Math.round(parsedLoanAmt * loanInterestRate);
+  const loanInterestAmount = Number(parsedLoanAmt * loanInterestRate);
   const totalLoanRepay = parsedLoanAmt + loanInterestAmount;
 
   const handleApplyLoan = async () => {
@@ -1434,7 +1435,7 @@ export default function DashboardPage() {
     if (!activeLoan) return;
     if (!repayPhoneInput || repayPhoneInput.length < 10) return setMessage('Enter a valid M-Pesa phone number.');
 
-    const amt = Math.round(parseFloat(repayAmountInput));
+    const amt = parseFloat(repayAmountInput); // 🔥 NO ROUNDING
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
 
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
@@ -1508,7 +1509,7 @@ export default function DashboardPage() {
     }
     const extractedCode = codeMatch[1];
 
-    const amt = Math.round(parseFloat(repayAmountInput));
+    const amt = parseFloat(repayAmountInput); // 🔥 NO ROUNDING
     const remaining = activeLoan.totalRepay - activeLoan.amountPaid;
 
     if (remaining <= 0) return setMessage('Your loan is already fully repaid.');
@@ -1533,12 +1534,13 @@ export default function DashboardPage() {
     await notifyAdmin('New Repayment 💰', `Loan repayment from ${user?.phone} for ${formatMoney(amt)}`);
   };
 
-  const parsedWithdrawAmt = Math.round(parseFloat(withdrawAmountInput) || 0);
+  const parsedWithdrawAmt = parseFloat(withdrawAmountInput) || 0; // 🔥 NO ROUNDING
   const currentGWFFee = calculateGWF(parsedWithdrawAmt);
   const currentNetPayout = Math.max(0, parsedWithdrawAmt - currentGWFFee);
 
   const packageEarnings = activeSubscriptions.reduce((sum, s) => sum + s.accumulatedBalance, 0);
 
+  // 🔥 FORMATS REAL VALUES TO 2 DECIMAL PLACES (e.g., 0.60, 0.07, 1.67)
   const formatMoney = (amount: number) => {
     if (hideBalances) return 'KES ****';
     const num = Number(amount) || 0;
