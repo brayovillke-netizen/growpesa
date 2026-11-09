@@ -196,7 +196,6 @@ export default function DashboardPage() {
       setHasSavedBio(true);
     }
 
-    // 🔥 Check initial notification status
     if ('Notification' in window && Notification.permission === 'granted') {
       setNotifGranted(true);
     }
@@ -229,7 +228,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🔥 NEW: Function to handle the header notification button
   const handleEnableNotifications = async () => {
     if (!('Notification' in window)) {
       alert('Your browser does not support notifications.');
@@ -244,7 +242,7 @@ export default function DashboardPage() {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       setNotifGranted(true);
-      localStorage.setItem('growpesa_notif_dismissed', 'true'); // Stop the popup
+      localStorage.setItem('growpesa_notif_dismissed', 'true');
       
       try {
         const registration = await navigator.serviceWorker.ready;
@@ -255,16 +253,24 @@ export default function DashboardPage() {
 
         if (user?.phone) {
           await supabase.from('push_subscriptions').delete().eq('phone', user.phone);
-          await supabase.from('push_subscriptions').insert({
+          const { error } = await supabase.from('push_subscriptions').insert({
             phone: user.phone,
             subscription: subscription
           });
+          
+          if (error) {
+            // 🔥 THIS WILL SHOW US EXACTLY WHAT SUPABASE IS COMPLAINING ABOUT
+            console.error("Supabase Save Error:", error);
+            alert(`Database Error: ${error.message}\nDid you disable RLS?`);
+            return;
+          }
         }
-      } catch (e) {
+        alert('Push Notifications Enabled! 🚀 You will now get alerts even when the app is closed.');
+        triggerNotification('Alerts Enabled 🚀', 'You will now receive system notifications.');
+      } catch (e: any) {
         console.error('Subscription save failed', e);
+        alert(`Subscription failed: ${e.message}`);
       }
-      
-      triggerNotification('Alerts Enabled 🚀', 'You will now receive system notifications.');
     }
   };
 
@@ -1816,15 +1822,19 @@ export default function DashboardPage() {
             <button onClick={() => setShowChangePin(true)} className="text-[9px] text-emerald-400 font-bold hover:underline">
               Change PIN
             </button>
-            <span className="text-slate-600 text-[9px]">•</span>
             
-            {/* 🔥 NOTIFICATION TOGGLE */}
-            <button 
-              onClick={handleEnableNotifications} 
-              className={`text-[9px] font-bold transition ${notifGranted ? 'text-emerald-400 cursor-default' : 'text-amber-400 hover:underline'}`}
-            >
-              {notifGranted ? '🔔 Alerts Active' : '🔕 Enable Alerts'}
-            </button>
+            {/* 🔥 NOTIFICATION TOGGLE: Completely hidden if notifGranted is true */}
+            {!notifGranted && (
+              <>
+                <span className="text-slate-600 text-[9px]">•</span>
+                <button 
+                  onClick={handleEnableNotifications} 
+                  className="text-[9px] text-amber-400 font-bold hover:underline"
+                >
+                  🔕 Enable Alerts
+                </button>
+              </>
+            )}
 
             {bioSupported && (
               <>

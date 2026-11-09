@@ -8,7 +8,6 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
 });
 
-// 1. Listen for Push messages from the Backend
 self.addEventListener('push', function(event) {
   if (event.data) {
     const data = event.data.json();
@@ -25,7 +24,6 @@ self.addEventListener('push', function(event) {
   }
 });
 
-// 2. Open the app when notification is clicked
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   event.waitUntil(
