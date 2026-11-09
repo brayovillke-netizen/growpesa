@@ -4,78 +4,71 @@ import { useState, useEffect } from 'react';
 import { Bell, X } from 'lucide-react';
 
 export function PushNotificationManager({ userPhone }: { userPhone: string }) {
-  const [isSupported, setIsSupported] = useState(false);
-  const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [isIos, setIsIos] = useState(false);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      setIsSupported(true);
-      registerServiceWorker();
+    // Check if it's iOS
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIos(isIOSDevice);
+
+    // If the browser doesn't support notifications, exit
+    if (!('Notification' in window)) return;
+
+    // If they already granted or denied, exit
+    if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+      return;
     }
 
-    // Check if previously dismissed
+    // Check if they previously dismissed the custom prompt
     if (localStorage.getItem('growpesa_notif_dismissed') === 'true') {
-      setShowPrompt(false);
-    } else {
-      // Delay showing the prompt slightly so it doesn't pop up instantly
-      const timer = setTimeout(() => setShowPrompt(true), 5000);
-      return () => clearTimeout(timer);
+      return;
     }
+
+    // Show prompt after 3 seconds
+    const timer = setTimeout(() => setShowPrompt(true), 3000);
+    return () => clearTimeout(timer);
   }, []);
 
-  async function registerServiceWorker() {
+  const subscribeToPush = async () => {
+    if (!('Notification' in window)) return;
+    
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/',
-        updateViaCache: 'none',
-      });
-      const sub = await registration.pushManager.getSubscription();
-      setSubscription(sub);
-    } catch (error) {
-      console.error('Service Worker registration failed:', error);
-    }
-  }
-
-  async function subscribeToPush() {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        alert('You need to allow notifications in your browser settings.');
-        setShowPrompt(false);
-        localStorage.setItem('growpesa_notif_dismissed', 'true');
-        return;
-      }
-
-      // Note: You need a VAPID public key from your backend to fully implement this
-      // For now, we just request permission and let the backend handle the rest if configured
-      setShowPrompt(false);
-      localStorage.setItem('growpesa_notif_dismissed', 'true');
       
-      // You can optionally send the subscription object to your backend here
-      // await fetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ phone: userPhone, sub }) });
-
+      if (permission === 'granted') {
+        // Here you would normally fetch a VAPID key and subscribe
+        // await fetch('/api/push/subscribe', { ... })
+        localStorage.setItem('growpesa_notif_dismissed', 'true');
+        setShowPrompt(false);
+      } else {
+        localStorage.setItem('growpesa_notif_dismissed', 'true');
+        setShowPrompt(false);
+      }
     } catch (error) {
-      console.error('Failed to subscribe to push:', error);
-      alert('Failed to enable notifications. Please check your browser settings.');
+      console.error('Error requesting notification permission', error);
     }
-  }
+  };
 
-  if (!isSupported || !showPrompt) return null;
+  if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-2xl relative overflow-hidden">
+    <div className="fixed top-4 left-4 right-4 z-[100] max-w-md mx-auto animate-in slide-in-from-top-4 fade-in duration-300">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 flex items-center justify-between shadow-2xl relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent pointer-events-none"></div>
         <div className="flex items-center gap-3 relative z-10">
           <div className="bg-emerald-500/20 p-2.5 rounded-full">
             <Bell className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white">Enable Notifications</h4>
-            <p className="text-xs text-slate-400">Get instant alerts for deposits & loans.</p>
+            <h4 className="text-sm font-bold text-white">
+              {isIos ? 'Add to Home Screen' : 'Enable Notifications'}
+            </h4>
+            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
+              {isIos 
+                ? 'Tap the Share icon below and select "Add to Home Screen" to enable alerts.' 
+                : 'Get instant alerts for deposits & loans.'}
+            </p>
           </div>
         </div>
         <div className="flex gap-2 relative z-10 items-center">
@@ -88,12 +81,15 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
           >
             <X className="w-4 h-4" />
           </button>
-          <button 
-            onClick={subscribeToPush} 
-            className="bg-emerald-500 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg whitespace-nowrap shadow-md"
-          >
-            Allow
-          </button>
+          
+          {!isIos && (
+            <button 
+              onClick={subscribeToPush} 
+              className="bg-emerald-500 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-md"
+            >
+              Allow
+            </button>
+          )}
         </div>
       </div>
     </div>

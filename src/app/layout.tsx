@@ -1,11 +1,16 @@
 ﻿import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css"; // 🔥 THIS IS THE MISSING PIECE
+import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const viewport: Viewport = {
   themeColor: "#10b981",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Prevents zooming, making it feel like an app
+  viewportFit: "cover", // Handles notches on modern phones
 };
 
 export const metadata: Metadata = {
@@ -14,7 +19,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent", // Makes the top bar blend with the app
     title: "GrowPesa",
   },
 };
@@ -37,10 +42,10 @@ export default function RootLayout({
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').then(
                     function(registration) {
-                      console.log('Service Worker registration successful with scope: ', registration.scope);
+                      console.log('SW registered');
                     },
                     function(err) {
-                      console.log('Service Worker registration failed: ', err);
+                      console.log('SW registration failed: ', err);
                     }
                   );
                 });
