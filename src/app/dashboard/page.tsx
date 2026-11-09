@@ -195,6 +195,27 @@ export default function DashboardPage() {
     }
   };
 
+  // 🔥 NEW: Helper to trigger both in-app and system notifications
+  const triggerNotification = async (title: string, body: string) => {
+    // 1. Always show in-app banner
+    setMessage(body);
+
+    // 2. Try OS system notification
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        registration.showNotification(title, {
+          body: body,
+          icon: '/icon-192x192.png',
+          vibrate: [200, 100, 200],
+          tag: 'growpesa-alert',
+        });
+      } catch (err) {
+        console.error('System notification failed', err);
+      }
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
@@ -956,11 +977,9 @@ export default function DashboardPage() {
 
   const handleEmergencyUnlock = async (lockItem: LedgerItem) => {
     const principal = lockItem.amount;
-    // 🔥 FIX: Use Math.ceil so 2% of small amounts (like 20) is applied as at least 1 KES
     const penalty = Math.ceil(principal * 0.02); 
     const amountReturned = principal - penalty;
 
-    // 🔥 FIX: Hide the math in the background and only show clear instructions to the user
     const confirm = window.confirm(
       `Are you sure you want to break this lock?\n\n` +
       `A 2% penalty of KES ${penalty.toLocaleString()} will be applied.\n` +
@@ -1006,7 +1025,6 @@ export default function DashboardPage() {
 
     await saveLedger([recordItem, ...updated], recordItem);
     
-    // Simple success message
     setMessage(`Emergency unlock successful. KES ${amountReturned.toLocaleString()} returned to your wallet.`);
   };
 
@@ -1089,7 +1107,6 @@ export default function DashboardPage() {
         throw new Error(JSON.stringify(data));
       }
 
-      // 🔥 Use the PayBridge UUID returned from the backend
       const activeReference = data.finalReference || tempReference;
 
       setMessage(`STK push sent to ${targetPhone}. Please enter your M-Pesa PIN.`);
@@ -1106,12 +1123,12 @@ export default function DashboardPage() {
         if (checkItem?.status === 'COMPLETED') {
           clearInterval(pollInterval);
           setIsPushing(false);
-          setMessage('🎉 Deposit successful! Balance updated.');
+          triggerNotification('Deposit Successful 🎉', 'Your balance has been updated.');
           syncFromServer(user!);
         } else if (checkItem?.status === 'FAILED') {
           clearInterval(pollInterval);
           setIsPushing(false);
-          setMessage('❌ Transaction failed or cancelled.');
+          triggerNotification('Deposit Failed ❌', 'The transaction was cancelled or failed.');
         } else if (attempts > 20) {
           clearInterval(pollInterval);
           setIsPushing(false);
@@ -1119,13 +1136,13 @@ export default function DashboardPage() {
           const timeoutItem: LedgerItem = { ...newItem, code: activeReference, status: 'TIMEOUT / PASTE SMS' };
           await submitToServerQueue(timeoutItem);
           
-          setMessage('STK push timed out. If money was deducted, paste SMS below.');
+          triggerNotification('STK Timeout ⏳', 'STK push timed out. If money was deducted, paste SMS below.');
           setShowManualDeposit(true);
         }
       }, 3000);
 
     } catch (err: any) {
-      setMessage(`STK Push error: ${err?.message || 'unknown'}.`);
+      triggerNotification('STK Push Error ❌', `${err?.message || 'unknown'}.`);
       setIsPushing(false);
       setShowManualDeposit(true);
       let errItem: LedgerItem | null = null;
@@ -1226,7 +1243,7 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    setMessage(`Withdrawal submitted! You will receive KES ${netPayout.toLocaleString()} on your M-Pesa within 24 hours.`);
+    triggerNotification('Withdrawal Submitted ⏳', `Your request for KES ${netPayout.toLocaleString()} is pending approval.`);
     
     await notifyAdmin('New Withdrawal 💸', `Withdrawal request from ${user?.phone} for KES ${grossAmt}`);
   };
@@ -1341,7 +1358,7 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    setMessage(`Loan of KES ${parsedLoanAmt.toLocaleString()} submitted. A total fee of KES ${totalFee.toLocaleString()} (5% + GWF) will be deducted. You will receive KES ${amountSentToMpesa.toLocaleString()} upon approval.`);
+    triggerNotification('Loan Requested 🏦', `Your loan of KES ${parsedLoanAmt.toLocaleString()} is pending approval.`);
     setRepayAmountInput('');
     
     await notifyAdmin('New Loan Request 🏦', `Loan request from ${user?.phone} for KES ${parsedLoanAmt}`);
@@ -1380,7 +1397,7 @@ export default function DashboardPage() {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, phone: repayPhoneInput, reference: reqCode }), // Pass reference to backend
+        body: JSON.stringify({ amount: amt, phone: repayPhoneInput, reference: reqCode }),
       });
       const data = await res.json();
 
@@ -1391,7 +1408,7 @@ export default function DashboardPage() {
       setMessage(`STK push sent. Enter your M-Pesa PIN. Admin will verify your payment.`);
       setRepayAmountInput('');
     } catch (err: any) {
-      setMessage(`STK Push error: ${err?.message || 'unknown'}.`);
+      triggerNotification('Repayment Failed ❌', `${err?.message || 'unknown'}.`);
 
       let errItem: LedgerItem | null = null;
       setLedger((prev) => {

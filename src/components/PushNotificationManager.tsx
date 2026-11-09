@@ -1,44 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, X } from 'lucide-react';
 
 export function PushNotificationManager({ userPhone }: { userPhone: string }) {
-  // FORCE IT TO SHOW FOR TESTING
-  const [showPrompt, setShowPrompt] = useState(true);
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  useEffect(() => {
+    // If browser doesn't support or user already decided, exit
+    if (!('Notification' in window) || Notification.permission !== 'default') return;
+    if (localStorage.getItem('growpesa_notif_dismissed') === 'true') return;
+
+    // Show prompt after 3 seconds
+    const timer = setTimeout(() => setShowPrompt(true), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const subscribeToPush = async () => {
-    if (!('Notification' in window)) {
-      alert("❌ Your browser does NOT support push notifications.");
-      return;
-    }
-    
     try {
       const permission = await Notification.requestPermission();
-      
-      if (permission === 'granted') {
+      if (permission === 'granted' || permission === 'denied') {
+        localStorage.setItem('growpesa_notif_dismissed', 'true');
         setShowPrompt(false);
-        
-        // 🔥 FIRE A TEST NOTIFICATION
-        try {
-          // Using the Service Worker to show the notification (Best for Android)
-          const registration = await navigator.serviceWorker.ready;
-          registration.showNotification('GrowPesa Test 🚀', {
-            body: 'Notifications are working perfectly!',
-            icon: '/icon-192x192.png',
-            vibrate: [200, 100, 200],
-            tag: 'test-notification'
-          });
-        } catch (err) {
-          // Fallback if Service Worker isn't ready (Works on Desktop/iOS)
-          new Notification('GrowPesa Test 🚀', {
-            body: 'Notifications are working perfectly!',
-            icon: '/icon-192x192.png'
-          });
-        }
       }
     } catch (error) {
-      alert(`⚠️ Error requesting permission: ${error}`);
+      console.error('Error requesting permission', error);
     }
   };
 
@@ -53,22 +39,20 @@ export function PushNotificationManager({ userPhone }: { userPhone: string }) {
             <Bell className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white">
-              Enable Notifications
-            </h4>
-            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
-              Get instant alerts for deposits & loans.
-            </p>
+            <h4 className="text-sm font-bold text-white">Enable Notifications</h4>
+            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">Get alerts even when the app is closed.</p>
           </div>
         </div>
         <div className="flex gap-2 relative z-10 items-center">
           <button 
-            onClick={() => setShowPrompt(false)} 
+            onClick={() => { 
+              setShowPrompt(false); 
+              localStorage.setItem('growpesa_notif_dismissed', 'true'); 
+            }} 
             className="text-slate-500 hover:text-white p-1"
           >
             <X className="w-4 h-4" />
           </button>
-          
           <button 
             onClick={subscribeToPush} 
             className="bg-emerald-500 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-md"
