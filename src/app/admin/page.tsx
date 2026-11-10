@@ -215,7 +215,7 @@ export default function AdminPage() {
         const gwfFee = calculateGWF(amt);
         const netPayout = Math.max(0, amt - gwfFee);
         poolUpdate = Math.max(0, mainPool - netPayout);
-        newMemberSavings = Math.max(0, currentSavings - amt);
+        // 🔥 FIX: Balance was already deducted on request. No further deduction needed here.
       } else if (item.type.includes('Loan Request')) {
         const loanFee = Number(amt * 0.05);
         const gwfFee = calculateGWF(amt);
@@ -245,22 +245,14 @@ export default function AdminPage() {
         setMainPool(poolUpdate);
       }
 
-      if (item.phone && (item.type.includes('Deposit') || item.type.includes('Withdrawal'))) {
+      // 🔥 FIX: Only update member savings for Deposits (Since Withdrawal was already deducted)
+      if (item.phone && item.type.includes('Deposit')) {
         const { error: savingsError } = await supabase
           .from('members')
-          .update({ savings_balance: newMemberSavings })
+          .update({ savings_balance: newMemberSavings, total_deposited: totalDeposited })
           .eq('phone', item.phone);
         
         if (savingsError) throw new Error(`Failed to update savings balance: ${savingsError.message}`);
-
-        try {
-          await supabase
-            .from('members')
-            .update({ total_deposited: totalDeposited })
-            .eq('phone', item.phone);
-        } catch (depositErr) {
-          console.warn("Could not update total_deposited tracker, but balance saved.");
-        }
       }
 
       if (item.type.includes('Deposit') && referredBy && !referralPaid && totalDeposited >= 100) {
@@ -344,19 +336,45 @@ export default function AdminPage() {
 
       if (error) throw error;
 
+      // 🔥 CRITICAL FIX: REFUND THE MEMBER IF WE ARE REJECTING A WITHDRAWAL
+      if (item.type.includes('Withdrawal') && item.phone) {
+        const amt = Number(item.amount);
+        
+        const { data: memberData } = await supabase
+          .from('members')
+          .select('savings_balance')
+          .eq('phone', item.phone)
+          .single();
+
+        if (memberData) {
+          const refundedBalance = Number(memberData.savings_balance) + amt;
+          
+          await supabase
+            .from('members')
+            .update({ savings_balance: refundedBalance })
+            .eq('phone', item.phone);
+        }
+      }
+
       if (item.phone) {
+        let rejectBody = `Your ${item.type} request of KES ${item.amount} was rejected. Please contact support.`;
+        if (item.type.includes('Withdrawal')) {
+          rejectBody = `Your withdrawal request was rejected. KES ${item.amount} has been refunded to your available balance.`;
+        }
+
         fetch('/api/push/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phone: item.phone,
             title: 'Transaction Rejected ❌',
-            body: `Your ${item.type} request of KES ${item.amount} was rejected. Please contact support.`
+            body: rejectBody
           })
         }).catch(console.error);
       }
       
       await fetchQueue();
+      if (activeAdminTab === 'members') await fetchMembers();
       setMessage(`Rejected ${item.code}`);
     } catch (e: any) {
       setMessage(`Reject error: ${e.message}`);
@@ -438,7 +456,6 @@ export default function AdminPage() {
   const availableCash = Math.max(0, mainPool - loanBookOutstanding);
   const totalSystem = mainPool + totalMemberSavings;
 
-  // 🔥 FIX: Sanitize historical data for Admin Activity feed too
   const recentCompleted = queue
     .filter(q => q.status === 'COMPLETED')
     .slice(0, 25)
@@ -819,7 +836,7 @@ export default function AdminPage() {
                             </div>
                             {isWithdrawal && (
                               <div className="text-[9px] text-slate-500 text-center bg-slate-900 py-1 rounded-lg">
-                                Deduct <strong className="text-white">{formatMoney(amt)}</strong> from Member Savings. (GWF Fee: {formatMoney(gwfFee)})
+                                Funds already deducted on request. Send <strong className="text-white">{formatMoney(netToSend)}</strong> to Member. (GWF Fee: {formatMoney(gwfFee)})
                               </div>
                             )}
                             {isLoan && (

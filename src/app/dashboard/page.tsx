@@ -1295,6 +1295,12 @@ export default function DashboardPage() {
     if (isNaN(grossAmt) || grossAmt < 50) return setMessage('Minimum withdrawal is KES 50.');
     if (grossAmt > mainPool) return setMessage(`Insufficient savings. Balance: ${formatMoney(mainPool)}.`);
 
+    // 🔥 CRITICAL FIX: Deduct the balance IMMEDIATELY to lock the funds
+    const deducted = await updateMainPool(mainPool - grossAmt);
+    if (!deducted) {
+      return setMessage('Failed to lock funds for withdrawal. Please try again.');
+    }
+
     const gwfFee = calculateGWF(grossAmt);
     const netPayout = grossAmt - gwfFee;
 
@@ -1309,7 +1315,7 @@ export default function DashboardPage() {
     };
     await saveLedger([item, ...ledger], item);
     
-    triggerNotification('Withdrawal Submitted ⏳', `Your request for ${formatMoney(netPayout)} is pending approval.`);
+    triggerNotification('Withdrawal Submitted ⏳', `Your request for ${formatMoney(netPayout)} is pending approval. Funds are on hold.`);
     
     await notifyAdmin('New Withdrawal 💸', `Withdrawal request from ${user?.phone} for ${formatMoney(grossAmt)}`);
   };
