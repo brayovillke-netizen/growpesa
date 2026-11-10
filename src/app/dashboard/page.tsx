@@ -5,7 +5,7 @@ import InstallPrompt from '@/components/InstallPrompt';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
 import { useBiometrics } from '@/components/BiometricLock';
 import { supabase } from '@/lib/supabase/client';
-import { Settings, X, Bell, Shield, LogOut, Fingerprint } from 'lucide-react';
+import { Settings, X, Bell, Shield, LogOut, Fingerprint, PlusCircle, Copy } from 'lucide-react';
 
 interface LedgerItem {
   id: string;
@@ -1545,7 +1545,6 @@ export default function DashboardPage() {
     return `KES ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // 🔥 FIX: Sanitize historical data to remove "(Net: KES ...)" from display
   const displayLedger = ledger
     .filter(item => {
       if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
@@ -1873,6 +1872,32 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Referral Program</p>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-slate-400 font-medium">Your Code</p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-black text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                        {user.referral_code || '---'}
+                      </span>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(user.referral_code || '');
+                          alert('Referral code copied!');
+                        }}
+                        className="p-1 bg-slate-800 hover:bg-slate-700 rounded-md transition"
+                      >
+                        <Copy className="w-3 h-3 text-slate-300" />
+                      </button>
+                    </div>
+                  </div>
+                  <button onClick={handleShareReferral} className="w-full py-1.5 bg-indigo-500/20 text-indigo-300 font-bold rounded-lg text-[10px] hover:bg-indigo-500/30 transition">
+                    Share Invite Link
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Security</p>
                 
                 {bioSupported && (
@@ -2074,22 +2099,22 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
-            <button
-              onClick={() => setIsDepositOpen(!isDepositOpen)}
-              disabled={isPushing}
-              className="w-full flex justify-between items-center"
-            >
-              <h3 className="font-black text-base text-white flex items-center gap-2">
-                <span className="text-emerald-400">💵</span> {isReviewMode ? 'Log Transaction' : 'Deposit Funds'}
-              </h3>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold">
-                {isDepositOpen ? 'Close' : 'Open Form'}
-              </span>
-            </button>
+          {/* PROMINENT DEPOSIT BUTTON */}
+          <button
+            onClick={() => setIsDepositOpen(!isDepositOpen)}
+            disabled={isPushing}
+            className={`w-full py-4 rounded-2xl font-black text-lg shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 ${
+              isDepositOpen 
+                ? 'bg-slate-800 text-white border border-slate-700' 
+                : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-emerald-500/30'
+            }`}
+          >
+            {isDepositOpen ? 'Close Deposit Form' : <><PlusCircle className="w-6 h-6" /> Deposit Funds</>}
+          </button>
 
-            {isDepositOpen && (
-              <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+          {isDepositOpen && (
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl animate-in slide-in-from-top-2">
+              <div className="space-y-3">
                 {!showManualDeposit ? (
                   <>
                     <div>
@@ -2121,7 +2146,7 @@ export default function DashboardPage() {
                     <button
                       onClick={handleDeposit}
                       disabled={isPushing || !depositAmountInput} 
-                      className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="w-full py-3.5 mt-2 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed active:scale-95"
                     >
                       {isPushing ? (
                         <>
@@ -2165,15 +2190,15 @@ export default function DashboardPage() {
                     />
                     <button
                       onClick={handleDirectSmsSubmit}
-                      className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer"
+                      className="w-full py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm shadow-lg hover:bg-emerald-400 transition cursor-pointer active:scale-95"
                     >
                       {isReviewMode ? 'Log Transaction' : 'Submit Confirmation'}
                     </button>
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-3xl bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
@@ -2186,7 +2211,7 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={() => setActiveTab('lock')}
-                className="w-full mt-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer"
+                className="w-full mt-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer active:scale-95"
               >
                 Go to Vault
               </button>
@@ -2197,12 +2222,12 @@ export default function DashboardPage() {
                 <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
                 <h3 className="font-black text-sm text-white mt-0.5">Invite Friends</h3>
                 <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                  Share your link to earn rewards!
+                  Earn up to KES 50 per referral.
                 </p>
               </div>
               <button
                 onClick={handleShareReferral}
-                className="w-full mt-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center justify-center gap-1"
+                className="w-full mt-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center justify-center gap-1 active:scale-95"
               >
                 <span>↗️ Share</span>
               </button>
@@ -2232,7 +2257,7 @@ export default function DashboardPage() {
                       <div className="flex justify-between items-center">
                         <div className="max-w-[65%]">
                           <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
-                          <p className="text-[8px] text-slate-500 font-medium">{item.date} · {item.code}</p>
+                          <p className="text-[9px] text-slate-500 font-medium">{item.date} · {item.code}</p>
                         </div>
                         <div className="text-right">
                           <p
@@ -2363,7 +2388,7 @@ export default function DashboardPage() {
                     <button
                       onClick={() => handleSweepSub(sub.tierId)}
                       disabled={sub.accumulatedBalance <= 0}
-                      className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center"
+                      className="w-full py-3 relative z-10 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex flex-col items-center justify-center active:scale-95"
                     >
                       <span>
                         {isReviewMode 
@@ -2421,7 +2446,7 @@ export default function DashboardPage() {
                       ) : (
                         <button
                           onClick={() => handleSubscribeTier(tier.id)}
-                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[10px] transition shadow-sm mt-1"
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[10px] transition shadow-sm mt-1 active:scale-95"
                         >
                           Join
                         </button>
@@ -2474,7 +2499,7 @@ export default function DashboardPage() {
             <button
               onClick={handleCreateLock}
               disabled={!lockAmountInput || !lockDateInput || mainPool < Number(lockAmountInput)}
-              className="w-full py-3.5 mt-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black rounded-xl text-sm transition shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:grayscale"
+              className="w-full py-3.5 mt-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black rounded-xl text-sm transition shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:grayscale active:scale-95"
             >
               Lock Funds
             </button>
@@ -2510,9 +2535,9 @@ export default function DashboardPage() {
                           <p className="text-[9px] text-slate-400">Unlocks: {unlockDateStr}</p>
                         </div>
                         {isMatured ? (
-                           <button onClick={() => handleClaimMaturedLock(lock)} className="px-3 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs animate-pulse">Claim</button>
+                           <button onClick={() => handleClaimMaturedLock(lock)} className="px-3 py-1.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs animate-pulse active:scale-95">Claim</button>
                         ) : (
-                          <button onClick={() => handleEmergencyUnlock(lock)} className="px-3 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold rounded-lg text-[10px]">Emergency Unlock</button>
+                          <button onClick={() => handleEmergencyUnlock(lock)} className="px-3 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold rounded-lg text-[10px] active:scale-95">Emergency Unlock</button>
                         )}
                       </div>
                       {!isMatured && (
@@ -2570,7 +2595,7 @@ export default function DashboardPage() {
             <button
               onClick={handleWithdraw}
               disabled={mainPool <= 0 || parsedWithdrawAmt < 50 || parsedWithdrawAmt > mainPool || hasUnpaidLoan}
-              className="w-full py-3.5 mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2"
+              className="w-full py-3.5 mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale flex justify-center items-center gap-2 active:scale-95"
             >
               {hasUnpaidLoan ? (
                 <>🚫 Active Loan</>
@@ -2719,7 +2744,7 @@ export default function DashboardPage() {
                         <button
                           onClick={handleRepaySTK}
                           disabled={loading}
-                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20 disabled:opacity-50"
+                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20 disabled:opacity-50 active:scale-95"
                         >
                           {loading ? 'Sending...' : 'Trigger STK Push'}
                         </button>
@@ -2734,7 +2759,7 @@ export default function DashboardPage() {
                         />
                         <button
                           onClick={handleRepaySMS}
-                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20"
+                          className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black rounded-xl text-xs transition shadow-lg shadow-rose-500/20 active:scale-95"
                         >
                           Submit SMS
                         </button>
@@ -2781,7 +2806,7 @@ export default function DashboardPage() {
                         <button
                           onClick={handleRepaySTK}
                           disabled={loading}
-                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 active:scale-95"
                         >
                           {loading ? 'Sending...' : 'Trigger STK Push'}
                         </button>
@@ -2796,7 +2821,7 @@ export default function DashboardPage() {
                         />
                         <button
                           onClick={handleRepaySMS}
-                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
+                          className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95"
                         >
                           Submit SMS
                         </button>
@@ -2863,7 +2888,7 @@ export default function DashboardPage() {
                     <button
                       onClick={handleApplyLoan}
                       disabled={parsedLoanAmt <= 0 || parsedLoanAmt > calculatedMaxLimit}
-                      className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale"
+                      className="w-full py-3.5 mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-xl text-sm hover:opacity-90 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:grayscale active:scale-95"
                     >
                       Submit Request
                     </button>
