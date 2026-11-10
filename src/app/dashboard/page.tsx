@@ -1555,7 +1555,6 @@ export default function DashboardPage() {
       let cleanType = item.type.replace(/\(Net:.*?\)/gi, '').replace('Withdrawal ', 'Withdrawal').trim();
       let cleanCode = item.code;
       
-      // Truncate long UUIDs for cleaner display
       if (cleanCode.length > 12 && cleanCode.includes('-')) {
         cleanCode = cleanCode.substring(0, 8) + '...';
       }
@@ -1961,6 +1960,21 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Community</p>
+                <a
+                  href="https://twitter.com/intent/follow?screen_name=growpesax"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 hover:border-slate-600 transition"
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
+                    𝕏 Follow @growpesax
+                  </div>
+                  <span className="text-[10px] text-slate-500">→</span>
+                </a>
+              </div>
+
               <button onClick={handleLogout} className="w-full py-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-rose-500/20 transition">
                 <LogOut className="w-4 h-4"/> Sign Out
               </button>
@@ -1980,7 +1994,15 @@ export default function DashboardPage() {
               </button>
             </div>
             
-            <div className="p-4 overflow-y-auto space-y-2 flex-1">
+            <div 
+              className="p-4 overflow-y-auto space-y-2 flex-1"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              <style jsx>{`
+                div::-webkit-scrollbar {
+                  display: none;
+                }
+              `}</style>
               {displayLedger.map((item) => (
                 <div key={item.id} className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
                   <div className="flex justify-between items-center">
@@ -2403,7 +2425,15 @@ export default function DashboardPage() {
               <span className="text-emerald-400">💎</span> Available Tiers
             </h3>
             
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            <div 
+              className="space-y-2 max-h-[420px] overflow-y-auto pr-1"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              <style jsx>{`
+                div::-webkit-scrollbar {
+                  display: none;
+                }
+              `}</style>
               {PACKAGE_TIERS.map((tier) => {
                 const isSubscribed = activeSubscriptions.some((s) => s.tierId === tier.id);
                 const hasEnough = mainPool >= tier.entry;
@@ -2489,6 +2519,7 @@ export default function DashboardPage() {
                 min={new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]}
                 onChange={(e) => setLockDateInput(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-blue-500"
+                style={{ colorScheme: 'dark' }}
               />
             </div>
 
