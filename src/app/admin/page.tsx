@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
+import { Download, Eye, EyeOff, LogOut } from 'lucide-react';
 
 interface LedgerItem {
   id: string;
@@ -66,7 +67,6 @@ export default function AdminPage() {
   const [hideBalances, setHideBalances] = useState<boolean>(false);
   const [isQueueExpanded, setIsQueueExpanded] = useState<boolean>(false);
 
-  // 🔥 NEW: State to hold the item waiting for manual bank payout
   const [payoutItem, setPayoutItem] = useState<LedgerItem | null>(null);
 
   const fetchQueue = useCallback(async () => {
@@ -81,7 +81,7 @@ export default function AdminPage() {
       if (poolError) throw poolError;
       
       if (poolData) {
-        const newPool = Math.round(Number(poolData.pool_balance));
+        const newPool = Number(poolData.pool_balance);
         setMainPool(prev => prev === newPool ? prev : newPool);
       }
 
@@ -96,7 +96,7 @@ export default function AdminPage() {
         id: String(row.id),
         phone: row.phone,
         type: String(row.type || ''),
-        amount: Math.round(Number(row.amount)) || 0,
+        amount: Number(row.amount) || 0,
         date: String(row.date || ''),
         status: String(row.status || '').replace(/_/g, ' '),
         code: String(row.code || ''),
@@ -157,8 +157,6 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [adminUser, activeAdminTab, fetchMembers]);
 
-  // 🔥 NEW: This intercepts the Approve click.
-  // If it's a payout (Withdrawal/Loan), it opens the modal instead of instantly approving.
   const handleApproveClick = (item: LedgerItem) => {
     if (item.type.includes('Withdrawal') || item.type.includes('Loan Request')) {
       setPayoutItem(item);
@@ -170,7 +168,7 @@ export default function AdminPage() {
   const executeApproval = async (item: LedgerItem) => {
     try {
       let poolUpdate: number | undefined = undefined;
-      const amt = Math.round(Number(item.amount));
+      const amt = Number(item.amount);
 
       let currentSavings = 0;
       let referredBy = null;
@@ -210,16 +208,16 @@ export default function AdminPage() {
       let newMemberSavings = currentSavings;
 
       if (item.type.includes('Deposit')) {
-        poolUpdate = Math.round(mainPool + amt);
+        poolUpdate = mainPool + amt;
         newMemberSavings = currentSavings + amt;
         totalDeposited += amt;
       } else if (item.type.includes('Withdrawal')) {
         const gwfFee = calculateGWF(amt);
         const netPayout = Math.max(0, amt - gwfFee);
-        poolUpdate = Math.max(0, Math.round(mainPool - netPayout));
+        poolUpdate = Math.max(0, mainPool - netPayout);
         newMemberSavings = Math.max(0, currentSavings - amt);
       } else if (item.type.includes('Loan Request')) {
-        const loanFee = Math.round(amt * 0.05);
+        const loanFee = Number(amt * 0.05);
         const gwfFee = calculateGWF(amt);
         const netDisbursed = Math.max(0, amt - loanFee - gwfFee);
         
@@ -227,9 +225,9 @@ export default function AdminPage() {
           throw new Error(`Approval denied. This loan would drop the group's liquidity below the 15% floor.`);
         }
         
-        poolUpdate = Math.max(0, Math.round(mainPool - netDisbursed));
+        poolUpdate = Math.max(0, mainPool - netDisbursed);
       } else if (item.type.includes('Loan Repayment')) {
-        poolUpdate = Math.round(mainPool + amt);
+        poolUpdate = mainPool + amt;
       }
 
       const { error: itemError } = await supabase
@@ -310,7 +308,7 @@ export default function AdminPage() {
           pushTitle = 'Withdrawal Sent 💸';
           pushBody = `KES ${net.toLocaleString()} is on its way to your M-Pesa.`;
         } else if (item.type.includes('Loan Request')) {
-          const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+          const fees = Number(amt * 0.05) + calculateGWF(amt);
           const net = amt - fees;
           pushTitle = 'Loan Approved 🏦';
           pushBody = `KES ${net.toLocaleString()} has been sent to your M-Pesa.`;
@@ -416,7 +414,7 @@ export default function AdminPage() {
   });
 
   const totalMemberSavings = members.reduce(
-    (sum, m) => sum + (Math.round(Number(m.savings_balance)) || 0),
+    (sum, m) => sum + (Number(m.savings_balance) || 0),
     0
   );
 
@@ -426,12 +424,12 @@ export default function AdminPage() {
   queue.forEach(item => {
     if (item.status === 'COMPLETED') {
       if (item.type.includes('Loan Request')) {
-        const amt = Math.round(Number(item.amount));
-        const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+        const amt = Number(item.amount);
+        const fees = Number(amt * 0.05) + calculateGWF(amt);
         totalDisbursed += (amt - fees);
       }
       if (item.type.includes('Loan Repayment')) {
-        totalRepaid += Math.round(Number(item.amount));
+        totalRepaid += Number(item.amount);
       }
     }
   });
@@ -443,7 +441,9 @@ export default function AdminPage() {
   const recentCompleted = queue.filter(q => q.status === 'COMPLETED').slice(0, 25);
 
   const formatMoney = (amount: number) => {
-    return hideBalances ? 'KES ****' : `KES ${amount.toLocaleString()}`;
+    if (hideBalances) return 'KES ****';
+    const num = Number(amount) || 0;
+    return `KES ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const getMemberDebt = (phone: string) => {
@@ -453,12 +453,12 @@ export default function AdminPage() {
     queue.forEach(item => {
       if (item.phone === phone && item.status === 'COMPLETED') {
         if (item.type.includes('Loan Request')) {
-          const amt = Math.round(Number(item.amount));
-          const fees = Math.round(amt * 0.05) + calculateGWF(amt);
+          const amt = Number(item.amount);
+          const fees = Number(amt * 0.05) + calculateGWF(amt);
           disbursed += (amt - fees);
         }
         if (item.type.includes('Loan Repayment')) {
-          repaid += Math.round(Number(item.amount));
+          repaid += Number(item.amount);
         }
       }
     });
@@ -471,7 +471,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4 font-sans pb-24 relative">
       
-      {/* 🔥 MODAL FOR MANUAL PAYOUTS */}
+      {/* MODAL FOR MANUAL PAYOUTS */}
       {payoutItem && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm space-y-5 shadow-2xl relative overflow-hidden">
@@ -503,10 +503,11 @@ export default function AdminPage() {
               <div className="border-t border-slate-800/50 pt-3">
                 <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Amount to Send</p>
                 <p className="font-mono text-2xl font-black text-emerald-400">
-                  KES {payoutItem.type.includes('Withdrawal') 
-                    ? (payoutItem.amount - calculateGWF(payoutItem.amount)).toLocaleString()
-                    : (payoutItem.amount - (Math.round(payoutItem.amount * 0.05) + calculateGWF(payoutItem.amount))).toLocaleString()
-                  }
+                  {formatMoney(
+                    payoutItem.type.includes('Withdrawal') 
+                      ? (payoutItem.amount - calculateGWF(payoutItem.amount))
+                      : (payoutItem.amount - (Number(payoutItem.amount * 0.05) + calculateGWF(payoutItem.amount)))
+                  )}
                 </p>
                 <p className="text-[9px] text-slate-400 mt-1">
                   (Net amount after fees)
@@ -554,45 +555,21 @@ export default function AdminPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={async () => {
-              setMessage("Sending test push...");
-              try {
-                const res = await fetch('/api/push/send', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                    phone: adminUser.phone, 
-                    title: 'Admin Test 🚀', 
-                    body: 'This is a test notification from the Treasurer dashboard!' 
-                  })
-                });
-                const data = await res.json();
-                if (data.success) setMessage("Test push sent successfully!");
-                else setMessage(`Error: ${data.error || 'Failed'}`);
-              } catch (err: any) {
-                setMessage(`Fetch error: ${err.message}`);
-              }
-            }}
-            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-[10px] transition cursor-pointer"
-          >
-            🔔 Test Push
-          </button>
-          
-          <button
             onClick={() => setHideBalances(!hideBalances)}
             className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
             title={hideBalances ? "Reveal Balances" : "Hide Balances"}
           >
-            {hideBalances ? '🙈' : '👁️'}
+            {hideBalances ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
           <button
             onClick={() => {
               localStorage.removeItem('growpesa_auth_user');
               window.location.replace('/dashboard');
             }}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-[10px] transition cursor-pointer border border-slate-700"
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
+            title="Exit"
           >
-            Exit
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -627,7 +604,9 @@ export default function AdminPage() {
         <div className="bg-amber-600 p-3 rounded-2xl text-slate-950 shadow-md col-span-2">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Total Treasury Pool (Cash + Loans)</p>
           <p className="text-sm font-black mt-1">{formatMoney(mainPool)}</p>
-          <p className="text-[9px] opacity-70 mt-0.5">{pendingOnly.length} pending requests waiting</p>
+          <p className="text-[9px] opacity-70 mt-0.5">
+            {pendingOnly.length === 0 ? "✅ All caught up! No pending requests." : `${pendingOnly.length} pending requests waiting`}
+          </p>
         </div>
       </div>
 
@@ -711,7 +690,7 @@ export default function AdminPage() {
                 ))}
               </div>
 
-              <div className="space-y-4 pt-2 max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-4 pt-2 max-h-[520px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {filteredQueue.length === 0 ? (
                   <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500">
                     No pending transactions for "{activeFilter}".
@@ -723,12 +702,12 @@ export default function AdminPage() {
                     const isLoan = item.type.includes('Loan Request');
                     const isRepay = item.type.includes('Loan Repayment');
                     
-                    const amt = Math.round(Number(item.amount));
+                    const amt = Number(item.amount);
                     
                     const gwfFee = isWithdrawal ? calculateGWF(amt) : 0;
                     const netPayout = isWithdrawal ? amt - gwfFee : amt;
                     
-                    const loanFees = Math.round(amt * 0.05) + calculateGWF(amt);
+                    const loanFees = Number(amt * 0.05) + calculateGWF(amt);
                     const netToSend = isLoan ? Math.max(0, amt - loanFees) : netPayout;
 
                     const smsText = item.smsMessage || item.sms_message || '';
@@ -869,7 +848,7 @@ export default function AdminPage() {
             </button>
           </div>
 
-          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {members.length === 0 ? (
               <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500">
                 No members found.
@@ -900,15 +879,16 @@ export default function AdminPage() {
                         </span>
                       )}
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-black text-emerald-400">
-                        {formatMoney(Math.round(Number(m.savings_balance) || 0))}
+                    <div className="text-right shrink-0 flex items-center gap-2">
+                      <p className="font-black text-emerald-400 text-sm">
+                        {formatMoney(m.savings_balance)}
                       </p>
                       <button
                         onClick={() => downloadLedgerCSV(m.phone, m.full_name || m.phone)}
-                        className="mt-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-lg text-[9px] transition cursor-pointer border border-slate-700"
+                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg transition border border-slate-700"
+                        title="Download Ledger CSV"
                       >
-                        📥 Ledger CSV
+                        <Download className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -926,7 +906,7 @@ export default function AdminPage() {
             <span className="text-[10px] text-slate-500">{recentCompleted.length} completed</span>
           </div>
 
-          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {recentCompleted.length === 0 ? (
               <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500">
                 No completed transactions yet.
@@ -945,7 +925,7 @@ export default function AdminPage() {
                   >
                     <div className="min-w-0">
                       <p className="font-bold text-white truncate">{item.type}</p>
-                      <p className="text-[10px] text-slate-500">
+                      <p className="text-[10px] text-slate-500 truncate">
                         {item.date} · {item.code} · {item.phone || '—'}
                       </p>
                     </div>
