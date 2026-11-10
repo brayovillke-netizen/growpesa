@@ -438,7 +438,19 @@ export default function AdminPage() {
   const availableCash = Math.max(0, mainPool - loanBookOutstanding);
   const totalSystem = mainPool + totalMemberSavings;
 
-  const recentCompleted = queue.filter(q => q.status === 'COMPLETED').slice(0, 25);
+  // 🔥 FIX: Sanitize historical data for Admin Activity feed too
+  const recentCompleted = queue
+    .filter(q => q.status === 'COMPLETED')
+    .slice(0, 25)
+    .map(item => {
+      const cleanType = item.type.replace(/\(Net:.*?\)/gi, '').replace('Withdrawal ', 'Withdrawal').trim();
+      let cleanCode = item.code;
+      
+      if (cleanCode.length > 12 && cleanCode.includes('-')) {
+        cleanCode = cleanCode.substring(0, 8) + '...';
+      }
+      return { ...item, type: cleanType, code: cleanCode };
+    });
 
   const formatMoney = (amount: number) => {
     if (hideBalances) return 'KES ****';
@@ -655,16 +667,27 @@ export default function AdminPage() {
 
           {!isQueueExpanded ? (
             <div className="py-6 flex flex-col items-center justify-center space-y-3 bg-slate-950/50 rounded-xl border border-slate-800">
-              <span className="text-3xl">📋</span>
-              <p className="text-[11px] font-medium text-slate-400 text-center px-4">
-                You have <strong className="text-amber-400">{pendingOnly.length} pending requests</strong> waiting for review.
-              </p>
-              <button
-                onClick={() => setIsQueueExpanded(true)}
-                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition mt-2"
-              >
-                Open Review Queue
-              </button>
+              {pendingOnly.length === 0 ? (
+                <>
+                  <span className="text-3xl">✅</span>
+                  <p className="text-[11px] font-medium text-slate-400 text-center px-4">
+                    All caught up! No pending requests to review.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <span className="text-3xl">📋</span>
+                  <p className="text-[11px] font-medium text-slate-400 text-center px-4">
+                    You have <strong className="text-amber-400">{pendingOnly.length} pending requests</strong> waiting for review.
+                  </p>
+                  <button
+                    onClick={() => setIsQueueExpanded(true)}
+                    className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition mt-2"
+                  >
+                    Open Review Queue
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <>
