@@ -1552,8 +1552,15 @@ export default function DashboardPage() {
       return true;
     })
     .map(item => {
-      const cleanType = item.type.replace(/\(Net:.*?\)/gi, '').replace('Withdrawal ', 'Withdrawal').trim();
-      return { ...item, type: cleanType };
+      let cleanType = item.type.replace(/\(Net:.*?\)/gi, '').replace('Withdrawal ', 'Withdrawal').trim();
+      let cleanCode = item.code;
+      
+      // Truncate long UUIDs for cleaner display
+      if (cleanCode.length > 12 && cleanCode.includes('-')) {
+        cleanCode = cleanCode.substring(0, 8) + '...';
+      }
+
+      return { ...item, type: cleanType, code: cleanCode };
     });
 
   const recentActivity = displayLedger.slice(0, 5);
@@ -1874,6 +1881,9 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Referral Program</p>
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                  <p className="text-[10px] text-emerald-400 font-bold mb-1">
+                    Earn up to KES 50 per successful referral!
+                  </p>
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] text-slate-400 font-medium">Your Code</p>
                     <div className="flex items-center gap-2">
@@ -2014,7 +2024,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-5'} gap-1 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-[11px] font-semibold`}>
+      <div className={`grid ${isReviewMode ? 'grid-cols-1' : 'grid-cols-5'} gap-1 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-[10px] font-semibold`}>
         {availableTabs.map((tab) => (
           <button
             key={tab}
