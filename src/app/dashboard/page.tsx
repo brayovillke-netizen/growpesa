@@ -140,6 +140,7 @@ export default function DashboardPage() {
   const [newPin, setNewPin] = useState('');
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const [notifGranted, setNotifGranted] = useState(false);
   const [hideBalances, setHideBalances] = useState(false);
   
@@ -1299,7 +1300,7 @@ export default function DashboardPage() {
 
     const item: LedgerItem = {
       id: Date.now().toString(),
-      type: 'Withdrawal', // 🔥 FIXED: Removed the confusing "(Net: KES XX)" from the title
+      type: 'Withdrawal', // Fixed: Removed the confusing "(Net: KES XX)"
       amount: grossAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1544,11 +1545,19 @@ export default function DashboardPage() {
     return `KES ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const displayLedger = ledger.filter(item => {
-    if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
-    if (item.status === 'FAILED' || item.status === 'REJECTED') return false;
-    return true;
-  });
+  // 🔥 FIX: Sanitize historical data to remove "(Net: KES ...)" from display
+  const displayLedger = ledger
+    .filter(item => {
+      if (isReviewMode && (item.type.includes('Withdrawal') || item.type.includes('Loan') || item.type.includes('Sweep'))) return false;
+      if (item.status === 'FAILED' || item.status === 'REJECTED') return false;
+      return true;
+    })
+    .map(item => {
+      const cleanType = item.type.replace(/\(Net:.*?\)/gi, '').replace('Withdrawal ', 'Withdrawal').trim();
+      return { ...item, type: cleanType };
+    });
+
+  const recentActivity = displayLedger.slice(0, 5);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -1795,6 +1804,7 @@ export default function DashboardPage() {
       
       {!isReviewMode && <InstallPrompt />}
 
+      {/* HEADER */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 font-black text-slate-950 text-lg shadow-md shadow-emerald-500/20">
@@ -1823,6 +1833,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
@@ -1933,6 +1944,54 @@ export default function DashboardPage() {
               <button onClick={handleLogout} className="w-full py-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-rose-500/20 transition">
                 <LogOut className="w-4 h-4"/> Sign Out
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACTIVITY FULL MODAL */}
+      {showAllActivity && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-md animate-in slide-in-from-bottom-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col h-[80vh]">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/80 rounded-t-3xl sticky top-0 z-10">
+              <h3 className="font-bold text-white">All Transactions</h3>
+              <button onClick={() => setShowAllActivity(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto space-y-2 flex-1">
+              {displayLedger.map((item) => (
+                <div key={item.id} className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                  <div className="flex justify-between items-center">
+                    <div className="max-w-[65%]">
+                      <p className="font-bold text-xs text-white truncate">{item.type}</p>
+                      <p className="text-[9px] text-slate-500 font-medium">{item.date} · {item.code}</p>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={`font-black text-[13px] ${
+                          item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus')
+                            ? 'text-emerald-400'
+                            : 'text-rose-400'
+                        }`}
+                      >
+                        {item.type.includes('Deposit') || item.type.includes('Sweep') || item.type.includes('Disbursement') || item.type.includes('Bonus') ? '+' : '-'}
+                        {formatMoney(item.amount)}
+                      </p>
+                      <p className={`text-[9px] font-bold ${
+                        item.status === 'COMPLETED' || item.status === 'DISBURSED' || item.status === 'APPROVED'
+                          ? 'text-emerald-500'
+                          : item.status === 'PENDING ADMIN APPROVAL' || item.status === 'PENDING PIN' || (isReviewMode && item.status.includes('ADMIN'))
+                          ? 'text-sky-400'
+                          : 'text-rose-500'
+                      }`}>
+                        {isReviewMode && item.status.includes('ADMIN') ? 'PENDING SYNC' : item.status}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -2131,52 +2190,57 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="rounded-3xl bg-gradient-to-r from-blue-900/40 to-slate-900 border border-blue-500/30 p-4 shadow-xl relative overflow-hidden">
-             <div className="flex justify-between items-start mb-1">
-                <div>
-                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">New Feature</span>
-                  <h3 className="font-black text-base text-white">Lock & Grow</h3>
-                </div>
-                <div className="text-2xl drop-shadow-md">🔒</div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-3xl bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">New Feature</span>
+                <h3 className="font-black text-sm text-white mt-0.5">Lock & Grow</h3>
+                <p className="text-[9px] text-slate-400 mt-1 leading-tight">
+                  Earn up to 20% APY on locked funds.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-400 mb-3 font-medium">
-                Lock your savings to earn up to 20%. Watch your money grow effortlessly in the background.
-              </p>
               <button
                 onClick={() => setActiveTab('lock')}
-                className="w-full py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-xl text-xs transition cursor-pointer"
+                className="w-full mt-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer"
               >
                 Go to Vault
               </button>
-          </div>
+            </div>
 
-          {!isReviewMode && (
-            <div className="rounded-2xl bg-gradient-to-br from-indigo-900/30 to-slate-900 border border-indigo-500/20 p-3 shadow-lg flex items-center justify-between">
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
               <div>
-                <h3 className="font-black text-sm text-white">Refer & Earn</h3>
-                <p className="text-[10px] text-slate-400 font-medium">Invite friends & get KES 5.00</p>
+                <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
+                <h3 className="font-black text-sm text-white mt-0.5">Invite Friends</h3>
+                <p className="text-[9px] text-slate-400 mt-1 leading-tight">
+                  Get KES 5.00 per active referral.
+                </p>
               </div>
               <button
                 onClick={handleShareReferral}
-                className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center gap-1"
+                className="w-full mt-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center justify-center gap-1"
               >
                 <span>↗️ Share</span>
               </button>
             </div>
-          )}
+          </div>
 
           {!isReviewMode && (
             <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="font-bold text-sm text-white">Recent Activity</h3>
-                <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-md">{displayLedger.length} Records</span>
+                <button 
+                  onClick={() => setShowAllActivity(true)}
+                  className="text-[9px] font-bold text-amber-400 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-md transition"
+                >
+                  View All ({displayLedger.length})
+                </button>
               </div>
               
-              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                {displayLedger.length === 0 ? (
+              <div className="space-y-1.5">
+                {recentActivity.length === 0 ? (
                   <p className="text-center text-xs text-slate-500 py-4">No recent activity.</p>
                 ) : (
-                  displayLedger.map((item) => (
+                  recentActivity.map((item) => (
                     <div key={item.id} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 space-y-1.5">
                       <div className="flex justify-between items-center">
                         <div className="max-w-[65%]">
