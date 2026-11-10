@@ -1976,7 +1976,7 @@ export default function DashboardPage() {
                   <div className="flex justify-between items-center">
                     <div className="max-w-[65%]">
                       <p className="font-bold text-xs text-white truncate">{item.type}</p>
-                      <p className="text-[9px] text-slate-500 font-medium">{item.date} · {item.code}</p>
+                      <p className="text-[9px] text-slate-500 font-medium truncate">{item.date} · {item.code}</p>
                     </div>
                     <div className="text-right">
                       <p
@@ -2092,7 +2092,7 @@ export default function DashboardPage() {
                   
                   <div className="bg-gradient-to-br from-indigo-500 to-indigo-800 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-900/30">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Loan Status</p>
-                    <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'None'}</p>
+                    <p className="text-xl font-black mt-1">{hasUnpaidLoan ? 'Active' : 'No Active Loan'}</p>
                   </div>
                 </>
               )}
@@ -2200,38 +2200,24 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-3xl bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          {/* FULL WIDTH LOCK & GROW CARD */}
+          <div className="rounded-3xl bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
+            <div className="flex justify-between items-start">
               <div>
-                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">New Feature</span>
-                <h3 className="font-black text-sm text-white mt-0.5">Lock & Grow</h3>
-                <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                  Earn up to 20% APY on locked funds.
+                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">New Feature</span>
+                <h3 className="font-black text-base text-white mt-0.5">Lock & Grow</h3>
+                <p className="text-[10px] text-slate-400 mt-1 leading-tight max-w-[85%]">
+                  Lock your savings to earn up to 20% APY. Watch your money grow effortlessly in the background.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveTab('lock')}
-                className="w-full mt-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer active:scale-95"
-              >
-                Go to Vault
-              </button>
+              <span className="text-2xl drop-shadow-md">🔒</span>
             </div>
-
-            <div className="rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
-              <div>
-                <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
-                <h3 className="font-black text-sm text-white mt-0.5">Invite Friends</h3>
-                <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                  Earn up to KES 50 per referral.
-                </p>
-              </div>
-              <button
-                onClick={handleShareReferral}
-                className="w-full mt-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-bold rounded-lg text-[10px] transition cursor-pointer flex items-center justify-center gap-1 active:scale-95"
-              >
-                <span>↗️ Share</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setActiveTab('lock')}
+              className="w-full mt-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold rounded-lg text-xs transition cursor-pointer active:scale-95"
+            >
+              Go to Vault
+            </button>
           </div>
 
           {!isReviewMode && (
@@ -2257,7 +2243,7 @@ export default function DashboardPage() {
                       <div className="flex justify-between items-center">
                         <div className="max-w-[65%]">
                           <p className="font-bold text-[11px] text-white truncate">{item.type}</p>
-                          <p className="text-[9px] text-slate-500 font-medium">{item.date} · {item.code}</p>
+                          <p className="text-[9px] text-slate-500 font-medium truncate">{item.date} · {item.code}</p>
                         </div>
                         <div className="text-right">
                           <p
