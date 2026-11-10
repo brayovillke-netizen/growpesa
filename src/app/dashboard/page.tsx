@@ -1300,7 +1300,7 @@ export default function DashboardPage() {
 
     const item: LedgerItem = {
       id: Date.now().toString(),
-      type: 'Withdrawal', // Fixed: Removed the confusing "(Net: KES XX)"
+      type: 'Withdrawal',
       amount: grossAmt,
       date: new Date().toISOString().split('T')[0],
       status: 'PENDING ADMIN APPROVAL',
@@ -1926,21 +1926,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Community</p>
-                <a
-                  href="https://twitter.com/intent/follow?screen_name=growpesax"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 hover:border-slate-600 transition"
-                >
-                  <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
-                    𝕏 Follow @growpesax
-                  </div>
-                  <span className="text-[10px] text-slate-500">→</span>
-                </a>
-              </div>
-
               <button onClick={handleLogout} className="w-full py-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-rose-500/20 transition">
                 <LogOut className="w-4 h-4"/> Sign Out
               </button>
@@ -2212,7 +2197,7 @@ export default function DashboardPage() {
                 <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Refer & Earn</span>
                 <h3 className="font-black text-sm text-white mt-0.5">Invite Friends</h3>
                 <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                  Get KES 5.00 per active referral.
+                  Share your link to earn rewards!
                 </p>
               </div>
               <button
@@ -2228,12 +2213,14 @@ export default function DashboardPage() {
             <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="font-bold text-sm text-white">Recent Activity</h3>
-                <button 
-                  onClick={() => setShowAllActivity(true)}
-                  className="text-[9px] font-bold text-amber-400 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-md transition"
-                >
-                  View All ({displayLedger.length})
-                </button>
+                {displayLedger.length > 5 && (
+                  <button 
+                    onClick={() => setShowAllActivity(true)}
+                    className="text-[9px] font-bold text-amber-400 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-md transition"
+                  >
+                    View All
+                  </button>
+                )}
               </div>
               
               <div className="space-y-1.5">
